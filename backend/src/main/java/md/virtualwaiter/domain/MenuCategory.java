@@ -1,0 +1,29 @@
+package md.virtualwaiter.domain;
+
+import jakarta.persistence.*;
+
+@Entity
+@Table(name = "menu_categories")
+public class MenuCategory {
+  @Id
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
+  public Long id;
+
+  @Column(name = "branch_id", nullable = false)
+  public Long branchId;
+
+  @Column(name = "name_ru", nullable = false)
+  public String nameRu;
+
+  @Column(name = "name_ro")
+  public String nameRo;
+
+  @Column(name = "name_en")
+  public String nameEn;
+
+  @Column(name = "sort_order", nullable = false)
+  public int sortOrder = 0;
+
+  @Column(name = "is_active", nullable = false)
+  public boolean isActive = true;
+}

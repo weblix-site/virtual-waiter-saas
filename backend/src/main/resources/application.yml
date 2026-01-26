@@ -1,0 +1,31 @@
+server:
+  port: 8080
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/vw
+    username: vw
+    password: vw
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+
+app:
+  qr:
+    hmacSecret: "CHANGE_ME_DEV_SECRET"
+  publicBaseUrl: "http://localhost:3000"
+  otp:
+    requireForFirstOrder: false
+    ttlSeconds: 180
+    maxAttempts: 5
+    resendCooldownSeconds: 60
+    length: 4
+    devEchoCode: true
+
+  tips:
+    enabled: false
+    percentages: [5,10,15,20]
+  bill:
+    allowPayOtherGuestsItems: false
+    allowPayWholeTable: false

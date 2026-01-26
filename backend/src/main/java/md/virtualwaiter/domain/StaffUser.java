@@ -1,0 +1,27 @@
+package md.virtualwaiter.domain;
+
+import jakarta.persistence.*;
+
+@Entity
+@Table(name = "staff_users")
+public class StaffUser {
+  @Id
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
+  public Long id;
+
+  @Column(name = "branch_id", nullable = false)
+  public Long branchId;
+
+  @Column(nullable = false, unique = true)
+  public String username;
+
+  @Column(name = "password_hash", nullable = false)
+  public String passwordHash;
+
+  /** WAITER | KITCHEN | ADMIN */
+  @Column(nullable = false)
+  public String role;
+
+  @Column(name = "is_active", nullable = false)
+  public boolean isActive = true;
+}

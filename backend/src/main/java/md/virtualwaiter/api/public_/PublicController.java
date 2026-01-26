@@ -1,0 +1,535 @@
+package md.virtualwaiter.api.public_;
+
+import md.virtualwaiter.domain.*;
+import md.virtualwaiter.security.QrSignatureService;
+import md.virtualwaiter.repo.CafeTableRepo;
+import md.virtualwaiter.repo.GuestSessionRepo;
+import md.virtualwaiter.repo.MenuCategoryRepo;
+import md.virtualwaiter.repo.MenuItemRepo;
+import md.virtualwaiter.repo.OrderItemRepo;
+import md.virtualwaiter.repo.OrderRepo;
+import md.virtualwaiter.repo.WaiterCallRepo;
+import md.virtualwaiter.repo.TablePartyRepo;
+import md.virtualwaiter.repo.BillRequestRepo;
+import md.virtualwaiter.repo.BillRequestItemRepo;
+import md.virtualwaiter.config.TipsProperties;
+import md.virtualwaiter.config.BillProperties;
+import md.virtualwaiter.otp.OtpProperties;
+import md.virtualwaiter.otp.OtpService;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.Locale;
+import java.util.*;
+
+@RestController
+@RequestMapping("/api/public")
+public class PublicController {
+
+  private final CafeTableRepo tableRepo;
+  private final GuestSessionRepo sessionRepo;
+  private final MenuCategoryRepo categoryRepo;
+  private final MenuItemRepo itemRepo;
+  private final OrderRepo orderRepo;
+  private final OrderItemRepo orderItemRepo;
+  private final WaiterCallRepo waiterCallRepo;
+  private final TablePartyRepo partyRepo;
+  private final BillRequestRepo billRequestRepo;
+  private final BillRequestItemRepo billRequestItemRepo;
+  private final TipsProperties tipsProps;
+  private final BillProperties billProps;
+  private final QrSignatureService qrSig;
+  private final OtpProperties otpProps;
+  private final OtpService otpService;
+
+  public PublicController(
+    CafeTableRepo tableRepo,
+    GuestSessionRepo sessionRepo,
+    MenuCategoryRepo categoryRepo,
+    MenuItemRepo itemRepo,
+    OrderRepo orderRepo,
+    OrderItemRepo orderItemRepo,
+    WaiterCallRepo waiterCallRepo,
+    TablePartyRepo partyRepo,
+    BillRequestRepo billRequestRepo,
+    BillRequestItemRepo billRequestItemRepo,
+    TipsProperties tipsProps,
+    BillProperties billProps,
+    QrSignatureService qrSig,
+    OtpProperties otpProps,
+    OtpService otpService
+  ) {
+    this.tableRepo = tableRepo;
+    this.sessionRepo = sessionRepo;
+    this.categoryRepo = categoryRepo;
+    this.itemRepo = itemRepo;
+    this.orderRepo = orderRepo;
+    this.orderItemRepo = orderItemRepo;
+    this.waiterCallRepo = waiterCallRepo;
+    this.partyRepo = partyRepo;
+    this.billRequestRepo = billRequestRepo;
+    this.billRequestItemRepo = billRequestItemRepo;
+    this.tipsProps = tipsProps;
+    this.billProps = billProps;
+    this.qrSig = qrSig;
+    this.otpProps = otpProps;
+    this.otpService = otpService;
+  }
+
+  public record StartSessionRequest(@NotBlank String tablePublicId, @NotBlank String sig, @NotBlank String locale) {}
+  public record StartSessionResponse(long guestSessionId, long tableId, int tableNumber, long branchId, String locale, boolean otpRequired, boolean isVerified) {}
+
+  @PostMapping("/session/start")
+  public StartSessionResponse startSession(@Valid @RequestBody StartSessionRequest req) {
+    if (!qrSig.verifyTablePublicId(req.tablePublicId(), req.sig())) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Invalid QR signature");
+    }
+
+    CafeTable table = tableRepo.findByPublicId(req.tablePublicId())
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
+
+    GuestSession s = new GuestSession();
+    s.tableId = table.id;
+    s.locale = normalizeLocale(req.locale());
+    s.expiresAt = Instant.now().plus(12, ChronoUnit.HOURS);
+    s = sessionRepo.save(s);
+
+    return new StartSessionResponse(s.id, table.id, table.number, table.branchId, s.locale, otpProps.requireForFirstOrder, s.isVerified);
+  }
+
+  // --- Menu ---
+  public record MenuItemDto(
+    long id,
+    String name,
+    String description,
+    String ingredients,
+    String allergens,
+    String weight,
+    List<String> photos,
+    List<String> tags,
+    int priceCents,
+    String currency
+  ) {}
+
+  public record MenuCategoryDto(
+    long id,
+    String name,
+    int sortOrder,
+    List<MenuItemDto> items
+  ) {}
+
+  public record MenuResponse(
+    long branchId,
+    String locale,
+    List<MenuCategoryDto> categories
+  ) {}
+
+  @GetMapping("/menu")
+  public MenuResponse getMenu(
+    @RequestParam("tablePublicId") String tablePublicId,
+    @RequestParam("sig") String sig,
+    @RequestParam(value = "locale", required = false) String locale
+  ) {
+    if (!qrSig.verifyTablePublicId(tablePublicId, sig)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Invalid QR signature");
+    }
+    CafeTable table = tableRepo.findByPublicId(tablePublicId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
+
+    String loc = normalizeLocale(locale);
+    List<MenuCategory> cats = categoryRepo.findByBranchIdAndIsActiveOrderBySortOrderAscIdAsc(table.branchId, true);
+    List<Long> catIds = cats.stream().map(c -> c.id).toList();
+    List<MenuItem> items = catIds.isEmpty() ? List.of() : itemRepo.findByCategoryIdInAndIsActive(catIds, true);
+
+    Map<Long, List<MenuItemDto>> itemsByCat = new HashMap<>();
+    for (MenuItem it : items) {
+      itemsByCat.computeIfAbsent(it.categoryId, k -> new ArrayList<>())
+        .add(new MenuItemDto(
+          it.id,
+          pick(loc, it.nameRu, it.nameRo, it.nameEn),
+          pick(loc, it.descriptionRu, it.descriptionRo, it.descriptionEn),
+          pick(loc, it.ingredientsRu, it.ingredientsRo, it.ingredientsEn),
+          it.allergens,
+          it.weight,
+          splitCsv(it.photoUrls),
+          splitCsv(it.tags),
+          it.priceCents,
+          it.currency
+        ));
+    }
+
+    List<MenuCategoryDto> out = new ArrayList<>();
+    for (MenuCategory c : cats) {
+      out.add(new MenuCategoryDto(
+        c.id,
+        pick(loc, c.nameRu, c.nameRo, c.nameEn),
+        c.sortOrder,
+        itemsByCat.getOrDefault(c.id, List.of())
+      ));
+    }
+
+    return new MenuResponse(table.branchId, loc, out);
+  }
+
+  // --- Orders ---
+  public record CreateOrderItemReq(
+    @NotNull Long menuItemId,
+    @Positive int qty,
+    String comment,
+    String modifiersJson
+  ) {}
+
+  public record CreateOrderRequest(
+    @NotNull Long guestSessionId,
+    @NotNull List<CreateOrderItemReq> items
+  ) {}
+
+  public record CreateOrderResponse(long orderId, String status) {}
+
+  @PostMapping("/orders")
+  public CreateOrderResponse createOrder(@Valid @RequestBody CreateOrderRequest req) {
+    GuestSession s = sessionRepo.findById(req.guestSessionId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
+    if (s.expiresAt.isBefore(Instant.now())) {
+      throw new ResponseStatusException(HttpStatus.GONE, "Session expired");
+    }
+
+    if (otpProps.requireForFirstOrder && !s.isVerified) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "OTP required before first order");
+    }
+
+    CafeTable table = tableRepo.findById(s.tableId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
+
+    if (req.items == null || req.items.isEmpty()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Order items empty");
+    }
+
+    // Load menu items for snapshot/prices
+    List<Long> ids = req.items.stream().map(i -> i.menuItemId).toList();
+    Map<Long, MenuItem> menu = new HashMap<>();
+    for (MenuItem mi : itemRepo.findAllById(ids)) {
+      menu.put(mi.id, mi);
+    }
+    for (Long id : ids) {
+      if (!menu.containsKey(id)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown menu item: " + id);
+    }
+
+    Order o = new Order();
+    o.tableId = table.id;
+    o.guestSessionId = s.id;
+    o.status = "NEW";
+    o = orderRepo.save(o);
+
+    for (CreateOrderItemReq i : req.items) {
+      MenuItem mi = menu.get(i.menuItemId);
+      OrderItem oi = new OrderItem();
+      oi.orderId = o.id;
+      oi.menuItemId = mi.id;
+      oi.nameSnapshot = pick(s.locale, mi.nameRu, mi.nameRo, mi.nameEn);
+      oi.unitPriceCents = mi.priceCents;
+      oi.qty = i.qty;
+      oi.comment = i.comment;
+      oi.modifiersJson = i.modifiersJson;
+      orderItemRepo.save(oi);
+    }
+
+    return new CreateOrderResponse(o.id, o.status);
+  }
+
+
+  // --- Party PIN (group table) ---
+  public record CreatePartyRequest(@NotNull Long guestSessionId) {}
+  public record CreatePartyResponse(long partyId, String pin, Instant expiresAt) {}
+
+  @PostMapping("/party/create")
+  public CreatePartyResponse createParty(@Valid @RequestBody CreatePartyRequest req) {
+    GuestSession s = sessionRepo.findById(req.guestSessionId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
+    if (s.expiresAt.isBefore(Instant.now())) {
+      throw new ResponseStatusException(HttpStatus.GONE, "Session expired");
+    }
+
+    if (otpProps.requireForFirstOrder && !s.isVerified) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "OTP required before joining a party");
+    }
+
+    // If already in an active party, return it (idempotent UX)
+    if (s.partyId != null) {
+      Optional<TableParty> existing = partyRepo.findById(s.partyId);
+      if (existing.isPresent() && "ACTIVE".equals(existing.get().status) && existing.get().expiresAt.isAfter(Instant.now())) {
+        TableParty p = existing.get();
+        return new CreatePartyResponse(p.id, p.pin, p.expiresAt);
+      }
+    }
+
+    String pin = generatePin4();
+    Instant now = Instant.now();
+    Instant exp = now.plus(2, ChronoUnit.HOURS);
+
+    // Ensure PIN uniqueness for the table among active parties
+    for (int tries = 0; tries < 10; tries++) {
+      if (partyRepo.findActiveByTableIdAndPin(s.tableId, pin, now).isEmpty()) break;
+      pin = generatePin4();
+    }
+    if (partyRepo.findActiveByTableIdAndPin(s.tableId, pin, now).isPresent()) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "Failed to allocate PIN");
+    }
+
+    TableParty p = new TableParty();
+    p.tableId = s.tableId;
+    p.pin = pin;
+    p.status = "ACTIVE";
+    p.expiresAt = exp;
+    p = partyRepo.save(p);
+
+    s.partyId = p.id;
+    sessionRepo.save(s);
+
+    return new CreatePartyResponse(p.id, p.pin, p.expiresAt);
+  }
+
+  public record JoinPartyRequest(@NotNull Long guestSessionId, @NotBlank String pin) {}
+  public record JoinPartyResponse(long partyId, String pin, Instant expiresAt) {}
+
+  @PostMapping("/party/join")
+  public JoinPartyResponse joinParty(@Valid @RequestBody JoinPartyRequest req) {
+    GuestSession s = sessionRepo.findById(req.guestSessionId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
+    if (s.expiresAt.isBefore(Instant.now())) {
+      throw new ResponseStatusException(HttpStatus.GONE, "Session expired");
+    }
+
+    if (otpProps.requireForFirstOrder && !s.isVerified) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "OTP required before joining a party");
+    }
+
+    String pin = req.pin().trim();
+    if (pin.length() != 4 || !pin.chars().allMatch(Character::isDigit)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "PIN must be 4 digits");
+    }
+
+    TableParty p = partyRepo.findActiveByTableIdAndPin(s.tableId, pin, Instant.now())
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Party not found or expired"));
+
+    s.partyId = p.id;
+    sessionRepo.save(s);
+
+    return new JoinPartyResponse(p.id, p.pin, p.expiresAt);
+  }
+
+  private static String generatePin4() {
+    int v = new java.util.Random().nextInt(10000);
+    return String.format(java.util.Locale.ROOT, "%04d", v);
+  }
+
+
+  // --- OTP (SMS verification) ---
+  public record SendOtpRequest(@NotNull Long guestSessionId, @NotBlank String phoneE164, String locale) {}
+  public record SendOtpResponse(long challengeId, int ttlSeconds, String devCode) {}
+
+  @PostMapping("/otp/send")
+  public SendOtpResponse sendOtp(@Valid @RequestBody SendOtpRequest req) {
+    var r = otpService.sendOtp(req.guestSessionId, req.phoneE164, normalizeLocale(req.locale));
+    return new SendOtpResponse(r.challengeId(), r.ttlSeconds(), r.devCode());
+  }
+
+  public record VerifyOtpRequest(@NotNull Long guestSessionId, @NotNull Long challengeId, @NotBlank String code) {}
+  public record VerifyOtpResponse(boolean verified) {}
+
+  @PostMapping("/otp/verify")
+  public VerifyOtpResponse verifyOtp(@Valid @RequestBody VerifyOtpRequest req) {
+    otpService.verifyOtp(req.guestSessionId, req.challengeId, req.code);
+    return new VerifyOtpResponse(true);
+  }
+
+
+  // --- Waiter call ---
+  public record WaiterCallRequest(@NotNull Long guestSessionId) {}
+  public record WaiterCallResponse(long waiterCallId, String status) {}
+
+  @PostMapping("/waiter-call")
+  public WaiterCallResponse callWaiter(@Valid @RequestBody WaiterCallRequest req) {
+    GuestSession s = sessionRepo.findById(req.guestSessionId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
+    if (s.expiresAt.isBefore(Instant.now())) {
+      throw new ResponseStatusException(HttpStatus.GONE, "Session expired");
+    }
+    WaiterCall wc = new WaiterCall();
+    wc.tableId = s.tableId;
+    wc.guestSessionId = s.id;
+    wc.status = "NEW";
+    wc = waiterCallRepo.save(wc);
+    return new WaiterCallResponse(wc.id, wc.status);
+  }
+
+  private static String normalizeLocale(String s) {
+    if (s == null) return "ru";
+    String v = s.trim().toLowerCase(Locale.ROOT);
+    return switch (v) { case "ru", "ro", "en" -> v; default -> "ru"; };
+  }
+
+  private static String pick(String locale, String ru, String ro, String en) {
+    if (locale == null) locale = "ru";
+    return switch (locale) {
+      case "ro" -> (ro != null && !ro.isBlank()) ? ro : ru;
+      case "en" -> (en != null && !en.isBlank()) ? en : ru;
+      default -> ru;
+    };
+  }
+
+  private static List<String> splitCsv(String s) {
+    if (s == null || s.isBlank()) return List.of();
+    String[] parts = s.split(",");
+    List<String> out = new ArrayList<>();
+    for (String p : parts) {
+      String v = p.trim();
+      if (!v.isEmpty()) out.add(v);
+    }
+    return out;
+  }
+
+  // --- Bill request / offline payment ---
+  public record CreateBillRequest(
+    @NotNull Long guestSessionId,
+    @NotBlank String mode, // MY | SELECTED | WHOLE_TABLE
+    List<Long> orderItemIds, // for SELECTED
+    @NotBlank String paymentMethod, // CASH | TERMINAL
+    Integer tipsPercent
+  ) {}
+
+  public record BillItemLine(long orderItemId, String name, int qty, int unitPriceCents, int lineTotalCents) {}
+
+  public record BillRequestResponse(
+    long billRequestId,
+    String status,
+    String paymentMethod,
+    String mode,
+    int subtotalCents,
+    Integer tipsPercent,
+    int tipsAmountCents,
+    int totalCents,
+    List<BillItemLine> items
+  ) {}
+
+  @PostMapping("/bill-request/create")
+  public BillRequestResponse createBillRequest(@Valid @RequestBody CreateBillRequest req) {
+    GuestSession s = sessionRepo.findById(req.guestSessionId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
+    if (s.expiresAt.isBefore(Instant.now())) {
+      throw new ResponseStatusException(HttpStatus.GONE, "Session expired");
+    }
+
+    String mode = req.mode == null ? "" : req.mode.trim().toUpperCase(Locale.ROOT);
+    String pay = req.paymentMethod == null ? "" : req.paymentMethod.trim().toUpperCase(Locale.ROOT);
+    if (!Set.of("CASH","TERMINAL").contains(pay)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported paymentMethod");
+    }
+    if (!Set.of("MY","SELECTED","WHOLE_TABLE").contains(mode)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported mode");
+    }
+
+    // For this stage we implement: MY and SELECTED (own items). WHOLE_TABLE is gated by flag.
+    if ("WHOLE_TABLE".equals(mode) && !billProps.allowPayWholeTable) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Whole table payment is disabled");
+    }
+
+    // Collect candidate order items to pay (only not closed)
+    List<Order> orders = orderRepo.findByGuestSessionIdOrderByCreatedAtDesc(s.id);
+    if (orders.isEmpty()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No orders for this session");
+    }
+    List<Long> orderIds = orders.stream().map(o -> o.id).toList();
+    List<OrderItem> allItems = orderItemRepo.findByOrderIdIn(orderIds);
+
+    // filter not closed
+    List<OrderItem> openItems = allItems.stream().filter(oi -> !oi.isClosed).toList();
+    if (openItems.isEmpty()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No unpaid items");
+    }
+
+    List<OrderItem> selected;
+    if ("MY".equals(mode)) {
+      selected = openItems;
+    } else if ("SELECTED".equals(mode)) {
+      if (req.orderItemIds == null || req.orderItemIds.isEmpty()) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "orderItemIds required for SELECTED");
+      }
+      Set<Long> sel = new HashSet<>(req.orderItemIds);
+      selected = openItems.stream().filter(oi -> sel.contains(oi.id)).toList();
+      if (selected.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No matching unpaid items selected");
+    } else {
+      // WHOLE_TABLE (MVP impl: treat as MY for now; full table later)
+      selected = openItems;
+    }
+
+    int subtotal = 0;
+    List<BillItemLine> lines = new ArrayList<>();
+    for (OrderItem oi : selected) {
+      int lineTotal = oi.unitPriceCents * oi.qty;
+      subtotal += lineTotal;
+      lines.add(new BillItemLine(oi.id, oi.nameSnapshot, oi.qty, oi.unitPriceCents, lineTotal));
+    }
+
+    Integer tipsPercent = req.tipsPercent;
+    int tipsAmount = 0;
+    if (tipsPercent != null) {
+      if (!tipsProps.enabled) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tips are disabled");
+      }
+      if (!tipsProps.percentages.contains(tipsPercent)) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported tips percent");
+      }
+      tipsAmount = (int) Math.round(subtotal * (tipsPercent / 100.0));
+    }
+
+    BillRequest br = new BillRequest();
+    br.tableId = s.tableId;
+    br.guestSessionId = s.id;
+    br.partyId = s.partyId;
+    br.mode = mode;
+    br.paymentMethod = pay;
+    br.subtotalCents = subtotal;
+    br.tipsPercent = tipsPercent;
+    br.tipsAmountCents = tipsAmount;
+    br.totalCents = subtotal + tipsAmount;
+
+    br = billRequestRepo.save(br);
+
+    for (OrderItem oi : selected) {
+      BillRequestItem bri = new BillRequestItem();
+      bri.billRequestId = br.id;
+      bri.orderItemId = oi.id;
+      bri.lineTotalCents = oi.unitPriceCents * oi.qty;
+      billRequestItemRepo.save(bri);
+
+      // mark reserved to this bill request (but not closed yet)
+      oi.billRequestId = br.id;
+      orderItemRepo.save(oi);
+    }
+
+    return new BillRequestResponse(br.id, br.status, br.paymentMethod, br.mode, br.subtotalCents, br.tipsPercent, br.tipsAmountCents, br.totalCents, lines);
+  }
+
+  @GetMapping("/bill-request/{id}")
+  public BillRequestResponse getBillRequest(@PathVariable("id") long id) {
+    BillRequest br = billRequestRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "BillRequest not found"));
+    List<BillRequestItem> items = billRequestItemRepo.findByBillRequestId(br.id);
+    List<BillItemLine> lines = new ArrayList<>();
+    for (BillRequestItem it : items) {
+      OrderItem oi = orderItemRepo.findById(it.orderItemId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Order item missing: " + it.orderItemId));
+      lines.add(new BillItemLine(oi.id, oi.nameSnapshot, oi.qty, oi.unitPriceCents, it.lineTotalCents));
+    }
+    return new BillRequestResponse(br.id, br.status, br.paymentMethod, br.mode, br.subtotalCents, br.tipsPercent, br.tipsAmountCents, br.totalCents, lines);
+  }
+
+}
