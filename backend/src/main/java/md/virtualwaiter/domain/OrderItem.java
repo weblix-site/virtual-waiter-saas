@@ -21,6 +21,12 @@ public class OrderItem {
   @Column(name = "unit_price_cents", nullable = false)
   public int unitPriceCents;
 
+  @Column(name = "base_price_cents")
+  public Integer basePriceCents;
+
+  @Column(name = "modifiers_price_cents")
+  public Integer modifiersPriceCents;
+
   @Column(nullable = false)
   public int qty;
 

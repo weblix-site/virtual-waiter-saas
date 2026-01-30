@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -51,7 +52,7 @@ class _LoginScreenState extends State<LoginScreen> {
       }
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => OrdersScreen(username: _user.text, password: _pass.text)),
+        MaterialPageRoute(builder: (_) => HomeScreen(username: _user.text, password: _pass.text)),
       );
     } catch (e) {
       setState(() => _error = e.toString());
@@ -89,17 +90,116 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
-class OrdersScreen extends StatefulWidget {
+class HomeScreen extends StatefulWidget {
   final String username;
   final String password;
 
-  const OrdersScreen({super.key, required this.username, required this.password});
+  const HomeScreen({super.key, required this.username, required this.password});
 
   @override
-  State<OrdersScreen> createState() => _OrdersScreenState();
+  State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _OrdersScreenState extends State<OrdersScreen> {
+class _HomeScreenState extends State<HomeScreen> {
+  int _index = 0;
+  Timer? _timer;
+  DateTime _sinceOrders = DateTime.now();
+  DateTime _sinceCalls = DateTime.now();
+  DateTime _sinceBills = DateTime.now();
+  int _newOrders = 0;
+  int _newCalls = 0;
+  int _newBills = 0;
+
+  String get _auth => base64Encode(utf8.encode('${widget.username}:${widget.password}'));
+
+  Future<void> _poll() async {
+    try {
+      final res = await http.get(
+        Uri.parse('$apiBase/api/staff/notifications?sinceOrders=${_sinceOrders.toUtc().toIso8601String()}&sinceCalls=${_sinceCalls.toUtc().toIso8601String()}&sinceBills=${_sinceBills.toUtc().toIso8601String()}'),
+        headers: {'Authorization': 'Basic $_auth'},
+      );
+      if (res.statusCode != 200) return;
+      final body = jsonDecode(res.body);
+      setState(() {
+        _newOrders = body['newOrders'] ?? 0;
+        _newCalls = body['newCalls'] ?? 0;
+        _newBills = body['newBills'] ?? 0;
+      });
+    } catch (_) {}
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 15), (_) => _poll());
+    _poll();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tabs = [
+      OrdersTab(username: widget.username, password: widget.password),
+      CallsTab(username: widget.username, password: widget.password),
+      BillsTab(username: widget.username, password: widget.password),
+      KitchenTab(username: widget.username, password: widget.password),
+    ];
+    return Scaffold(
+      body: tabs[_index],
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _index,
+        onDestinationSelected: (i) {
+          setState(() {
+            _index = i;
+            final now = DateTime.now();
+            if (i == 0) {
+              _sinceOrders = now;
+              _newOrders = 0;
+            } else if (i == 1) {
+              _sinceCalls = now;
+              _newCalls = 0;
+            } else if (i == 2) {
+              _sinceBills = now;
+              _newBills = 0;
+            }
+          });
+        },
+        destinations: [
+          NavigationDestination(
+            icon: _newOrders > 0 ? Badge(label: Text('$_newOrders'), child: const Icon(Icons.receipt_long)) : const Icon(Icons.receipt_long),
+            label: 'Orders',
+          ),
+          NavigationDestination(
+            icon: _newCalls > 0 ? Badge(label: Text('$_newCalls'), child: const Icon(Icons.notifications_active)) : const Icon(Icons.notifications_active),
+            label: 'Calls',
+          ),
+          NavigationDestination(
+            icon: _newBills > 0 ? Badge(label: Text('$_newBills'), child: const Icon(Icons.payments)) : const Icon(Icons.payments),
+            label: 'Bills',
+          ),
+          const NavigationDestination(icon: Icon(Icons.kitchen), label: 'Kitchen'),
+        ],
+      ),
+    );
+  }
+}
+
+class OrdersTab extends StatefulWidget {
+  final String username;
+  final String password;
+
+  const OrdersTab({super.key, required this.username, required this.password});
+
+  @override
+  State<OrdersTab> createState() => _OrdersTabState();
+}
+
+class _OrdersTabState extends State<OrdersTab> {
   bool _loading = true;
   String? _error;
   List<dynamic> _orders = const [];
@@ -152,12 +252,276 @@ class _OrdersScreenState extends State<OrdersScreen> {
                     final o = _orders[i] as Map<String, dynamic>;
                     final items = (o['items'] as List<dynamic>? ?? const []).cast<Map<String, dynamic>>();
                     final tableNumber = o['tableNumber'];
+                    final assigned = o['assignedWaiterId'];
+                    return ListTile(
+                      title: Text('Table #$tableNumber  •  Order #${o['id']}'),
+                      subtitle: Text('${o['status']} • ${items.length} item(s)' + (assigned != null ? ' • waiter #$assigned' : '')),
+                      onTap: () {
+                        Navigator.of(context).push(MaterialPageRoute(
+                          builder: (_) => OrderDetailsScreen(
+                            order: o,
+                            username: widget.username,
+                            password: widget.password,
+                            actions: const ['ACCEPTED', 'READY'],
+                          ),
+                        ));
+                      },
+                    );
+                  },
+                ),
+    );
+  }
+}
+
+class CallsTab extends StatefulWidget {
+  final String username;
+  final String password;
+
+  const CallsTab({super.key, required this.username, required this.password});
+
+  @override
+  State<CallsTab> createState() => _CallsTabState();
+}
+
+class _CallsTabState extends State<CallsTab> {
+  bool _loading = true;
+  String? _error;
+  List<dynamic> _calls = const [];
+
+  String get _auth => base64Encode(utf8.encode('${widget.username}:${widget.password}'));
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final res = await http.get(
+        Uri.parse('$apiBase/api/staff/waiter-calls/active'),
+        headers: {'Authorization': 'Basic $_auth'},
+      );
+      if (res.statusCode != 200) throw Exception('Load failed (${res.statusCode})');
+      final body = jsonDecode(res.body);
+      setState(() => _calls = body as List<dynamic>);
+    } catch (e) {
+      setState(() => _error = e.toString());
+    } finally {
+      setState(() => _loading = false);
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Waiter Calls'),
+        actions: [
+          IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
+        ],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(child: Text(_error!))
+              : ListView.separated(
+                  itemCount: _calls.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (ctx, i) {
+                    final c = _calls[i] as Map<String, dynamic>;
+                    return ListTile(
+                      title: Text('Table #${c['tableNumber']}'),
+                      subtitle: Text('${c['status']} • ${c['createdAt']}'),
+                      leading: const Icon(Icons.notifications_active),
+                    );
+                  },
+                ),
+    );
+  }
+}
+
+class BillsTab extends StatefulWidget {
+  final String username;
+  final String password;
+
+  const BillsTab({super.key, required this.username, required this.password});
+
+  @override
+  State<BillsTab> createState() => _BillsTabState();
+}
+
+class _BillsTabState extends State<BillsTab> {
+  bool _loading = true;
+  String? _error;
+  List<dynamic> _bills = const [];
+
+  String get _auth => base64Encode(utf8.encode('${widget.username}:${widget.password}'));
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final res = await http.get(
+        Uri.parse('$apiBase/api/staff/bill-requests/active'),
+        headers: {'Authorization': 'Basic $_auth'},
+      );
+      if (res.statusCode != 200) throw Exception('Load failed (${res.statusCode})');
+      final body = jsonDecode(res.body);
+      setState(() => _bills = body as List<dynamic>);
+    } catch (e) {
+      setState(() => _error = e.toString());
+    } finally {
+      setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _confirmPaid(int id) async {
+    final res = await http.post(
+      Uri.parse('$apiBase/api/staff/bill-requests/$id/confirm-paid'),
+      headers: {'Authorization': 'Basic $_auth'},
+    );
+    if (res.statusCode >= 300) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Confirm failed (${res.statusCode})')));
+      return;
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Payment confirmed')));
+    _load();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Bill Requests'),
+        actions: [
+          IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
+        ],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(child: Text(_error!))
+              : ListView.separated(
+                  itemCount: _bills.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (ctx, i) {
+                    final b = _bills[i] as Map<String, dynamic>;
+                    final items = (b['items'] as List<dynamic>? ?? const []).cast<Map<String, dynamic>>();
+                    return ExpansionTile(
+                      title: Text('Table #${b['tableNumber']} • ${b['paymentMethod']}'),
+                      subtitle: Text('${b['mode']} • ${b['totalCents']} cents'),
+                      children: [
+                        ...items.map((it) => ListTile(
+                              title: Text('${it['name']} × ${it['qty']}'),
+                              subtitle: Text('${it['lineTotalCents']} cents'),
+                            )),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          child: SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              onPressed: () => _confirmPaid(b['billRequestId']),
+                              child: const Text('Confirm paid'),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+    );
+  }
+}
+
+class KitchenTab extends StatefulWidget {
+  final String username;
+  final String password;
+
+  const KitchenTab({super.key, required this.username, required this.password});
+
+  @override
+  State<KitchenTab> createState() => _KitchenTabState();
+}
+
+class _KitchenTabState extends State<KitchenTab> {
+  bool _loading = true;
+  String? _error;
+  List<dynamic> _orders = const [];
+
+  String get _auth => base64Encode(utf8.encode('${widget.username}:${widget.password}'));
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final res = await http.get(
+        Uri.parse('$apiBase/api/staff/orders/active'),
+        headers: {'Authorization': 'Basic $_auth'},
+      );
+      if (res.statusCode != 200) throw Exception('Load failed (${res.statusCode})');
+      final body = jsonDecode(res.body);
+      setState(() => _orders = body as List<dynamic>);
+    } catch (e) {
+      setState(() => _error = e.toString());
+    } finally {
+      setState(() => _loading = false);
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Kitchen Queue'),
+        actions: [
+          IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
+        ],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(child: Text(_error!))
+              : ListView.separated(
+                  itemCount: _orders.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (ctx, i) {
+                    final o = _orders[i] as Map<String, dynamic>;
+                    final items = (o['items'] as List<dynamic>? ?? const []).cast<Map<String, dynamic>>();
+                    final tableNumber = o['tableNumber'];
                     return ListTile(
                       title: Text('Table #$tableNumber  •  Order #${o['id']}'),
                       subtitle: Text('${o['status']} • ${items.length} item(s)'),
                       onTap: () {
                         Navigator.of(context).push(MaterialPageRoute(
-                          builder: (_) => OrderDetailsScreen(order: o, username: widget.username, password: widget.password),
+                          builder: (_) => OrderDetailsScreen(
+                            order: o,
+                            username: widget.username,
+                            password: widget.password,
+                            actions: const ['ACCEPTED', 'COOKING', 'READY'],
+                          ),
                         ));
                       },
                     );
@@ -171,8 +535,15 @@ class OrderDetailsScreen extends StatelessWidget {
   final Map<String, dynamic> order;
   final String username;
   final String password;
+  final List<String> actions;
 
-  const OrderDetailsScreen({super.key, required this.order, required this.username, required this.password});
+  const OrderDetailsScreen({
+    super.key,
+    required this.order,
+    required this.username,
+    required this.password,
+    required this.actions,
+  });
 
   String get _auth => base64Encode(utf8.encode('$username:$password'));
 
@@ -219,11 +590,17 @@ class OrderDetailsScreen extends StatelessWidget {
               ),
             ),
             Row(
-              children: [
-                Expanded(child: OutlinedButton(onPressed: () => _setStatus(context, 'ACCEPTED'), child: const Text('ACCEPT'))),
-                const SizedBox(width: 8),
-                Expanded(child: OutlinedButton(onPressed: () => _setStatus(context, 'READY'), child: const Text('READY'))),
-              ],
+              children: actions
+                  .map((s) => Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: OutlinedButton(
+                            onPressed: () => _setStatus(context, s),
+                            child: Text(s),
+                          ),
+                        ),
+                      ))
+                  .toList(),
             ),
           ],
         ),

@@ -9,6 +9,6 @@ public interface OrderRepo extends JpaRepository<Order, Long> {
   List<Order> findTop50ByTableIdOrderByCreatedAtDesc(Long tableId);
   List<Order> findTop50ByTableIdAndStatusNotInOrderByCreatedAtDesc(Long tableId, List<String> statuses);
   List<Order> findTop100ByTableIdInAndStatusNotInOrderByCreatedAtDesc(List<Long> tableIds, List<String> statuses);
+  List<Order> findByTableIdOrderByCreatedAtDesc(Long tableId);
   List<Order> findByGuestSessionIdOrderByCreatedAtDesc(Long guestSessionId);
 }
-

@@ -64,4 +64,7 @@ public class MenuItem {
 
   @Column(name = "is_active", nullable = false)
   public boolean isActive = true;
+
+  @Column(name = "is_stop_list", nullable = false)
+  public boolean isStopList = false;
 }

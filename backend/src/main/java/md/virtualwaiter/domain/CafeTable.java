@@ -16,4 +16,7 @@ public class CafeTable {
 
   @Column(name="branch_id", nullable=false)
   public Long branchId;
+
+  @Column(name="assigned_waiter_id")
+  public Long assignedWaiterId;
 }

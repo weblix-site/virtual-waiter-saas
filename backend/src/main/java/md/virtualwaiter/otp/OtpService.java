@@ -2,8 +2,10 @@ package md.virtualwaiter.otp;
 
 import md.virtualwaiter.domain.GuestSession;
 import md.virtualwaiter.domain.OtpChallenge;
+import md.virtualwaiter.repo.CafeTableRepo;
 import md.virtualwaiter.repo.GuestSessionRepo;
 import md.virtualwaiter.repo.OtpChallengeRepo;
+import md.virtualwaiter.service.BranchSettingsService;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -21,14 +23,25 @@ public class OtpService {
   private final OtpProvider provider;
   private final OtpChallengeRepo otpRepo;
   private final GuestSessionRepo sessionRepo;
+  private final CafeTableRepo tableRepo;
+  private final BranchSettingsService settingsService;
   private final SecureRandom rnd = new SecureRandom();
   private final BCryptPasswordEncoder enc = new BCryptPasswordEncoder();
 
-  public OtpService(OtpProperties props, OtpProvider provider, OtpChallengeRepo otpRepo, GuestSessionRepo sessionRepo) {
+  public OtpService(
+    OtpProperties props,
+    OtpProvider provider,
+    OtpChallengeRepo otpRepo,
+    GuestSessionRepo sessionRepo,
+    CafeTableRepo tableRepo,
+    BranchSettingsService settingsService
+  ) {
     this.props = props;
     this.provider = provider;
     this.otpRepo = otpRepo;
     this.sessionRepo = sessionRepo;
+    this.tableRepo = tableRepo;
+    this.settingsService = settingsService;
   }
 
   public record SendResult(long challengeId, int ttlSeconds, String devCode) {}
@@ -39,34 +52,38 @@ public class OtpService {
     if (s.expiresAt.isBefore(Instant.now())) {
       throw new ResponseStatusException(HttpStatus.GONE, "Session expired");
     }
+    long branchId = tableRepo.findById(s.tableId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"))
+      .branchId;
+    BranchSettingsService.Resolved settings = settingsService.resolveForBranch(branchId);
 
     Optional<OtpChallenge> prev = otpRepo.findTopByGuestSessionIdAndStatusOrderByCreatedAtDesc(guestSessionId, "SENT");
     if (prev.isPresent()) {
       OtpChallenge p = prev.get();
       if (p.expiresAt.isAfter(Instant.now())) {
         long secondsSince = ChronoUnit.SECONDS.between(p.createdAt, Instant.now());
-        if (secondsSince < props.resendCooldownSeconds) {
+        if (secondsSince < settings.otpResendCooldownSeconds()) {
           throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "OTP resend cooldown");
         }
       }
     }
 
-    String code = generateCode(props.length);
+    String code = generateCode(settings.otpLength());
     String message = buildMessage(code, lang);
 
     OtpChallenge c = new OtpChallenge();
     c.guestSessionId = guestSessionId;
     c.phoneE164 = phoneE164;
     c.otpHash = enc.encode(code);
-    c.expiresAt = Instant.now().plus(props.ttlSeconds, ChronoUnit.SECONDS);
-    c.attemptsLeft = props.maxAttempts;
+    c.expiresAt = Instant.now().plus(settings.otpTtlSeconds(), ChronoUnit.SECONDS);
+    c.attemptsLeft = settings.otpMaxAttempts();
     c.status = "SENT";
     c.createdAt = Instant.now();
     c = otpRepo.save(c);
 
     provider.sendOtp(phoneE164, message);
 
-    return new SendResult(c.id, props.ttlSeconds, props.devEchoCode ? code : null);
+    return new SendResult(c.id, settings.otpTtlSeconds(), settings.otpDevEchoCode() ? code : null);
   }
 
   public void verifyOtp(long guestSessionId, long challengeId, String code) {

@@ -38,7 +38,31 @@ type StartSessionResponse = {
   isVerified: boolean;
 };
 
-type CartLine = { item: MenuItem; qty: number };
+type BillOptionsItem = {
+  orderItemId: number;
+  guestSessionId: number;
+  name: string;
+  qty: number;
+  unitPriceCents: number;
+  lineTotalCents: number;
+};
+
+type BillOptionsResponse = {
+  allowPayOtherGuestsItems: boolean;
+  allowPayWholeTable: boolean;
+  tipsEnabled: boolean;
+  tipsPercentages: number[];
+  enablePartyPin: boolean;
+  partyId: number | null;
+  myItems: BillOptionsItem[];
+  tableItems: BillOptionsItem[];
+};
+
+type ModOption = { id: number; name: string; priceCents: number };
+type ModGroup = { id: number; name: string; isRequired: boolean; minSelect?: number | null; maxSelect?: number | null; options: ModOption[] };
+type MenuItemModifiersResponse = { menuItemId: number; groups: ModGroup[] };
+
+type CartLine = { item: MenuItem; qty: number; comment?: string; modifierOptionIds?: number[]; modifierSummary?: string };
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8080";
 
@@ -65,10 +89,15 @@ export default function TablePage({ params, searchParams }: any) {
   const [billRequestId, setBillRequestId] = useState<number | null>(null);
   const [billStatus, setBillStatus] = useState<string | null>(null);
   const [billError, setBillError] = useState<string | null>(null);
+  const [billOptions, setBillOptions] = useState<BillOptionsResponse | null>(null);
+  const [billMode, setBillMode] = useState<'MY' | 'SELECTED' | 'WHOLE_TABLE'>('MY');
+  const [selectedItemIds, setSelectedItemIds] = useState<number[]>([]);
   const [billPayMethod, setBillPayMethod] = useState<'CASH' | 'TERMINAL'>('CASH');
   const [billTipsPercent, setBillTipsPercent] = useState<number | ''>('');
   const [billLoading, setBillLoading] = useState(false);
   const [party, setParty] = useState<{ partyId: number; pin: string; expiresAt: string } | null>(null);
+  const [modifiersByItem, setModifiersByItem] = useState<Record<number, MenuItemModifiersResponse>>({});
+  const [modOpenByItem, setModOpenByItem] = useState<Record<number, boolean>>({});
   const [phone, setPhone] = useState("");
   const [otpChallengeId, setOtpChallengeId] = useState<number | null>(null);
   const [otpCode, setOtpCode] = useState("");
@@ -96,6 +125,12 @@ export default function TablePage({ params, searchParams }: any) {
         const m: MenuResponse = await mRes.json();
         if (cancelled) return;
         setMenu(m);
+
+        const boRes = await fetch(`${API_BASE}/api/public/bill-options?guestSessionId=${ss.guestSessionId}`);
+        if (boRes.ok) {
+          const bo: BillOptionsResponse = await boRes.json();
+          if (!cancelled) setBillOptions(bo);
+        }
       } catch (e: any) {
         if (cancelled) return;
         setError(e?.message ?? "Unexpected error");
@@ -111,6 +146,21 @@ export default function TablePage({ params, searchParams }: any) {
 
   const cartTotalCents = useMemo(() => cart.reduce((sum, l) => sum + l.item.priceCents * l.qty, 0), [cart]);
 
+  const billItemsForMode = useMemo(() => {
+    if (!billOptions) return [] as BillOptionsItem[];
+    if (billMode === 'WHOLE_TABLE') return billOptions.tableItems;
+    if (billMode === 'SELECTED') {
+      return (billOptions.allowPayOtherGuestsItems ? billOptions.tableItems : billOptions.myItems);
+    }
+    return billOptions.myItems;
+  }, [billOptions, billMode]);
+
+  useEffect(() => {
+    if (billMode !== 'SELECTED') {
+      setSelectedItemIds([]);
+    }
+  }, [billMode]);
+
   function addToCart(item: MenuItem) {
     setOrderId(null);
     setCart((prev) => {
@@ -120,7 +170,7 @@ export default function TablePage({ params, searchParams }: any) {
         next[idx] = { ...next[idx], qty: next[idx].qty + 1 };
         return next;
       }
-      return [...prev, { item, qty: 1 }];
+      return [...prev, { item, qty: 1, comment: "", modifierOptionIds: [], modifierSummary: "" }];
     });
   }
 
@@ -147,7 +197,14 @@ export default function TablePage({ params, searchParams }: any) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           guestSessionId: session.guestSessionId,
-          items: cart.map((l) => ({ menuItemId: l.item.id, qty: l.qty })),
+          items: cart.map((l) => ({
+            menuItemId: l.item.id,
+            qty: l.qty,
+            comment: l.comment?.trim() || undefined,
+            modifiersJson: l.modifierOptionIds && l.modifierOptionIds.length > 0
+              ? JSON.stringify({ optionIds: l.modifierOptionIds })
+              : undefined,
+          })),
         }),
       });
       if (!res.ok) {
@@ -159,6 +216,9 @@ export default function TablePage({ params, searchParams }: any) {
       const body = await res.json();
       setOrderId(body.orderId);
       setCart([]);
+      // refresh bill options after ordering
+      const boRes = await fetch(`${API_BASE}/api/public/bill-options?guestSessionId=${session.guestSessionId}`);
+      if (boRes.ok) setBillOptions(await boRes.json());
     } catch (e: any) {
       setError(e?.message ?? "Order error");
     } finally {
@@ -272,11 +332,15 @@ export default function TablePage({ params, searchParams }: any) {
     setBillError(null);
     setBillLoading(true);
     try {
+      if (billMode === 'SELECTED' && selectedItemIds.length === 0) {
+        throw new Error(lang === 'ro' ? 'Selectați pozițiile' : lang === 'en' ? 'Select items' : 'Выберите позиции');
+      }
       const payload: any = {
         guestSessionId: session.guestSessionId,
-        mode: "MY",
+        mode: billMode,
         paymentMethod: billPayMethod,
       };
+      if (billMode === 'SELECTED') payload.orderItemIds = selectedItemIds;
       if (billTipsPercent !== "") payload.tipsPercent = billTipsPercent;
 
       const res = await fetch(`${API_BASE}/api/public/bill-request/create`, {
@@ -294,6 +358,59 @@ export default function TablePage({ params, searchParams }: any) {
     } finally {
       setBillLoading(false);
     }
+  }
+
+  async function toggleModifiers(itemId: number) {
+    const isOpen = !!modOpenByItem[itemId];
+    if (!isOpen && !modifiersByItem[itemId]) {
+      const res = await fetch(`${API_BASE}/api/public/menu-item/${itemId}/modifiers?tablePublicId=${encodeURIComponent(tablePublicId)}&sig=${encodeURIComponent(sig)}&locale=${lang}`);
+      if (res.ok) {
+        const body: MenuItemModifiersResponse = await res.json();
+        setModifiersByItem((prev) => ({ ...prev, [itemId]: body }));
+      }
+    }
+    setModOpenByItem((prev) => ({ ...prev, [itemId]: !isOpen }));
+  }
+
+  function toggleOption(itemId: number, group: ModGroup, opt: ModOption) {
+    setCart((prev) => prev.map((l) => {
+      if (l.item.id !== itemId) return l;
+      const current = new Set(l.modifierOptionIds ?? []);
+      const groupOptionIds = new Set((group.options ?? []).map((o) => o.id));
+      const selectedInGroup = Array.from(current).filter((id) => groupOptionIds.has(id));
+      const max = group.maxSelect ?? (group.isRequired ? 1 : undefined);
+      const min = group.minSelect ?? (group.isRequired ? 1 : 0);
+
+      if (current.has(opt.id)) {
+        current.delete(opt.id);
+      } else {
+        if (max != null && selectedInGroup.length >= max) {
+          // if max=1, replace
+          if (max === 1) {
+            for (const id of selectedInGroup) current.delete(id);
+          } else {
+            return l;
+          }
+        }
+        current.add(opt.id);
+      }
+
+      // basic required guard (UI only)
+      if (min > 0 && Array.from(current).filter((id) => groupOptionIds.has(id)).length < min) {
+        // allow empty; server will validate
+      }
+
+      const mods = modifiersByItem[itemId];
+      let summary = "";
+      if (mods) {
+        const allOptions = mods.groups.flatMap((g) => g.options);
+        summary = Array.from(current)
+          .map((id) => allOptions.find((o) => o.id === id)?.name)
+          .filter(Boolean)
+          .join(", ");
+      }
+      return { ...l, modifierOptionIds: Array.from(current), modifierSummary: summary };
+    }));
   }
 
 
@@ -331,12 +448,16 @@ export default function TablePage({ params, searchParams }: any) {
           {lang === "ro" ? "Cheamă chelnerul" : lang === "en" ? "Call waiter" : "Вызвать официанта"}
         </button>
 
-        <button onClick={createPin} style={{ padding: "10px 14px" }}>
-          {lang === "ro" ? "Creează PIN" : lang === "en" ? "Create PIN" : "Создать PIN"}
-        </button>
-        <button onClick={joinByPin} style={{ padding: "10px 14px" }}>
-          {lang === "ro" ? "Conectează-te la PIN" : lang === "en" ? "Join by PIN" : "Объединиться по PIN"}
-        </button>
+        {billOptions?.enablePartyPin && (
+          <>
+            <button onClick={createPin} style={{ padding: "10px 14px" }}>
+              {lang === "ro" ? "Creează PIN" : lang === "en" ? "Create PIN" : "Создать PIN"}
+            </button>
+            <button onClick={joinByPin} style={{ padding: "10px 14px" }}>
+              {lang === "ro" ? "Conectează-te la PIN" : lang === "en" ? "Join by PIN" : "Объединиться по PIN"}
+            </button>
+          </>
+        )}
         <button onClick={requestBill} disabled={billLoading} style={{ padding: "10px 14px" }}>
           {billLoading
             ? (lang === "ro" ? "Se trimite..." : lang === "en" ? "Sending..." : "Отправка...")
@@ -407,6 +528,38 @@ export default function TablePage({ params, searchParams }: any) {
                 <button onClick={() => addToCart(it)} style={{ marginTop: 10, padding: "8px 12px" }}>
                   {lang === "ro" ? "Adaugă" : lang === "en" ? "Add" : "Добавить"}
                 </button>
+                <button onClick={() => toggleModifiers(it.id)} style={{ marginTop: 8, padding: "6px 10px" }}>
+                  {lang === "ro" ? "Modificatori" : lang === "en" ? "Modifiers" : "Модификаторы"}
+                </button>
+                {modOpenByItem[it.id] && modifiersByItem[it.id]?.groups?.length ? (
+                  <div style={{ marginTop: 8, borderTop: "1px dashed #ddd", paddingTop: 8 }}>
+                    {modifiersByItem[it.id].groups.map((g) => (
+                      <div key={g.id} style={{ marginBottom: 8 }}>
+                        <div style={{ fontWeight: 600 }}>
+                          {g.name} {g.isRequired ? "*" : ""}
+                        </div>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          {g.options.map((o) => {
+                            const selected = cart.find((c) => c.item.id === it.id)?.modifierOptionIds?.includes(o.id) ?? false;
+                            return (
+                              <button
+                                key={o.id}
+                                onClick={() => toggleOption(it.id, g, o)}
+                                style={{
+                                  padding: "6px 8px",
+                                  borderRadius: 6,
+                                  border: selected ? "2px solid #333" : "1px solid #ddd",
+                                }}
+                              >
+                                {o.name} {o.priceCents ? `+${money(o.priceCents, it.currency)}` : ""}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>
@@ -423,6 +576,17 @@ export default function TablePage({ params, searchParams }: any) {
               <div>
                 <div><strong>{l.item.name}</strong></div>
                 <div style={{ color: "#666", fontSize: 12 }}>{money(l.item.priceCents, l.item.currency)}</div>
+                {l.modifierSummary && (
+                  <div style={{ color: "#666", fontSize: 12 }}>{l.modifierSummary}</div>
+                )}
+                <div style={{ marginTop: 6, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <input
+                    value={l.comment ?? ""}
+                    onChange={(e) => setCart((prev) => prev.map((x) => x.item.id === l.item.id ? { ...x, comment: e.target.value } : x))}
+                    placeholder={lang === "ro" ? "Comentariu" : lang === "en" ? "Comment" : "Комментарий"}
+                    style={{ padding: "6px 8px", border: "1px solid #ddd", borderRadius: 6, minWidth: 160 }}
+                  />
+                </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <button onClick={() => dec(l.item.id)}>-</button>
@@ -439,6 +603,84 @@ export default function TablePage({ params, searchParams }: any) {
           <button disabled={placing} onClick={placeOrder} style={{ marginTop: 10, padding: "10px 14px", width: "100%" }}>
             {placing ? (lang === "ro" ? "Se trimite..." : lang === "en" ? "Sending..." : "Отправляем...") : (lang === "ro" ? "Trimite comanda" : lang === "en" ? "Place order" : "Сделать заказ")}
           </button>
+        </div>
+      )}
+
+      <h2 style={{ marginTop: 24 }}>{lang === "ro" ? "Plată" : lang === "en" ? "Payment" : "Оплата"}</h2>
+      {!billOptions ? (
+        <p style={{ color: "#666" }}>{lang === "ro" ? "Se încarcă opțiunile..." : lang === "en" ? "Loading options..." : "Загрузка опций..."}</p>
+      ) : (
+        <div style={{ border: "1px solid #eee", borderRadius: 10, padding: 12 }}>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <label><input type="radio" checked={billMode === 'MY'} onChange={() => setBillMode('MY')} /> {lang === "ro" ? "Doar al meu" : lang === "en" ? "My items" : "Только моё"}</label>
+            <label><input type="radio" checked={billMode === 'SELECTED'} onChange={() => setBillMode('SELECTED')} /> {lang === "ro" ? "Ales" : lang === "en" ? "Selected" : "Выбранные"}</label>
+            {billOptions.allowPayWholeTable && (
+              <label><input type="radio" checked={billMode === 'WHOLE_TABLE'} onChange={() => setBillMode('WHOLE_TABLE')} /> {lang === "ro" ? "Totul la masă" : lang === "en" ? "Whole table" : "Весь стол"}</label>
+            )}
+          </div>
+
+          <div style={{ marginTop: 12 }}>
+            {billItemsForMode.length === 0 ? (
+              <p style={{ color: "#666" }}>{lang === "ro" ? "Nu există poziții neplătite" : lang === "en" ? "No unpaid items" : "Нет неоплаченных позиций"}</p>
+            ) : (
+              <div style={{ border: "1px solid #f0f0f0", borderRadius: 8, padding: 8 }}>
+                {billItemsForMode.map((it) => (
+                  <div key={it.orderItemId} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px dashed #eee" }}>
+                    <div>
+                      <div>
+                        {billMode === 'SELECTED' && (
+                          <input
+                            type="checkbox"
+                            checked={selectedItemIds.includes(it.orderItemId)}
+                            onChange={(e) => {
+                              setSelectedItemIds((prev) => e.target.checked
+                                ? [...prev, it.orderItemId]
+                                : prev.filter((id) => id !== it.orderItemId)
+                              );
+                            }}
+                            style={{ marginRight: 8 }}
+                          />
+                        )}
+                        <strong>{it.name}</strong>
+                      </div>
+                      <div style={{ color: "#666", fontSize: 12 }}>{it.qty} × {money(it.unitPriceCents, "MDL")}</div>
+                      {billOptions.allowPayOtherGuestsItems && it.guestSessionId !== session?.guestSessionId && (
+                        <div style={{ color: "#999", fontSize: 12 }}>{lang === "ro" ? "Alt oaspete" : lang === "en" ? "Other guest" : "Другой гость"}</div>
+                      )}
+                    </div>
+                    <div><strong>{money(it.lineTotalCents, "MDL")}</strong></div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div style={{ marginTop: 12, display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <label><input type="radio" checked={billPayMethod === 'CASH'} onChange={() => setBillPayMethod('CASH')} /> {lang === "ro" ? "Numerar" : lang === "en" ? "Cash" : "Наличные"}</label>
+            <label><input type="radio" checked={billPayMethod === 'TERMINAL'} onChange={() => setBillPayMethod('TERMINAL')} /> {lang === "ro" ? "Terminal" : lang === "en" ? "Terminal" : "Терминал"}</label>
+          </div>
+
+          {billOptions.tipsEnabled && (
+            <div style={{ marginTop: 12 }}>
+              <div style={{ marginBottom: 6 }}>{lang === "ro" ? "Bacșiș" : lang === "en" ? "Tips" : "Чаевые"}</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {billOptions.tipsPercentages.map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setBillTipsPercent(p)}
+                    style={{ padding: "6px 10px", border: billTipsPercent === p ? "2px solid #333" : "1px solid #ddd", borderRadius: 8 }}
+                  >
+                    {p}%
+                  </button>
+                ))}
+                <button onClick={() => setBillTipsPercent('')} style={{ padding: "6px 10px", border: "1px solid #ddd", borderRadius: 8 }}>
+                  {lang === "ro" ? "Fără" : lang === "en" ? "None" : "Без"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {billError && <div style={{ color: "#b11e46", marginTop: 10 }}>{billError}</div>}
         </div>
       )}
     </main>

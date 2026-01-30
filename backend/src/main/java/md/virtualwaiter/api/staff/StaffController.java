@@ -15,12 +15,14 @@ import md.virtualwaiter.repo.WaiterCallRepo;
 import md.virtualwaiter.repo.BillRequestRepo;
 import md.virtualwaiter.repo.BillRequestItemRepo;
 import md.virtualwaiter.security.QrSignatureService;
+import md.virtualwaiter.service.StaffNotificationService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Instant;
 import java.util.*;
 
 @RestController
@@ -36,6 +38,7 @@ public class StaffController {
   private final BillRequestItemRepo billRequestItemRepo;
   private final QrSignatureService qrSig;
   private final String publicBaseUrl;
+  private final StaffNotificationService notificationService;
 
   public StaffController(
     StaffUserRepo staffUserRepo,
@@ -46,7 +49,8 @@ public class StaffController {
     BillRequestRepo billRequestRepo,
     BillRequestItemRepo billRequestItemRepo,
     QrSignatureService qrSig,
-    @Value("${app.publicBaseUrl:http://localhost:3000}") String publicBaseUrl
+    @Value("${app.publicBaseUrl:http://localhost:3000}") String publicBaseUrl,
+    StaffNotificationService notificationService
   ) {
     this.staffUserRepo = staffUserRepo;
     this.tableRepo = tableRepo;
@@ -57,6 +61,7 @@ public class StaffController {
     this.billRequestItemRepo = billRequestItemRepo;
     this.qrSig = qrSig;
     this.publicBaseUrl = publicBaseUrl;
+    this.notificationService = notificationService;
   }
 
   private StaffUser current(Authentication auth) {
@@ -65,6 +70,15 @@ public class StaffController {
     }
     return staffUserRepo.findByUsername(auth.getName())
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unknown user"));
+  }
+
+  private StaffUser requireRole(Authentication auth, String... roles) {
+    StaffUser u = current(auth);
+    String role = u.role == null ? "" : u.role.toUpperCase(Locale.ROOT);
+    for (String r : roles) {
+      if (role.equals(r)) return u;
+    }
+    throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Insufficient role");
   }
 
   public record MeResponse(long id, String username, String role, long branchId) {}
@@ -76,11 +90,11 @@ public class StaffController {
   }
 
   public record StaffOrderItemDto(long id, long menuItemId, String name, int unitPriceCents, int qty, String comment) {}
-  public record StaffOrderDto(long id, long tableId, int tableNumber, String status, String createdAt, List<StaffOrderItemDto> items) {}
+  public record StaffOrderDto(long id, long tableId, int tableNumber, Long assignedWaiterId, String status, String createdAt, List<StaffOrderItemDto> items) {}
 
   @GetMapping("/orders/active")
   public List<StaffOrderDto> activeOrders(Authentication auth) {
-    StaffUser u = current(auth);
+    StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
     List<CafeTable> tables = tableRepo.findByBranchId(u.branchId);
     List<Long> tableIds = tables.stream().map(t -> t.id).toList();
     if (tableIds.isEmpty()) return List.of();
@@ -90,7 +104,11 @@ public class StaffController {
     if (orders.isEmpty()) return List.of();
 
     Map<Long, Integer> tableNumberById = new HashMap<>();
-    for (CafeTable t : tables) tableNumberById.put(t.id, t.number);
+    Map<Long, Long> assignedById = new HashMap<>();
+    for (CafeTable t : tables) {
+      tableNumberById.put(t.id, t.number);
+      assignedById.put(t.id, t.assignedWaiterId);
+    }
 
     List<Long> orderIds = orders.stream().map(o -> o.id).toList();
     List<OrderItem> items = orderItemRepo.findByOrderIdIn(orderIds);
@@ -107,6 +125,7 @@ public class StaffController {
         o.id,
         o.tableId,
         tableNumberById.getOrDefault(o.tableId, 0),
+        assignedById.get(o.tableId),
         o.status,
         o.createdAt.toString(),
         itemsByOrder.getOrDefault(o.id, List.of())
@@ -119,7 +138,7 @@ public class StaffController {
 
   @PostMapping("/orders/{orderId}/status")
   public void updateStatus(@PathVariable long orderId, @RequestBody UpdateStatusReq req, Authentication auth) {
-    StaffUser u = current(auth);
+    StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
     Order o = orderRepo.findById(orderId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Order not found"));
     // simple branch-level authorization
@@ -139,7 +158,7 @@ public class StaffController {
 
   @GetMapping("/waiter-calls/active")
   public List<StaffWaiterCallDto> activeCalls(Authentication auth) {
-    StaffUser u = current(auth);
+    StaffUser u = requireRole(auth, "WAITER", "ADMIN");
     List<CafeTable> tables = tableRepo.findByBranchId(u.branchId);
     List<Long> tableIds = tables.stream().map(t -> t.id).toList();
     if (tableIds.isEmpty()) return List.of();
@@ -157,9 +176,13 @@ public class StaffController {
   public record SignedTableUrlResponse(String tablePublicId, String sig, String url) {}
 
   @GetMapping("/tables/{tablePublicId}/signed-url")
-  public SignedTableUrlResponse getSignedTableUrl(@PathVariable String tablePublicId) {
+  public SignedTableUrlResponse getSignedTableUrl(@PathVariable String tablePublicId, Authentication auth) {
+    StaffUser u = requireRole(auth, "ADMIN", "WAITER");
     CafeTable table = tableRepo.findByPublicId(tablePublicId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
+    if (!Objects.equals(table.branchId, u.branchId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong branch");
+    }
     String sig = qrSig.signTablePublicId(tablePublicId);
     String url = publicBaseUrl + "/t/" + table.publicId + "?sig=" + sig;
     return new SignedTableUrlResponse(table.publicId, sig, url);
@@ -182,7 +205,8 @@ public class StaffController {
   ) {}
 
   @GetMapping("/bill-requests/active")
-  public List<StaffBillRequestDto> activeBillRequests() {
+  public List<StaffBillRequestDto> activeBillRequests(Authentication auth) {
+    StaffUser u = requireRole(auth, "WAITER", "ADMIN");
     List<BillRequest> reqs = billRequestRepo.findByStatusOrderByCreatedAtAsc("CREATED");
     if (reqs.isEmpty()) return List.of();
 
@@ -197,6 +221,7 @@ public class StaffController {
     for (BillRequest br : reqs) {
       CafeTable t = tables.get(br.tableId);
       if (t == null) continue;
+      if (u.branchId != null && !Objects.equals(t.branchId, u.branchId)) continue;
       List<BillRequestItem> items = billRequestItemRepo.findByBillRequestId(br.id);
       List<StaffBillLine> lines = new ArrayList<>();
       for (BillRequestItem it : items) {
@@ -213,9 +238,14 @@ public class StaffController {
 
   @PostMapping("/bill-requests/{id}/confirm-paid")
   public ConfirmPaidResponse confirmPaid(@PathVariable("id") long id, Authentication auth) {
-    StaffUser staff = currentUser(auth);
+    StaffUser staff = requireRole(auth, "WAITER", "ADMIN");
     BillRequest br = billRequestRepo.findById(id)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Bill request not found"));
+    CafeTable t = tableRepo.findById(br.tableId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
+    if (staff.branchId != null && !Objects.equals(t.branchId, staff.branchId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong branch");
+    }
     if (!"CREATED".equals(br.status)) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Bill request is not active");
     }
@@ -236,6 +266,28 @@ public class StaffController {
     }
 
     return new ConfirmPaidResponse(br.id, br.status);
+  }
+
+  // --- Notifications (polling) ---
+  public record NotificationCounts(long newOrders, long newCalls, long newBills, String sinceOrders, String sinceCalls, String sinceBills) {}
+
+  @GetMapping("/notifications")
+  public NotificationCounts notifications(
+    @RequestParam("sinceOrders") String sinceOrders,
+    @RequestParam("sinceCalls") String sinceCalls,
+    @RequestParam("sinceBills") String sinceBills,
+    Authentication auth
+  ) {
+    StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
+    try {
+      Instant so = Instant.parse(sinceOrders);
+      Instant sc = Instant.parse(sinceCalls);
+      Instant sb = Instant.parse(sinceBills);
+      StaffNotificationService.Counts c = notificationService.countsSince(u.branchId, so, sc, sb);
+      return new NotificationCounts(c.newOrders(), c.newCalls(), c.newBills(), sinceOrders, sinceCalls, sinceBills);
+    } catch (Exception e) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid since");
+    }
   }
 
 }

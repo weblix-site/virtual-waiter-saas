@@ -9,7 +9,7 @@ public class StaffUser {
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   public Long id;
 
-  @Column(name = "branch_id", nullable = false)
+  @Column(name = "branch_id")
   public Long branchId;
 
   @Column(nullable = false, unique = true)
@@ -18,7 +18,7 @@ public class StaffUser {
   @Column(name = "password_hash", nullable = false)
   public String passwordHash;
 
-  /** WAITER | KITCHEN | ADMIN */
+  /** WAITER | KITCHEN | ADMIN | SUPER_ADMIN */
   @Column(nullable = false)
   public String role;
 
