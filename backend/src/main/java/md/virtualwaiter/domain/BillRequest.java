@@ -46,6 +46,12 @@ public class BillRequest {
   @Column(name = "created_at", nullable = false)
   public Instant createdAt = Instant.now();
 
+  @Column(name = "created_by_ip")
+  public String createdByIp;
+
+  @Column(name = "created_by_ua")
+  public String createdByUa;
+
   @Column(name = "confirmed_at")
   public Instant confirmedAt;
 

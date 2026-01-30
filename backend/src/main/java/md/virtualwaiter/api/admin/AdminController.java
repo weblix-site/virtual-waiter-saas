@@ -5,6 +5,7 @@ import md.virtualwaiter.repo.*;
 import md.virtualwaiter.security.QrSignatureService;
 import md.virtualwaiter.service.BranchSettingsService;
 import md.virtualwaiter.service.StatsService;
+import md.virtualwaiter.service.AuditService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -36,6 +37,7 @@ public class AdminController {
   private final ModifierGroupRepo modifierGroupRepo;
   private final ModifierOptionRepo modifierOptionRepo;
   private final MenuItemModifierGroupRepo menuItemModifierGroupRepo;
+  private final AuditService auditService;
 
   public AdminController(
     StaffUserRepo staffUserRepo,
@@ -50,7 +52,8 @@ public class AdminController {
     StatsService statsService,
     ModifierGroupRepo modifierGroupRepo,
     ModifierOptionRepo modifierOptionRepo,
-    MenuItemModifierGroupRepo menuItemModifierGroupRepo
+    MenuItemModifierGroupRepo menuItemModifierGroupRepo,
+    AuditService auditService
   ) {
     this.staffUserRepo = staffUserRepo;
     this.categoryRepo = categoryRepo;
@@ -65,6 +68,7 @@ public class AdminController {
     this.modifierGroupRepo = modifierGroupRepo;
     this.modifierOptionRepo = modifierOptionRepo;
     this.menuItemModifierGroupRepo = menuItemModifierGroupRepo;
+    this.auditService = auditService;
   }
 
   private StaffUser current(Authentication auth) {
@@ -256,6 +260,7 @@ public class AdminController {
     c.sortOrder = req.sortOrder == null ? 0 : req.sortOrder;
     c.isActive = req.isActive == null || req.isActive;
     c = categoryRepo.save(c);
+    auditService.log(u, "CREATE", "MenuCategory", c.id, null);
     return new MenuCategoryDto(c.id, c.nameRu, c.nameRo, c.nameEn, c.sortOrder, c.isActive);
   }
 
@@ -273,6 +278,7 @@ public class AdminController {
     if (req.sortOrder != null) c.sortOrder = req.sortOrder;
     if (req.isActive != null) c.isActive = req.isActive;
     c = categoryRepo.save(c);
+    auditService.log(u, "UPDATE", "MenuCategory", c.id, null);
     return new MenuCategoryDto(c.id, c.nameRu, c.nameRo, c.nameEn, c.sortOrder, c.isActive);
   }
 
@@ -283,6 +289,7 @@ public class AdminController {
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found"));
     requireBranchAccess(u, c.branchId);
     categoryRepo.delete(c);
+    auditService.log(u, "DELETE", "MenuCategory", c.id, null);
   }
 
   // --- Menu items ---
@@ -400,6 +407,7 @@ public class AdminController {
     it.isActive = req.isActive == null || req.isActive;
     it.isStopList = req.isStopList != null && req.isStopList;
     it = itemRepo.save(it);
+    auditService.log(u, "CREATE", "MenuItem", it.id, null);
     return toDto(it);
   }
 
@@ -466,6 +474,7 @@ public class AdminController {
     if (req.isStopList != null) it.isStopList = req.isStopList;
 
     it = itemRepo.save(it);
+    auditService.log(u, "UPDATE", "MenuItem", it.id, null);
     return toDto(it);
   }
 
@@ -478,6 +487,7 @@ public class AdminController {
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found"));
     requireBranchAccess(u, c.branchId);
     itemRepo.delete(it);
+    auditService.log(u, "DELETE", "MenuItem", it.id, null);
   }
 
   private static MenuItemDto toDto(MenuItem it) {
@@ -537,6 +547,7 @@ public class AdminController {
     t.publicId = (req.publicId == null || req.publicId.isBlank()) ? generatePublicId() : req.publicId.trim();
     t.assignedWaiterId = req.assignedWaiterId;
     t = tableRepo.save(t);
+    auditService.log(u, "CREATE", "CafeTable", t.id, null);
     return new TableDto(t.id, t.number, t.publicId, t.assignedWaiterId);
   }
 
@@ -550,6 +561,7 @@ public class AdminController {
     if (req.publicId != null && !req.publicId.isBlank()) t.publicId = req.publicId.trim();
     if (req.assignedWaiterId != null) t.assignedWaiterId = req.assignedWaiterId;
     t = tableRepo.save(t);
+    auditService.log(u, "UPDATE", "CafeTable", t.id, null);
     return new TableDto(t.id, t.number, t.publicId, t.assignedWaiterId);
   }
 
@@ -560,6 +572,7 @@ public class AdminController {
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
     requireBranchAccess(u, t.branchId);
     tableRepo.delete(t);
+    auditService.log(u, "DELETE", "CafeTable", t.id, null);
   }
 
   public record SignedTableUrlResponse(String tablePublicId, String sig, String url) {}
@@ -613,6 +626,7 @@ public class AdminController {
     su.role = role;
     su.isActive = true;
     su = staffUserRepo.save(su);
+    auditService.log(u, "CREATE", "StaffUser", su.id, null);
     return new StaffUserDto(su.id, su.branchId, su.username, su.role, su.isActive);
   }
 
@@ -634,6 +648,7 @@ public class AdminController {
     }
     if (req.isActive != null) su.isActive = req.isActive;
     su = staffUserRepo.save(su);
+    auditService.log(u, "UPDATE", "StaffUser", su.id, null);
     return new StaffUserDto(su.id, su.branchId, su.username, su.role, su.isActive);
   }
 
@@ -644,6 +659,7 @@ public class AdminController {
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Staff user not found"));
     requireBranchAccess(u, su.branchId);
     staffUserRepo.delete(su);
+    auditService.log(u, "DELETE", "StaffUser", su.id, null);
   }
 
   private static String generatePublicId() {
@@ -854,6 +870,31 @@ public class AdminController {
     long grossCents,
     long tipsCents
   ) {}
+
+  @GetMapping("/stats/daily.csv")
+  public String getDailyCsv(
+    @RequestParam(value = "from", required = false) String from,
+    @RequestParam(value = "to", required = false) String to,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    Instant fromTs = parseInstantOrDate(from, true);
+    Instant toTs = parseInstantOrDate(to, false);
+    List<StatsService.DailyRow> rows = statsService.dailyForBranch(bid, fromTs, toTs);
+    StringBuilder sb = new StringBuilder();
+    sb.append("day,orders,calls,paid_bills,gross_cents,tips_cents\n");
+    for (StatsService.DailyRow r : rows) {
+      sb.append(r.day()).append(',')
+        .append(r.ordersCount()).append(',')
+        .append(r.callsCount()).append(',')
+        .append(r.paidBillsCount()).append(',')
+        .append(r.grossCents()).append(',')
+        .append(r.tipsCents()).append('\n');
+    }
+    return sb.toString();
+  }
 
   @GetMapping("/stats/summary")
   public StatsSummaryResponse getSummary(

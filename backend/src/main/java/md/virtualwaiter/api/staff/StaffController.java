@@ -18,6 +18,8 @@ import md.virtualwaiter.security.QrSignatureService;
 import md.virtualwaiter.service.StaffNotificationService;
 import md.virtualwaiter.repo.NotificationEventRepo;
 import md.virtualwaiter.domain.NotificationEvent;
+import md.virtualwaiter.repo.StaffDeviceTokenRepo;
+import md.virtualwaiter.domain.StaffDeviceToken;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -42,6 +44,7 @@ public class StaffController {
   private final String publicBaseUrl;
   private final StaffNotificationService notificationService;
   private final NotificationEventRepo notificationEventRepo;
+  private final StaffDeviceTokenRepo staffDeviceTokenRepo;
 
   public StaffController(
     StaffUserRepo staffUserRepo,
@@ -54,7 +57,8 @@ public class StaffController {
     QrSignatureService qrSig,
     @Value("${app.publicBaseUrl:http://localhost:3000}") String publicBaseUrl,
     StaffNotificationService notificationService,
-    NotificationEventRepo notificationEventRepo
+    NotificationEventRepo notificationEventRepo,
+    StaffDeviceTokenRepo staffDeviceTokenRepo
   ) {
     this.staffUserRepo = staffUserRepo;
     this.tableRepo = tableRepo;
@@ -67,6 +71,7 @@ public class StaffController {
     this.publicBaseUrl = publicBaseUrl;
     this.notificationService = notificationService;
     this.notificationEventRepo = notificationEventRepo;
+    this.staffDeviceTokenRepo = staffDeviceTokenRepo;
   }
 
   private StaffUser current(Authentication auth) {
@@ -96,6 +101,8 @@ public class StaffController {
 
   public record StaffOrderItemDto(long id, long menuItemId, String name, int unitPriceCents, int qty, String comment) {}
   public record StaffOrderDto(long id, long tableId, int tableNumber, Long assignedWaiterId, String status, String createdAt, List<StaffOrderItemDto> items) {}
+
+  public record KitchenOrderDto(long id, long tableId, int tableNumber, Long assignedWaiterId, String status, String createdAt, long ageSeconds, List<StaffOrderItemDto> items) {}
 
   @GetMapping("/orders/active")
   public List<StaffOrderDto> activeOrders(
@@ -146,6 +153,64 @@ public class StaffController {
         assignedById.get(o.tableId),
         o.status,
         o.createdAt.toString(),
+        itemsByOrder.getOrDefault(o.id, List.of())
+      ));
+    }
+    return out;
+  }
+
+  @GetMapping("/orders/kitchen")
+  public List<KitchenOrderDto> kitchenQueue(
+    @RequestParam(value = "statusIn", required = false) String statusIn,
+    Authentication auth
+  ) {
+    StaffUser u = requireRole(auth, "KITCHEN", "ADMIN");
+    List<CafeTable> tables = tableRepo.findByBranchId(u.branchId);
+    List<Long> tableIds = tables.stream().map(t -> t.id).toList();
+    if (tableIds.isEmpty()) return List.of();
+
+    List<String> closed = List.of("CLOSED", "CANCELLED");
+    List<Order> orders = orderRepo.findTop100ByTableIdInAndStatusNotInOrderByCreatedAtDesc(tableIds, closed);
+    if (statusIn != null && !statusIn.isBlank()) {
+      Set<String> allow = new HashSet<>();
+      for (String s : statusIn.split(",")) {
+        String v = s.trim().toUpperCase(Locale.ROOT);
+        if (!v.isEmpty()) allow.add(v);
+      }
+      if (!allow.isEmpty()) {
+        orders = orders.stream().filter(o -> allow.contains(o.status)).toList();
+      }
+    }
+    if (orders.isEmpty()) return List.of();
+
+    Map<Long, Integer> tableNumberById = new HashMap<>();
+    Map<Long, Long> assignedById = new HashMap<>();
+    for (CafeTable t : tables) {
+      tableNumberById.put(t.id, t.number);
+      assignedById.put(t.id, t.assignedWaiterId);
+    }
+
+    List<Long> orderIds = orders.stream().map(o -> o.id).toList();
+    List<OrderItem> items = orderItemRepo.findByOrderIdIn(orderIds);
+    Map<Long, List<StaffOrderItemDto>> itemsByOrder = new HashMap<>();
+    for (OrderItem it : items) {
+      itemsByOrder.computeIfAbsent(it.orderId, k -> new ArrayList<>()).add(
+        new StaffOrderItemDto(it.id, it.menuItemId, it.nameSnapshot, it.unitPriceCents, it.qty, it.comment)
+      );
+    }
+
+    long now = java.time.Instant.now().getEpochSecond();
+    List<KitchenOrderDto> out = new ArrayList<>();
+    for (Order o : orders) {
+      long age = now - o.createdAt.getEpochSecond();
+      out.add(new KitchenOrderDto(
+        o.id,
+        o.tableId,
+        tableNumberById.getOrDefault(o.tableId, 0),
+        assignedById.get(o.tableId),
+        o.status,
+        o.createdAt.toString(),
+        age,
         itemsByOrder.getOrDefault(o.id, List.of())
       ));
     }
@@ -335,6 +400,37 @@ public class StaffController {
       if (e.id > last) last = e.id;
     }
     return new NotificationFeedResponse(last, out);
+  }
+
+  // --- Device tokens (push) ---
+  public record RegisterDeviceRequest(String token, String platform) {}
+  public record RegisterDeviceResponse(boolean registered) {}
+
+  @PostMapping("/devices/register")
+  public RegisterDeviceResponse registerDevice(@RequestBody RegisterDeviceRequest req, Authentication auth) {
+    StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
+    if (req == null || req.token == null || req.token.isBlank() || req.platform == null || req.platform.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "token/platform required");
+    }
+    StaffDeviceToken t = staffDeviceTokenRepo.findByToken(req.token.trim()).orElseGet(StaffDeviceToken::new);
+    t.token = req.token.trim();
+    t.platform = req.platform.trim().toUpperCase(Locale.ROOT);
+    t.staffUserId = u.id;
+    t.branchId = u.branchId;
+    t.lastSeenAt = java.time.Instant.now();
+    staffDeviceTokenRepo.save(t);
+    return new RegisterDeviceResponse(true);
+  }
+
+  public record UnregisterDeviceRequest(String token) {}
+
+  @PostMapping("/devices/unregister")
+  public void unregisterDevice(@RequestBody UnregisterDeviceRequest req, Authentication auth) {
+    requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
+    if (req == null || req.token == null || req.token.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "token required");
+    }
+    staffDeviceTokenRepo.deleteByToken(req.token.trim());
   }
 
   // --- Notifications (polling) ---

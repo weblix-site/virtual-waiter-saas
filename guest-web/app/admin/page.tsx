@@ -509,6 +509,15 @@ export default function AdminPage() {
     setDaily(dailyBody);
   }
 
+  function downloadCsv() {
+    const qs = new URLSearchParams();
+    if (statsFrom) qs.set("from", statsFrom);
+    if (statsTo) qs.set("to", statsTo);
+    const url = `${API_BASE}/api/admin/stats/daily.csv?${qs.toString()}`;
+    // Basic auth via URL is not supported; prompt user to open in new tab after login.
+    window.open(url, "_blank");
+  }
+
   async function saveEditedCategory() {
     if (!editingCategoryId) return;
     await api(`/api/admin/menu/categories/${editingCategoryId}`, {
@@ -609,6 +618,7 @@ export default function AdminPage() {
           <label>From <input type="date" value={statsFrom} onChange={(e) => setStatsFrom(e.target.value)} /></label>
           <label>To <input type="date" value={statsTo} onChange={(e) => setStatsTo(e.target.value)} /></label>
           <button onClick={loadStats}>Load</button>
+          <button onClick={downloadCsv}>Download CSV</button>
         </div>
         {stats && (
           <div style={{ marginTop: 10, border: "1px solid #eee", borderRadius: 8, padding: 10 }}>

@@ -14,4 +14,6 @@ public interface TablePartyRepo extends JpaRepository<TableParty, Long> {
 
   @Query("select p from TableParty p where p.tableId = ?1 and p.status = 'ACTIVE' and p.expiresAt > ?2")
   Optional<TableParty> findActiveByTableId(Long tableId, Instant now);
+
+  java.util.List<TableParty> findByStatus(String status);
 }

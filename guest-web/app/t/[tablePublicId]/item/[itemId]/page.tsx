@@ -77,13 +77,13 @@ export default function ItemPage({ params, searchParams }: any) {
       )}
 
       {item.description && <p>{item.description}</p>}
-      {item.ingredients && <div><strong>Ingredients:</strong> {item.ingredients}</div>}
-      {item.allergens && <div style={{ color: "#b11e46" }}><strong>Allergens:</strong> {item.allergens}</div>}
-      {item.weight && <div><strong>Weight:</strong> {item.weight}</div>}
+      {item.ingredients && <div><strong>{t(lang, "ingredients")}:</strong> {item.ingredients}</div>}
+      {item.allergens && <div style={{ color: "#b11e46" }}><strong>{t(lang, "allergens")}:</strong> {item.allergens}</div>}
+      {item.weight && <div><strong>{t(lang, "weight")}:</strong> {item.weight}</div>}
 
       {(item.kcal || item.proteinG || item.fatG || item.carbsG) && (
         <div style={{ marginTop: 12 }}>
-          <strong>KBJU:</strong>{" "}
+          <strong>{t(lang, "kbju")}:</strong>{" "}
           {item.kcal ? `Kcal ${item.kcal}` : ""}{" "}
           {item.proteinG ? `P ${item.proteinG}g` : ""}{" "}
           {item.fatG ? `F ${item.fatG}g` : ""}{" "}

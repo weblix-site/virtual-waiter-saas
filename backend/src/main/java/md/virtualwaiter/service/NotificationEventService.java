@@ -7,9 +7,11 @@ import org.springframework.stereotype.Service;
 @Service
 public class NotificationEventService {
   private final NotificationEventRepo repo;
+  private final StaffPushService pushService;
 
-  public NotificationEventService(NotificationEventRepo repo) {
+  public NotificationEventService(NotificationEventRepo repo, StaffPushService pushService) {
     this.repo = repo;
+    this.pushService = pushService;
   }
 
   public void emit(long branchId, String type, long refId) {
@@ -18,5 +20,6 @@ public class NotificationEventService {
     ev.eventType = type;
     ev.refId = refId;
     repo.save(ev);
+    pushService.notifyBranch(branchId, type, refId);
   }
 }

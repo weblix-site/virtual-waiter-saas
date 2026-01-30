@@ -26,4 +26,13 @@ public class GuestSession {
 
   @Column(name="verified_phone")
   public String verifiedPhone;
+
+  @Column(name="last_order_at")
+  public Instant lastOrderAt;
+
+  @Column(name="last_waiter_call_at")
+  public Instant lastWaiterCallAt;
+
+  @Column(name="last_bill_request_at")
+  public Instant lastBillRequestAt;
 }

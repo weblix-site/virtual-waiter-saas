@@ -205,12 +205,42 @@ export default function TablePage({ params, searchParams }: any) {
     });
   }
 
+  async function ensureModifiersLoaded(itemId: number) {
+    if (modifiersByItem[itemId]) return;
+    const res = await fetch(`${API_BASE}/api/public/menu-item/${itemId}/modifiers?tablePublicId=${encodeURIComponent(tablePublicId)}&sig=${encodeURIComponent(sig)}&locale=${lang}`);
+    if (res.ok) {
+      const body: MenuItemModifiersResponse = await res.json();
+      setModifiersByItem((prev) => ({ ...prev, [itemId]: body }));
+    }
+  }
+
+  function validateModifiers(itemId: number, selectedIds: number[]) {
+    const mods = modifiersByItem[itemId];
+    if (!mods || mods.groups.length === 0) return true;
+    for (const g of mods.groups) {
+      const optionIds = new Set(g.options.map((o) => o.id));
+      const count = selectedIds.filter((id) => optionIds.has(id)).length;
+      const min = g.minSelect ?? (g.isRequired ? 1 : 0);
+      const max = g.maxSelect ?? (g.isRequired ? 1 : undefined);
+      if (count < min) return false;
+      if (max != null && count > max) return false;
+    }
+    return true;
+  }
+
   async function placeOrder() {
     if (!session) return;
     if (cart.length === 0) return;
     setPlacing(true);
     setError(null);
     try {
+      for (const l of cart) {
+        await ensureModifiersLoaded(l.item.id);
+        const ok = validateModifiers(l.item.id, l.modifierOptionIds ?? []);
+        if (!ok) {
+          throw new Error(t(lang, "modifiersRequired"));
+        }
+      }
       const res = await fetch(`${API_BASE}/api/public/orders`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -228,7 +258,7 @@ export default function TablePage({ params, searchParams }: any) {
       });
       if (!res.ok) {
         if (res.status === 403 && session?.otpRequired && !session?.isVerified) {
-          throw new Error(lang === "ro" ? "Este necesară verificarea prin SMS" : lang === "en" ? "SMS verification required" : "Требуется SMS-верификация");
+          throw new Error(t(lang, "otpRequired"));
         }
         throw new Error(`Order failed (${res.status})`);
       }
@@ -248,7 +278,7 @@ export default function TablePage({ params, searchParams }: any) {
   async function sendOtp() {
     if (!session) return;
     if (!phone.trim()) {
-      alert(lang === "ro" ? "Introduceți numărul" : lang === "en" ? "Enter phone" : "Введите номер");
+      alert(t(lang, "phoneRequired"));
       return;
     }
     setOtpSending(true);
@@ -263,7 +293,7 @@ export default function TablePage({ params, searchParams }: any) {
       setOtpChallengeId(body.challengeId);
       if (body.devCode) alert((lang === "en" ? "DEV code: " : lang === "ro" ? "Cod DEV: " : "DEV код: ") + body.devCode);
     } catch (e: any) {
-      alert(e?.message ?? "Error");
+      alert(e?.message ?? t(lang, "errorGeneric"));
     } finally {
       setOtpSending(false);
     }
@@ -272,11 +302,11 @@ export default function TablePage({ params, searchParams }: any) {
   async function verifyOtp() {
     if (!session) return;
     if (!otpChallengeId) {
-      alert(lang === "ro" ? "Trimiteți codul mai întâi" : lang === "en" ? "Send code first" : "Сначала отправьте код");
+      alert(t(lang, "sendCodeFirst"));
       return;
     }
     if (!otpCode.trim()) {
-      alert(lang === "ro" ? "Introduceți codul" : lang === "en" ? "Enter code" : "Введите код");
+      alert(t(lang, "enterCode"));
       return;
     }
     setOtpVerifying(true);
@@ -288,9 +318,9 @@ export default function TablePage({ params, searchParams }: any) {
       });
       if (!res.ok) throw new Error(`OTP verify failed (${res.status})`);
       setSession({ ...session, isVerified: true });
-      alert(lang === "ro" ? "Verificat" : lang === "en" ? "Verified" : "Подтверждено");
+      alert(t(lang, "verified"));
     } catch (e: any) {
-      alert(e?.message ?? "Error");
+      alert(e?.message ?? t(lang, "errorGeneric"));
     } finally {
       setOtpVerifying(false);
     }
@@ -304,9 +334,9 @@ export default function TablePage({ params, searchParams }: any) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ guestSessionId: session.guestSessionId }),
       });
-      alert(lang === "ro" ? "Chelnerul a fost chemat" : lang === "en" ? "Waiter was called" : "Официант вызван");
+      alert(t(lang, "waiterCalled"));
     } catch {
-      alert("Error");
+      alert(t(lang, "errorGeneric"));
     }
   }
   async function createPin() {
@@ -320,9 +350,9 @@ export default function TablePage({ params, searchParams }: any) {
       if (!res.ok) throw new Error(`PIN create failed (${res.status})`);
       const body = await res.json();
       setParty({ partyId: body.partyId, pin: body.pin, expiresAt: body.expiresAt });
-      alert((lang === "ro" ? "PIN creat: " : lang === "en" ? "PIN created: " : "PIN создан: ") + body.pin);
+      alert(t(lang, "pinCreated") + body.pin);
     } catch (e: any) {
-      alert(e?.message ?? "Error");
+      alert(e?.message ?? t(lang, "errorGeneric"));
     }
   }
 
@@ -339,9 +369,9 @@ export default function TablePage({ params, searchParams }: any) {
       if (!res.ok) throw new Error(`PIN join failed (${res.status})`);
       const body = await res.json();
       setParty({ partyId: body.partyId, pin: body.pin, expiresAt: body.expiresAt });
-      alert((lang === "ro" ? "Conectat la PIN: " : lang === "en" ? "Joined PIN: " : "Подключились к PIN: ") + body.pin);
+      alert(t(lang, "pinJoined") + body.pin);
     } catch (e: any) {
-      alert(e?.message ?? "Error");
+      alert(e?.message ?? t(lang, "errorGeneric"));
     }
   }
 
@@ -355,9 +385,9 @@ export default function TablePage({ params, searchParams }: any) {
       });
       if (!res.ok) throw new Error(`Party close failed (${res.status})`);
       setParty(null);
-      alert(lang === "ro" ? "Party închis" : lang === "en" ? "Party closed" : "Party закрыт");
+      alert(t(lang, "partyClosed"));
     } catch (e: any) {
-      alert(e?.message ?? "Error");
+      alert(e?.message ?? t(lang, "errorGeneric"));
     }
   }
 
@@ -387,9 +417,9 @@ export default function TablePage({ params, searchParams }: any) {
       if (!res.ok) throw new Error(body?.message ?? `Bill request failed (${res.status})`);
       setBillRequestId(body.billRequestId);
       setBillStatus(body.status);
-      alert(lang === "ro" ? "Cerere de plată trimisă" : lang === "en" ? "Bill requested" : "Счет запрошен");
+      alert(t(lang, "billRequested"));
     } catch (e: any) {
-      setBillError(e?.message ?? "Error");
+      setBillError(e?.message ?? t(lang, "errorGeneric"));
     } finally {
       setBillLoading(false);
     }
@@ -458,7 +488,7 @@ export default function TablePage({ params, searchParams }: any) {
   if (error) {
     return (
       <main style={{ padding: 20 }}>
-        <h2 style={{ marginTop: 0 }}>Error</h2>
+        <h2 style={{ marginTop: 0 }}>{t(lang, "error")}</h2>
         <pre style={{ whiteSpace: "pre-wrap" }}>{error}</pre>
       </main>
     );
@@ -468,8 +498,8 @@ export default function TablePage({ params, searchParams }: any) {
     <main style={{ padding: 16, maxWidth: 900, margin: "0 auto", fontFamily: "system-ui, -apple-system, Segoe UI, Roboto" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <div>
-          <h1 style={{ margin: 0 }}>Table #{session?.tableNumber}</h1>
-          <div style={{ color: "#666" }}>Session: {session?.guestSessionId}</div>
+          <h1 style={{ margin: 0 }}>{t(lang, "table")} #{session?.tableNumber}</h1>
+          <div style={{ color: "#666" }}>{t(lang, "session")}: {session?.guestSessionId}</div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <a href={`/t/${tablePublicId}?lang=ru&sig=${encodeURIComponent(sig)}`}>RU</a>
@@ -493,7 +523,7 @@ export default function TablePage({ params, searchParams }: any) {
             </button>
             {party && (
               <button onClick={closeParty} style={{ padding: "10px 14px" }}>
-                {lang === "ro" ? "Închide Party" : lang === "en" ? "Close Party" : "Закрыть Party"}
+                {t(lang, "partyClose")}
               </button>
             )}
           </>

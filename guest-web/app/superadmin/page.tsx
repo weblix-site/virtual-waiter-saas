@@ -19,6 +19,16 @@ type StatsSummary = {
   activeTablesCount: number;
 };
 
+type BranchSummaryRow = {
+  branchId: number;
+  branchName: string;
+  ordersCount: number;
+  callsCount: number;
+  paidBillsCount: number;
+  grossCents: number;
+  tipsCents: number;
+};
+
 function money(priceCents: number, currency = "MDL") {
   return `${(priceCents / 100).toFixed(2)} ${currency}`;
 }
@@ -37,6 +47,7 @@ export default function SuperAdminPage() {
   const [statsFrom, setStatsFrom] = useState("");
   const [statsTo, setStatsTo] = useState("");
   const [stats, setStats] = useState<StatsSummary | null>(null);
+  const [branchStats, setBranchStats] = useState<BranchSummaryRow[]>([]);
 
   const [newTenantName, setNewTenantName] = useState("");
   const [newBranchName, setNewBranchName] = useState("");
@@ -117,6 +128,8 @@ export default function SuperAdminPage() {
     const res = await api(`/api/super/stats/summary?${qs.toString()}`);
     const body = await res.json();
     setStats(body);
+    const resBranches = await api(`/api/super/stats/branches?${qs.toString()}`);
+    setBranchStats(await resBranches.json());
   }
 
   async function createTenant() {
@@ -344,6 +357,65 @@ export default function SuperAdminPage() {
             <div>Active tables: {stats.activeTablesCount}</div>
           </div>
         )}
+        {branchStats.length > 0 && (
+          <div style={{ marginTop: 12 }}>
+            <h3>By Branch</h3>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Branch</th>
+                  <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Orders</th>
+                  <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Calls</th>
+                  <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Paid bills</th>
+                  <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Gross</th>
+                  <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Tips</th>
+                </tr>
+              </thead>
+              <tbody>
+                {branchStats.map((r) => (
+                  <tr key={r.branchId}>
+                    <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{r.branchName}</td>
+                    <td style={{ padding: "6px 4px", textAlign: "right", borderBottom: "1px solid #f0f0f0" }}>{r.ordersCount}</td>
+                    <td style={{ padding: "6px 4px", textAlign: "right", borderBottom: "1px solid #f0f0f0" }}>{r.callsCount}</td>
+                    <td style={{ padding: "6px 4px", textAlign: "right", borderBottom: "1px solid #f0f0f0" }}>{r.paidBillsCount}</td>
+                    <td style={{ padding: "6px 4px", textAlign: "right", borderBottom: "1px solid #f0f0f0" }}>{money(r.grossCents)}</td>
+                    <td style={{ padding: "6px 4px", textAlign: "right", borderBottom: "1px solid #f0f0f0" }}>{money(r.tipsCents)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section style={{ marginTop: 24 }}>
+        <h2>RBAC Matrix</h2>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr>
+              <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Role</th>
+              <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Access</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style={{ padding: "6px 4px" }}>WAITER</td>
+              <td style={{ padding: "6px 4px" }}>Orders, Waiter calls, Bill requests, Confirm paid</td>
+            </tr>
+            <tr>
+              <td style={{ padding: "6px 4px" }}>KITCHEN</td>
+              <td style={{ padding: "6px 4px" }}>Kitchen queue, Order status updates</td>
+            </tr>
+            <tr>
+              <td style={{ padding: "6px 4px" }}>ADMIN</td>
+              <td style={{ padding: "6px 4px" }}>Menu, Tables/QR, Staff, Settings, Stats</td>
+            </tr>
+            <tr>
+              <td style={{ padding: "6px 4px" }}>SUPER_ADMIN</td>
+              <td style={{ padding: "6px 4px" }}>Tenants/Branches, Global Staff, Global Stats</td>
+            </tr>
+          </tbody>
+        </table>
       </section>
     </main>
   );

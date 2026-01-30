@@ -215,6 +215,16 @@ public class SuperAdminController {
     long activeTablesCount
   ) {}
 
+  public record BranchSummaryRow(
+    long branchId,
+    String branchName,
+    long ordersCount,
+    long callsCount,
+    long paidBillsCount,
+    long grossCents,
+    long tipsCents
+  ) {}
+
   @GetMapping("/stats/summary")
   public StatsSummaryResponse getSummary(
     @RequestParam(value = "tenantId") Long tenantId,
@@ -236,6 +246,24 @@ public class SuperAdminController {
       s.tipsCents(),
       s.activeTablesCount()
     );
+  }
+
+  @GetMapping("/stats/branches")
+  public List<BranchSummaryRow> getBranchSummary(
+    @RequestParam(value = "tenantId") Long tenantId,
+    @RequestParam(value = "from", required = false) String from,
+    @RequestParam(value = "to", required = false) String to,
+    Authentication auth
+  ) {
+    requireSuper(auth);
+    Instant fromTs = parseInstantOrDate(from, true);
+    Instant toTs = parseInstantOrDate(to, false);
+    List<StatsService.BranchSummaryRow> rows = statsService.summaryByBranchForTenant(tenantId, fromTs, toTs);
+    List<BranchSummaryRow> out = new ArrayList<>();
+    for (StatsService.BranchSummaryRow r : rows) {
+      out.add(new BranchSummaryRow(r.branchId(), r.branchName(), r.ordersCount(), r.callsCount(), r.paidBillsCount(), r.grossCents(), r.tipsCents()));
+    }
+    return out;
   }
 
   private static Instant parseInstantOrDate(String v, boolean isStart) {

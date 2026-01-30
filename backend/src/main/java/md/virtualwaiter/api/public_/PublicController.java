@@ -326,7 +326,7 @@ public class PublicController {
   public record CreateOrderResponse(long orderId, String status) {}
 
   @PostMapping("/orders")
-  public CreateOrderResponse createOrder(@Valid @RequestBody CreateOrderRequest req) {
+  public CreateOrderResponse createOrder(@Valid @RequestBody CreateOrderRequest req, jakarta.servlet.http.HttpServletRequest httpReq) {
     GuestSession s = sessionRepo.findById(req.guestSessionId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
     if (s.expiresAt.isBefore(Instant.now())) {
@@ -338,6 +338,12 @@ public class PublicController {
     BranchSettingsService.Resolved settings = settingsService.resolveForBranch(table.branchId);
     if (settings.requireOtpForFirstOrder() && !s.isVerified) {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "OTP required before first order");
+    }
+
+    // Basic anti-spam: 1 order per 10 seconds per session
+    Instant now = Instant.now();
+    if (s.lastOrderAt != null && s.lastOrderAt.isAfter(now.minusSeconds(10))) {
+      throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Too many orders");
     }
 
     if (req.items == null || req.items.isEmpty()) {
@@ -358,6 +364,8 @@ public class PublicController {
     o.tableId = table.id;
     o.guestSessionId = s.id;
     o.status = "NEW";
+    o.createdByIp = getClientIp(httpReq);
+    o.createdByUa = getUserAgent(httpReq);
     o = orderRepo.save(o);
 
     for (CreateOrderItemReq i : req.items) {
@@ -378,6 +386,9 @@ public class PublicController {
       oi.modifiersJson = sel.rawJson;
       orderItemRepo.save(oi);
     }
+
+    s.lastOrderAt = now;
+    sessionRepo.save(s);
 
     notificationEventService.emit(table.branchId, "ORDER_NEW", o.id);
 
@@ -498,6 +509,25 @@ public class PublicController {
     return new ClosePartyResponse(p.id, p.status);
   }
 
+  @PostMapping("/party/close-expired")
+  public Map<String, Object> closeExpiredParties(@RequestHeader(value = "X-Admin-Key", required = false) String key) {
+    if (key == null || !key.equals(System.getenv("ADMIN_KEY"))) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Admin key required");
+    }
+    Instant now = Instant.now();
+    List<TableParty> parties = partyRepo.findByStatus("ACTIVE");
+    int closed = 0;
+    for (TableParty p : parties) {
+      if (p.expiresAt.isBefore(now)) {
+        p.status = "CLOSED";
+        p.closedAt = now;
+        partyRepo.save(p);
+        closed++;
+      }
+    }
+    return Map.of("closed", closed);
+  }
+
   private static String generatePin4() {
     int v = new java.util.Random().nextInt(10000);
     return String.format(java.util.Locale.ROOT, "%04d", v);
@@ -529,17 +559,25 @@ public class PublicController {
   public record WaiterCallResponse(long waiterCallId, String status) {}
 
   @PostMapping("/waiter-call")
-  public WaiterCallResponse callWaiter(@Valid @RequestBody WaiterCallRequest req) {
+  public WaiterCallResponse callWaiter(@Valid @RequestBody WaiterCallRequest req, jakarta.servlet.http.HttpServletRequest httpReq) {
     GuestSession s = sessionRepo.findById(req.guestSessionId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
     if (s.expiresAt.isBefore(Instant.now())) {
       throw new ResponseStatusException(HttpStatus.GONE, "Session expired");
     }
+    Instant now = Instant.now();
+    if (s.lastWaiterCallAt != null && s.lastWaiterCallAt.isAfter(now.minusSeconds(30))) {
+      throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Too many calls");
+    }
     WaiterCall wc = new WaiterCall();
     wc.tableId = s.tableId;
     wc.guestSessionId = s.id;
     wc.status = "NEW";
+    wc.createdByIp = getClientIp(httpReq);
+    wc.createdByUa = getUserAgent(httpReq);
     wc = waiterCallRepo.save(wc);
+    s.lastWaiterCallAt = now;
+    sessionRepo.save(s);
     CafeTable table = tableRepo.findById(s.tableId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
     notificationEventService.emit(table.branchId, "WAITER_CALL", wc.id);
@@ -570,6 +608,18 @@ public class PublicController {
       if (!v.isEmpty()) out.add(v);
     }
     return out;
+  }
+
+  private static String getClientIp(jakarta.servlet.http.HttpServletRequest req) {
+    String xf = req.getHeader("X-Forwarded-For");
+    if (xf != null && !xf.isBlank()) {
+      return xf.split(",")[0].trim();
+    }
+    return req.getRemoteAddr();
+  }
+
+  private static String getUserAgent(jakarta.servlet.http.HttpServletRequest req) {
+    return req.getHeader("User-Agent");
   }
 
   private static class ModSelection {
@@ -802,11 +852,15 @@ public class PublicController {
   ) {}
 
   @PostMapping("/bill-request/create")
-  public BillRequestResponse createBillRequest(@Valid @RequestBody CreateBillRequest req) {
+  public BillRequestResponse createBillRequest(@Valid @RequestBody CreateBillRequest req, jakarta.servlet.http.HttpServletRequest httpReq) {
     GuestSession s = sessionRepo.findById(req.guestSessionId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
     if (s.expiresAt.isBefore(Instant.now())) {
       throw new ResponseStatusException(HttpStatus.GONE, "Session expired");
+    }
+    Instant now = Instant.now();
+    if (s.lastBillRequestAt != null && s.lastBillRequestAt.isAfter(now.minusSeconds(30))) {
+      throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Too many bill requests");
     }
     CafeTable table = tableRepo.findById(s.tableId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
@@ -934,8 +988,12 @@ public class PublicController {
     br.tipsPercent = tipsPercent;
     br.tipsAmountCents = tipsAmount;
     br.totalCents = subtotal + tipsAmount;
+    br.createdByIp = getClientIp(httpReq);
+    br.createdByUa = getUserAgent(httpReq);
 
     br = billRequestRepo.save(br);
+    s.lastBillRequestAt = now;
+    sessionRepo.save(s);
     notificationEventService.emit(table.branchId, "BILL_REQUEST", br.id);
 
     for (OrderItem oi : selected) {

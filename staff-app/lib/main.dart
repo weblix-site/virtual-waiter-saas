@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -112,8 +113,10 @@ class _HomeScreenState extends State<HomeScreen> {
   int _newBills = 0;
   int _lastNotifId = 0;
   final List<Map<String, dynamic>> _events = [];
+  String? _deviceToken;
   final AudioPlayer _player = AudioPlayer();
   DateTime? _lastKitchenBeepAt;
+  DateTime? _lastSnackAt;
 
   String get _auth => base64Encode(utf8.encode('${widget.username}:${widget.password}'));
 
@@ -143,6 +146,25 @@ class _HomeScreenState extends State<HomeScreen> {
               _player.play(AssetSource('beep.wav'));
             }
           }
+
+          if (mounted) {
+            final now = DateTime.now();
+            if (_lastSnackAt == null || now.difference(_lastSnackAt!) > const Duration(seconds: 10)) {
+              _lastSnackAt = now;
+              final orders = events.where((e) => e['type'] == 'ORDER_NEW').length;
+              final calls = events.where((e) => e['type'] == 'WAITER_CALL').length;
+              final bills = events.where((e) => e['type'] == 'BILL_REQUEST').length;
+              final parts = <String>[];
+              if (orders > 0) parts.add('Orders: $orders');
+              if (calls > 0) parts.add('Calls: $calls');
+              if (bills > 0) parts.add('Bills: $bills');
+              if (parts.isNotEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('New events • ${parts.join("  ")}')),
+                );
+              }
+            }
+          }
         }
       }
       final res = await http.get(
@@ -159,11 +181,31 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (_) {}
   }
 
+  Future<void> _registerDevice() async {
+    if (_deviceToken == null) {
+      _deviceToken = _genToken();
+    }
+    try {
+      await http.post(
+        Uri.parse('$apiBase/api/staff/devices/register'),
+        headers: {'Authorization': 'Basic $_auth', 'Content-Type': 'application/json'},
+        body: jsonEncode({'token': _deviceToken, 'platform': 'APP'}),
+      );
+    } catch (_) {}
+  }
+
+  String _genToken() {
+    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    final rnd = Random();
+    return List.generate(32, (_) => chars[rnd.nextInt(chars.length)]).join();
+  }
+
   @override
   void initState() {
     super.initState();
     _timer = Timer.periodic(const Duration(seconds: 15), (_) => _poll());
     _poll();
+    _registerDevice();
   }
 
   @override
@@ -558,7 +600,7 @@ class _KitchenTabState extends State<KitchenTab> {
     });
     try {
       final res = await http.get(
-        Uri.parse('$apiBase/api/staff/orders/active?statusIn=$_statusFilter'),
+        Uri.parse('$apiBase/api/staff/orders/kitchen?statusIn=$_statusFilter'),
         headers: {'Authorization': 'Basic $_auth'},
       );
       if (res.statusCode != 200) throw Exception('Load failed (${res.statusCode})');
@@ -629,9 +671,11 @@ class _KitchenTabState extends State<KitchenTab> {
                     final o = orders[i] as Map<String, dynamic>;
                     final items = (o['items'] as List<dynamic>? ?? const []).cast<Map<String, dynamic>>();
                     final tableNumber = o['tableNumber'];
+                    final ageSec = (o['ageSeconds'] ?? 0) as int;
+                    final ageMin = (ageSec / 60).floor();
                     return ListTile(
                       title: Text('Table #$tableNumber  •  Order #${o['id']}'),
-                      subtitle: Text('${o['status']} • ${items.length} item(s)'),
+                      subtitle: Text('${o['status']} • ${items.length} item(s) • ${ageMin}m'),
                       onTap: () {
                         Navigator.of(context).push(MaterialPageRoute(
                           builder: (_) => OrderDetailsScreen(

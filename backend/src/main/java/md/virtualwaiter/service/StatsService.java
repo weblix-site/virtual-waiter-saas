@@ -57,6 +57,59 @@ public class StatsService {
     return runDaily(tableFilter, params);
   }
 
+  public record BranchSummaryRow(
+    long branchId,
+    String branchName,
+    long ordersCount,
+    long callsCount,
+    long paidBillsCount,
+    long grossCents,
+    long tipsCents
+  ) {}
+
+  public java.util.List<BranchSummaryRow> summaryByBranchForTenant(long tenantId, Instant from, Instant to) {
+    Map<String, Object> params = baseParams(from, to);
+    params.put("tenantId", tenantId);
+    String sql =
+      "SELECT b.id AS branch_id, b.name AS branch_name,\n" +
+      "  COALESCE(o.cnt,0) AS orders_count,\n" +
+      "  COALESCE(c.cnt,0) AS calls_count,\n" +
+      "  COALESCE(br.cnt,0) AS paid_bills_count,\n" +
+      "  COALESCE(br.gross,0) AS gross_cents,\n" +
+      "  COALESCE(br.tips,0) AS tips_cents\n" +
+      "FROM branches b\n" +
+      "LEFT JOIN (\n" +
+      "  SELECT t.branch_id, COUNT(*) AS cnt\n" +
+      "  FROM orders o JOIN tables t ON t.id = o.table_id\n" +
+      "  WHERE o.created_at BETWEEN :fromTs AND :toTs\n" +
+      "  GROUP BY t.branch_id\n" +
+      ") o ON o.branch_id = b.id\n" +
+      "LEFT JOIN (\n" +
+      "  SELECT t.branch_id, COUNT(*) AS cnt\n" +
+      "  FROM waiter_calls wc JOIN tables t ON t.id = wc.table_id\n" +
+      "  WHERE wc.created_at BETWEEN :fromTs AND :toTs\n" +
+      "  GROUP BY t.branch_id\n" +
+      ") c ON c.branch_id = b.id\n" +
+      "LEFT JOIN (\n" +
+      "  SELECT t.branch_id, COUNT(*) AS cnt, COALESCE(SUM(br.total_cents),0) AS gross, COALESCE(SUM(br.tips_amount_cents),0) AS tips\n" +
+      "  FROM bill_requests br JOIN tables t ON t.id = br.table_id\n" +
+      "  WHERE br.status = 'PAID_CONFIRMED' AND br.confirmed_at BETWEEN :fromTs AND :toTs\n" +
+      "  GROUP BY t.branch_id\n" +
+      ") br ON br.branch_id = b.id\n" +
+      "WHERE b.tenant_id = :tenantId\n" +
+      "ORDER BY b.name ASC";
+
+    return jdbc.query(sql, params, (rs, rowNum) -> new BranchSummaryRow(
+      rs.getLong("branch_id"),
+      rs.getString("branch_name"),
+      rs.getLong("orders_count"),
+      rs.getLong("calls_count"),
+      rs.getLong("paid_bills_count"),
+      rs.getLong("gross_cents"),
+      rs.getLong("tips_cents")
+    ));
+  }
+
   private java.util.List<DailyRow> runDaily(String tableFilter, Map<String, Object> params) {
     String sql =
       "WITH days AS (\n" +
