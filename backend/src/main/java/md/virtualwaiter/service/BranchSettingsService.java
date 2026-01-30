@@ -40,7 +40,9 @@ public class BranchSettingsService {
     boolean allowPayOtherGuestsItems,
     boolean allowPayWholeTable,
     boolean tipsEnabled,
-    List<Integer> tipsPercentages
+    List<Integer> tipsPercentages,
+    boolean payCashEnabled,
+    boolean payTerminalEnabled
   ) {}
 
   public Resolved resolveForBranch(long branchId) {
@@ -56,7 +58,9 @@ public class BranchSettingsService {
       boolOr(s == null ? null : s.allowPayOtherGuestsItems, billDefaults.allowPayOtherGuestsItems),
       boolOr(s == null ? null : s.allowPayWholeTable, billDefaults.allowPayWholeTable),
       boolOr(s == null ? null : s.tipsEnabled, tipsDefaults.enabled),
-      listOr(s == null ? null : s.tipsPercentages, tipsDefaults.percentages)
+      listOr(s == null ? null : s.tipsPercentages, tipsDefaults.percentages),
+      boolOr(s == null ? null : s.payCashEnabled, true),
+      boolOr(s == null ? null : s.payTerminalEnabled, true)
     );
   }
 

@@ -3,6 +3,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:audioplayers/audioplayers.dart';
 
 void main() {
   runApp(const StaffApp());
@@ -109,11 +110,41 @@ class _HomeScreenState extends State<HomeScreen> {
   int _newOrders = 0;
   int _newCalls = 0;
   int _newBills = 0;
+  int _lastNotifId = 0;
+  final List<Map<String, dynamic>> _events = [];
+  final AudioPlayer _player = AudioPlayer();
+  DateTime? _lastKitchenBeepAt;
 
   String get _auth => base64Encode(utf8.encode('${widget.username}:${widget.password}'));
 
   Future<void> _poll() async {
     try {
+      final feed = await http.get(
+        Uri.parse('$apiBase/api/staff/notifications/feed?sinceId=$_lastNotifId'),
+        headers: {'Authorization': 'Basic $_auth'},
+      );
+      if (feed.statusCode == 200) {
+        final body = jsonDecode(feed.body);
+        final events = (body['events'] as List<dynamic>? ?? const []).cast<Map<String, dynamic>>();
+        if (events.isNotEmpty) {
+          setState(() {
+            _lastNotifId = body['lastId'] ?? _lastNotifId;
+            _events.insertAll(0, events);
+          });
+
+          // Play sound for new orders (kitchen)
+          final hasNewOrder = events.any((e) => e['type'] == 'ORDER_NEW');
+          if (hasNewOrder) {
+            final now = DateTime.now();
+            if (_lastKitchenBeepAt == null || now.difference(_lastKitchenBeepAt!) > const Duration(seconds: 10)) {
+              _lastKitchenBeepAt = now;
+              // System beep as fallback
+              // For simplicity use a short system sound
+              _player.play(AssetSource('beep.wav'));
+            }
+          }
+        }
+      }
       final res = await http.get(
         Uri.parse('$apiBase/api/staff/notifications?sinceOrders=${_sinceOrders.toUtc().toIso8601String()}&sinceCalls=${_sinceCalls.toUtc().toIso8601String()}&sinceBills=${_sinceBills.toUtc().toIso8601String()}'),
         headers: {'Authorization': 'Basic $_auth'},
@@ -138,6 +169,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _timer?.cancel();
+    _player.dispose();
     super.dispose();
   }
 
@@ -148,6 +180,7 @@ class _HomeScreenState extends State<HomeScreen> {
       CallsTab(username: widget.username, password: widget.password),
       BillsTab(username: widget.username, password: widget.password),
       KitchenTab(username: widget.username, password: widget.password),
+      NotificationsTab(events: _events),
     ];
     return Scaffold(
       body: tabs[_index],
@@ -183,8 +216,35 @@ class _HomeScreenState extends State<HomeScreen> {
             label: 'Bills',
           ),
           const NavigationDestination(icon: Icon(Icons.kitchen), label: 'Kitchen'),
+          const NavigationDestination(icon: Icon(Icons.notifications), label: 'Events'),
         ],
       ),
+    );
+  }
+}
+
+class NotificationsTab extends StatelessWidget {
+  final List<Map<String, dynamic>> events;
+
+  const NotificationsTab({super.key, required this.events});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Events')),
+      body: events.isEmpty
+          ? const Center(child: Text('No events yet'))
+          : ListView.separated(
+              itemCount: events.length,
+              separatorBuilder: (_, __) => const Divider(height: 1),
+              itemBuilder: (ctx, i) {
+                final e = events[i];
+                return ListTile(
+                  title: Text('${e['type']} • #${e['refId']}'),
+                  subtitle: Text('${e['createdAt']}'),
+                );
+              },
+            ),
     );
   }
 }
@@ -422,6 +482,7 @@ class _BillsTabState extends State<BillsTab> {
                   itemBuilder: (ctx, i) {
                     final b = _bills[i] as Map<String, dynamic>;
                     final items = (b['items'] as List<dynamic>? ?? const []).cast<Map<String, dynamic>>();
+                    final partyId = b['partyId'];
                     return ExpansionTile(
                       title: Text('Table #${b['tableNumber']} • ${b['paymentMethod']}'),
                       subtitle: Text('${b['mode']} • ${b['totalCents']} cents'),
@@ -440,6 +501,29 @@ class _BillsTabState extends State<BillsTab> {
                             ),
                           ),
                         ),
+                        if (partyId != null)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            child: SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton(
+                                onPressed: () async {
+                                  final res = await http.post(
+                                    Uri.parse('$apiBase/api/staff/parties/$partyId/close'),
+                                    headers: {'Authorization': 'Basic $_auth'},
+                                  );
+                                  if (res.statusCode >= 300) {
+                                    if (!context.mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Close party failed (${res.statusCode})')));
+                                    return;
+                                  }
+                                  if (!context.mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Party closed')));
+                                },
+                                child: const Text('Close party'),
+                              ),
+                            ),
+                          ),
                       ],
                     );
                   },
@@ -462,6 +546,8 @@ class _KitchenTabState extends State<KitchenTab> {
   bool _loading = true;
   String? _error;
   List<dynamic> _orders = const [];
+  String _statusFilter = 'NEW,ACCEPTED,COOKING';
+  String _sortMode = 'time_desc';
 
   String get _auth => base64Encode(utf8.encode('${widget.username}:${widget.password}'));
 
@@ -472,7 +558,7 @@ class _KitchenTabState extends State<KitchenTab> {
     });
     try {
       final res = await http.get(
-        Uri.parse('$apiBase/api/staff/orders/active'),
+        Uri.parse('$apiBase/api/staff/orders/active?statusIn=$_statusFilter'),
         headers: {'Authorization': 'Basic $_auth'},
       );
       if (res.statusCode != 200) throw Exception('Load failed (${res.statusCode})');
@@ -493,10 +579,42 @@ class _KitchenTabState extends State<KitchenTab> {
 
   @override
   Widget build(BuildContext context) {
+    final orders = _orders.toList();
+    orders.sort((a, b) {
+      final sa = (a['status'] ?? '').toString();
+      final sb = (b['status'] ?? '').toString();
+      int pa = statusPriority(sa);
+      int pb = statusPriority(sb);
+      if (_sortMode == 'priority_time') {
+        if (pa != pb) return pa.compareTo(pb);
+        return (b['createdAt'] ?? '').toString().compareTo((a['createdAt'] ?? '').toString());
+      }
+      // time_desc default
+      return (b['createdAt'] ?? '').toString().compareTo((a['createdAt'] ?? '').toString());
+    });
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Kitchen Queue'),
         actions: [
+          PopupMenuButton<String>(
+            onSelected: (v) {
+              setState(() => _statusFilter = v);
+              _load();
+            },
+            itemBuilder: (ctx) => const [
+              PopupMenuItem(value: 'NEW,ACCEPTED,COOKING', child: Text('Active (New/Accepted/Cooking)')),
+              PopupMenuItem(value: 'READY', child: Text('Ready')),
+              PopupMenuItem(value: 'NEW', child: Text('New only')),
+            ],
+          ),
+          PopupMenuButton<String>(
+            onSelected: (v) => setState(() => _sortMode = v),
+            itemBuilder: (ctx) => const [
+              PopupMenuItem(value: 'time_desc', child: Text('Sort: newest first')),
+              PopupMenuItem(value: 'priority_time', child: Text('Sort: priority then time')),
+            ],
+          ),
           IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
         ],
       ),
@@ -505,10 +623,10 @@ class _KitchenTabState extends State<KitchenTab> {
           : _error != null
               ? Center(child: Text(_error!))
               : ListView.separated(
-                  itemCount: _orders.length,
+                  itemCount: orders.length,
                   separatorBuilder: (_, __) => const Divider(height: 1),
                   itemBuilder: (ctx, i) {
-                    final o = _orders[i] as Map<String, dynamic>;
+                    final o = orders[i] as Map<String, dynamic>;
                     final items = (o['items'] as List<dynamic>? ?? const []).cast<Map<String, dynamic>>();
                     final tableNumber = o['tableNumber'];
                     return ListTile(
@@ -528,6 +646,21 @@ class _KitchenTabState extends State<KitchenTab> {
                   },
                 ),
     );
+  }
+
+  int statusPriority(String status) {
+    switch (status.toUpperCase()) {
+      case 'NEW':
+        return 0;
+      case 'ACCEPTED':
+        return 1;
+      case 'COOKING':
+        return 2;
+      case 'READY':
+        return 3;
+      default:
+        return 9;
+    }
   }
 }
 

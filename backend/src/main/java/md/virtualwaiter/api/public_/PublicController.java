@@ -17,6 +17,7 @@ import md.virtualwaiter.repo.ModifierOptionRepo;
 import md.virtualwaiter.repo.MenuItemModifierGroupRepo;
 import md.virtualwaiter.otp.OtpService;
 import md.virtualwaiter.service.BranchSettingsService;
+import md.virtualwaiter.service.NotificationEventService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -50,6 +51,7 @@ public class PublicController {
   private final QrSignatureService qrSig;
   private final OtpService otpService;
   private final BranchSettingsService settingsService;
+  private final NotificationEventService notificationEventService;
 
   public PublicController(
     CafeTableRepo tableRepo,
@@ -67,7 +69,8 @@ public class PublicController {
     MenuItemModifierGroupRepo menuItemModifierGroupRepo,
     QrSignatureService qrSig,
     OtpService otpService,
-    BranchSettingsService settingsService
+    BranchSettingsService settingsService,
+    NotificationEventService notificationEventService
   ) {
     this.tableRepo = tableRepo;
     this.sessionRepo = sessionRepo;
@@ -85,6 +88,7 @@ public class PublicController {
     this.qrSig = qrSig;
     this.otpService = otpService;
     this.settingsService = settingsService;
+    this.notificationEventService = notificationEventService;
   }
 
   public record StartSessionRequest(@NotBlank String tablePublicId, @NotBlank String sig, @NotBlank String locale) {}
@@ -117,6 +121,10 @@ public class PublicController {
     String ingredients,
     String allergens,
     String weight,
+    Integer kcal,
+    Integer proteinG,
+    Integer fatG,
+    Integer carbsG,
     List<String> photos,
     List<String> tags,
     int priceCents,
@@ -140,6 +148,62 @@ public class PublicController {
   public record ModifierOptionDto(long id, String name, int priceCents) {}
   public record ModifierGroupDto(long id, String name, boolean isRequired, Integer minSelect, Integer maxSelect, List<ModifierOptionDto> options) {}
   public record MenuItemModifiersResponse(long menuItemId, List<ModifierGroupDto> groups) {}
+
+  public record MenuItemDetailResponse(
+    long id,
+    String name,
+    String description,
+    String ingredients,
+    String allergens,
+    String weight,
+    Integer kcal,
+    Integer proteinG,
+    Integer fatG,
+    Integer carbsG,
+    List<String> photos,
+    List<String> tags,
+    int priceCents,
+    String currency
+  ) {}
+
+  @GetMapping("/menu-item/{id}")
+  public MenuItemDetailResponse getMenuItemDetail(
+    @PathVariable("id") long id,
+    @RequestParam("tablePublicId") String tablePublicId,
+    @RequestParam("sig") String sig,
+    @RequestParam(value = "locale", required = false) String locale
+  ) {
+    if (!qrSig.verifyTablePublicId(tablePublicId, sig)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Invalid QR signature");
+    }
+    CafeTable table = tableRepo.findByPublicId(tablePublicId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
+    MenuItem item = itemRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Menu item not found"));
+    MenuCategory cat = categoryRepo.findById(item.categoryId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found"));
+    if (!Objects.equals(cat.branchId, table.branchId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong branch");
+    }
+
+    String loc = normalizeLocale(locale);
+    return new MenuItemDetailResponse(
+      item.id,
+      pick(loc, item.nameRu, item.nameRo, item.nameEn),
+      pick(loc, item.descriptionRu, item.descriptionRo, item.descriptionEn),
+      pick(loc, item.ingredientsRu, item.ingredientsRo, item.ingredientsEn),
+      item.allergens,
+      item.weight,
+      item.kcal,
+      item.proteinG,
+      item.fatG,
+      item.carbsG,
+      splitCsv(item.photoUrls),
+      splitCsv(item.tags),
+      item.priceCents,
+      item.currency
+    );
+  }
 
   @GetMapping("/menu-item/{id}/modifiers")
   public MenuItemModifiersResponse getMenuItemModifiers(
@@ -222,6 +286,10 @@ public class PublicController {
           pick(loc, it.ingredientsRu, it.ingredientsRo, it.ingredientsEn),
           it.allergens,
           it.weight,
+          it.kcal,
+          it.proteinG,
+          it.fatG,
+          it.carbsG,
           splitCsv(it.photoUrls),
           splitCsv(it.tags),
           it.priceCents,
@@ -310,6 +378,8 @@ public class PublicController {
       oi.modifiersJson = sel.rawJson;
       orderItemRepo.save(oi);
     }
+
+    notificationEventService.emit(table.branchId, "ORDER_NEW", o.id);
 
     return new CreateOrderResponse(o.id, o.status);
   }
@@ -407,6 +477,27 @@ public class PublicController {
     return new JoinPartyResponse(p.id, p.pin, p.expiresAt);
   }
 
+  public record ClosePartyRequest(@NotNull Long guestSessionId) {}
+  public record ClosePartyResponse(long partyId, String status) {}
+
+  @PostMapping("/party/close")
+  public ClosePartyResponse closeParty(@Valid @RequestBody ClosePartyRequest req) {
+    GuestSession s = sessionRepo.findById(req.guestSessionId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
+    if (s.partyId == null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Not in a party");
+    }
+    TableParty p = partyRepo.findById(s.partyId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Party not found"));
+    if (!"ACTIVE".equals(p.status)) {
+      return new ClosePartyResponse(p.id, p.status);
+    }
+    p.status = "CLOSED";
+    p.closedAt = Instant.now();
+    partyRepo.save(p);
+    return new ClosePartyResponse(p.id, p.status);
+  }
+
   private static String generatePin4() {
     int v = new java.util.Random().nextInt(10000);
     return String.format(java.util.Locale.ROOT, "%04d", v);
@@ -449,6 +540,9 @@ public class PublicController {
     wc.guestSessionId = s.id;
     wc.status = "NEW";
     wc = waiterCallRepo.save(wc);
+    CafeTable table = tableRepo.findById(s.tableId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
+    notificationEventService.emit(table.branchId, "WAITER_CALL", wc.id);
     return new WaiterCallResponse(wc.id, wc.status);
   }
 
@@ -569,6 +663,25 @@ public class PublicController {
     return new ModSelection(raw, selected, totalPrice);
   }
 
+  private Set<Long> resolvePartySessionIdsOrEmpty(GuestSession s, long tableId, BranchSettingsService.Resolved settings) {
+    if (!(settings.allowPayOtherGuestsItems() || settings.allowPayWholeTable())) {
+      return Set.of();
+    }
+    if (s.partyId == null) return Set.of();
+    TableParty p = partyRepo.findById(s.partyId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Party not found"));
+    if (!Objects.equals(p.tableId, tableId)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Party does not belong to table");
+    }
+    if (!"ACTIVE".equals(p.status) || p.expiresAt.isBefore(Instant.now())) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Party expired");
+    }
+    List<GuestSession> sessions = sessionRepo.findByPartyId(p.id);
+    Set<Long> ids = new HashSet<>();
+    for (GuestSession gs : sessions) ids.add(gs.id);
+    return ids;
+  }
+
   // --- Bill request / offline payment ---
   public record BillOptionsItem(
     long orderItemId,
@@ -586,8 +699,12 @@ public class PublicController {
     List<Integer> tipsPercentages,
     boolean enablePartyPin,
     Long partyId,
+    String partyStatus,
+    Instant partyExpiresAt,
     List<BillOptionsItem> myItems,
-    List<BillOptionsItem> tableItems
+    List<BillOptionsItem> tableItems,
+    boolean payCashEnabled,
+    boolean payTerminalEnabled
   ) {}
 
   @GetMapping("/bill-options")
@@ -601,6 +718,7 @@ public class PublicController {
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
     BranchSettingsService.Resolved settings = settingsService.resolveForBranch(table.branchId);
 
+    Set<Long> partySessionIds = resolvePartySessionIdsOrEmpty(s, table.id, settings);
     List<Order> orders = orderRepo.findByTableIdOrderByCreatedAtDesc(s.tableId);
     Map<Long, Long> orderToSession = new HashMap<>();
     for (Order o : orders) {
@@ -616,6 +734,9 @@ public class PublicController {
     List<BillOptionsItem> tableItems = new ArrayList<>();
     for (OrderItem oi : openItems) {
       long ownerSessionId = orderToSession.getOrDefault(oi.orderId, 0L);
+      if (!partySessionIds.isEmpty() && !partySessionIds.contains(ownerSessionId)) {
+        continue;
+      }
       BillOptionsItem dto = new BillOptionsItem(
         oi.id,
         ownerSessionId,
@@ -627,20 +748,34 @@ public class PublicController {
       if (ownerSessionId == s.id) {
         myItems.add(dto);
       }
-      if (settings.allowPayOtherGuestsItems() || settings.allowPayWholeTable()) {
+      if ((settings.allowPayOtherGuestsItems() || settings.allowPayWholeTable()) && !partySessionIds.isEmpty()) {
         tableItems.add(dto);
       }
     }
 
+    boolean partyActive = !partySessionIds.isEmpty();
+    String partyStatus = null;
+    Instant partyExpiresAt = null;
+    if (s.partyId != null) {
+      TableParty p = partyRepo.findById(s.partyId).orElse(null);
+      if (p != null) {
+        partyStatus = p.status;
+        partyExpiresAt = p.expiresAt;
+      }
+    }
     return new BillOptionsResponse(
-      settings.allowPayOtherGuestsItems(),
-      settings.allowPayWholeTable(),
+      partyActive && settings.allowPayOtherGuestsItems(),
+      partyActive && settings.allowPayWholeTable(),
       settings.tipsEnabled(),
       settings.tipsPercentages(),
       settings.enablePartyPin(),
       s.partyId,
+      partyStatus,
+      partyExpiresAt,
       myItems,
-      tableItems
+      tableItems,
+      settings.payCashEnabled(),
+      settings.payTerminalEnabled()
     );
   }
 
@@ -682,6 +817,12 @@ public class PublicController {
     if (!Set.of("CASH","TERMINAL").contains(pay)) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported paymentMethod");
     }
+    if ("CASH".equals(pay) && !settings.payCashEnabled()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cash payment is disabled");
+    }
+    if ("TERMINAL".equals(pay) && !settings.payTerminalEnabled()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Terminal payment is disabled");
+    }
     if (!Set.of("MY","SELECTED","WHOLE_TABLE").contains(mode)) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported mode");
     }
@@ -697,6 +838,9 @@ public class PublicController {
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "orderItemIds required for SELECTED");
       }
       if (settings.allowPayOtherGuestsItems()) {
+        if (s.partyId == null) {
+          throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Party required to pay other guests items");
+        }
         orders = orderRepo.findByTableIdOrderByCreatedAtDesc(s.tableId);
         if (orders.isEmpty()) {
           throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No orders for this table");
@@ -712,6 +856,9 @@ public class PublicController {
       if (!settings.allowPayWholeTable()) {
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Whole table payment is disabled");
       }
+      if (s.partyId == null) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Party required to pay whole table");
+      }
       orders = orderRepo.findByTableIdOrderByCreatedAtDesc(s.tableId);
       if (orders.isEmpty()) {
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No orders for this table");
@@ -721,9 +868,19 @@ public class PublicController {
     List<Long> orderIds = orders.stream().map(o -> o.id).toList();
     List<OrderItem> allItems = orderItemRepo.findByOrderIdIn(orderIds);
 
+    Set<Long> partySessionIds = resolvePartySessionIdsOrEmpty(s, table.id, settings);
+
     // filter not closed and not already reserved by another bill request
+    Map<Long, Long> orderToSession = new HashMap<>();
+    for (Order o : orders) orderToSession.put(o.id, o.guestSessionId);
+
     List<OrderItem> openItems = allItems.stream()
       .filter(oi -> !oi.isClosed && oi.billRequestId == null)
+      .filter(oi -> {
+        if (partySessionIds.isEmpty()) return true;
+        Long ownerSessionId = orderToSession.get(oi.orderId);
+        return ownerSessionId != null && partySessionIds.contains(ownerSessionId);
+      })
       .toList();
     if (openItems.isEmpty()) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No unpaid items");
@@ -779,6 +936,7 @@ public class PublicController {
     br.totalCents = subtotal + tipsAmount;
 
     br = billRequestRepo.save(br);
+    notificationEventService.emit(table.branchId, "BILL_REQUEST", br.id);
 
     for (OrderItem oi : selected) {
       BillRequestItem bri = new BillRequestItem();

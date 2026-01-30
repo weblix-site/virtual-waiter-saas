@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { t, type Lang } from "@/app/i18n";
 
 type MenuItem = {
   id: number;
@@ -9,6 +10,10 @@ type MenuItem = {
   ingredients?: string | null;
   allergens?: string | null;
   weight?: string | null;
+  kcal?: number | null;
+  proteinG?: number | null;
+  fatG?: number | null;
+  carbsG?: number | null;
   photos: string[];
   tags: string[];
   priceCents: number;
@@ -54,8 +59,12 @@ type BillOptionsResponse = {
   tipsPercentages: number[];
   enablePartyPin: boolean;
   partyId: number | null;
+  partyStatus?: string | null;
+  partyExpiresAt?: string | null;
   myItems: BillOptionsItem[];
   tableItems: BillOptionsItem[];
+  payCashEnabled?: boolean;
+  payTerminalEnabled?: boolean;
 };
 
 type ModOption = { id: number; name: string; priceCents: number };
@@ -73,7 +82,7 @@ function money(priceCents: number, currency: string) {
 
 export default function TablePage({ params, searchParams }: any) {
   const tablePublicId: string = params.tablePublicId;
-  const lang: "ru" | "ro" | "en" = (searchParams?.lang ?? "ru").toLowerCase();
+  const lang: Lang = (searchParams?.lang ?? "ru").toLowerCase();
   const sig: string = (searchParams?.sig ?? "");
   // If QR signature is missing (e.g., dev link), show a friendly error.
   // In production, all QR links must include ?sig=...
@@ -160,6 +169,16 @@ export default function TablePage({ params, searchParams }: any) {
       setSelectedItemIds([]);
     }
   }, [billMode]);
+
+  useEffect(() => {
+    if (!billOptions) return;
+    if (billPayMethod === 'CASH' && billOptions.payCashEnabled === false) {
+      setBillPayMethod(billOptions.payTerminalEnabled === false ? 'CASH' : 'TERMINAL');
+    }
+    if (billPayMethod === 'TERMINAL' && billOptions.payTerminalEnabled === false) {
+      setBillPayMethod(billOptions.payCashEnabled === false ? 'TERMINAL' : 'CASH');
+    }
+  }, [billOptions, billPayMethod]);
 
   function addToCart(item: MenuItem) {
     setOrderId(null);
@@ -326,6 +345,22 @@ export default function TablePage({ params, searchParams }: any) {
     }
   }
 
+  async function closeParty() {
+    if (!session) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/public/party/close`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ guestSessionId: session.guestSessionId }),
+      });
+      if (!res.ok) throw new Error(`Party close failed (${res.status})`);
+      setParty(null);
+      alert(lang === "ro" ? "Party închis" : lang === "en" ? "Party closed" : "Party закрыт");
+    } catch (e: any) {
+      alert(e?.message ?? "Error");
+    }
+  }
+
 
   async function requestBill() {
     if (!session) return;
@@ -445,27 +480,38 @@ export default function TablePage({ params, searchParams }: any) {
 
       <div style={{ marginTop: 12, display: "flex", gap: 12, flexWrap: "wrap" }}>
         <button onClick={callWaiter} style={{ padding: "10px 14px" }}>
-          {lang === "ro" ? "Cheamă chelnerul" : lang === "en" ? "Call waiter" : "Вызвать официанта"}
+          {t(lang, "callWaiter")}
         </button>
 
         {billOptions?.enablePartyPin && (
           <>
             <button onClick={createPin} style={{ padding: "10px 14px" }}>
-              {lang === "ro" ? "Creează PIN" : lang === "en" ? "Create PIN" : "Создать PIN"}
+              {t(lang, "createPin")}
             </button>
             <button onClick={joinByPin} style={{ padding: "10px 14px" }}>
-              {lang === "ro" ? "Conectează-te la PIN" : lang === "en" ? "Join by PIN" : "Объединиться по PIN"}
+              {t(lang, "joinPin")}
             </button>
+            {party && (
+              <button onClick={closeParty} style={{ padding: "10px 14px" }}>
+                {lang === "ro" ? "Închide Party" : lang === "en" ? "Close Party" : "Закрыть Party"}
+              </button>
+            )}
           </>
         )}
         <button onClick={requestBill} disabled={billLoading} style={{ padding: "10px 14px" }}>
           {billLoading
-            ? (lang === "ro" ? "Se trimite..." : lang === "en" ? "Sending..." : "Отправка...")
-            : (lang === "ro" ? "Cere nota" : lang === "en" ? "Request bill" : "Запросить счёт")}
+            ? t(lang, "sending")
+            : t(lang, "requestBill")}
         </button>
         {party && (
           <div style={{ padding: "10px 14px", border: "1px dashed #ccc", borderRadius: 8 }}>
             <strong>PIN:</strong> {party.pin}
+            {billOptions?.partyStatus && (
+              <div style={{ color: "#666", fontSize: 12, marginTop: 4 }}>
+                Status: {billOptions.partyStatus}
+                {billOptions.partyExpiresAt ? ` • Expires: ${billOptions.partyExpiresAt}` : ""}
+              </div>
+            )}
           </div>
         )}
 
@@ -510,7 +556,7 @@ export default function TablePage({ params, searchParams }: any) {
         </div>
       )}
 
-      <h2 style={{ marginTop: 20 }}>Menu</h2>
+      <h2 style={{ marginTop: 20 }}>{t(lang, "menu")}</h2>
       {menu?.categories.map((cat) => (
         <section key={cat.id} style={{ marginBottom: 18 }}>
           <h3 style={{ margin: "10px 0" }}>{cat.name}</h3>
@@ -526,11 +572,14 @@ export default function TablePage({ params, searchParams }: any) {
                 {it.ingredients && <div style={{ fontSize: 12, color: "#666" }}>{it.ingredients}</div>}
                 {it.allergens && <div style={{ fontSize: 12, color: "#b11e46" }}>{it.allergens}</div>}
                 <button onClick={() => addToCart(it)} style={{ marginTop: 10, padding: "8px 12px" }}>
-                  {lang === "ro" ? "Adaugă" : lang === "en" ? "Add" : "Добавить"}
+                  {t(lang, "add")}
                 </button>
                 <button onClick={() => toggleModifiers(it.id)} style={{ marginTop: 8, padding: "6px 10px" }}>
-                  {lang === "ro" ? "Modificatori" : lang === "en" ? "Modifiers" : "Модификаторы"}
+                  {t(lang, "modifiers")}
                 </button>
+                <a href={`/t/${tablePublicId}/item/${it.id}?lang=${lang}&sig=${encodeURIComponent(sig)}`} style={{ display: "inline-block", marginTop: 6 }}>
+                  {t(lang, "details")}
+                </a>
                 {modOpenByItem[it.id] && modifiersByItem[it.id]?.groups?.length ? (
                   <div style={{ marginTop: 8, borderTop: "1px dashed #ddd", paddingTop: 8 }}>
                     {modifiersByItem[it.id].groups.map((g) => (
@@ -566,9 +615,9 @@ export default function TablePage({ params, searchParams }: any) {
         </section>
       ))}
 
-      <h2 style={{ marginTop: 20 }}>{lang === "ro" ? "Coș" : lang === "en" ? "Cart" : "Корзина"}</h2>
+      <h2 style={{ marginTop: 20 }}>{t(lang, "cart")}</h2>
       {cart.length === 0 ? (
-        <p style={{ color: "#666" }}>{lang === "ro" ? "Coșul e gol" : lang === "en" ? "Cart is empty" : "Корзина пуста"}</p>
+        <p style={{ color: "#666" }}>{t(lang, "cartEmpty")}</p>
       ) : (
         <div style={{ border: "1px solid #eee", borderRadius: 10, padding: 12 }}>
           {cart.map((l) => (
@@ -583,7 +632,7 @@ export default function TablePage({ params, searchParams }: any) {
                   <input
                     value={l.comment ?? ""}
                     onChange={(e) => setCart((prev) => prev.map((x) => x.item.id === l.item.id ? { ...x, comment: e.target.value } : x))}
-                    placeholder={lang === "ro" ? "Comentariu" : lang === "en" ? "Comment" : "Комментарий"}
+                    placeholder={t(lang, "comment")}
                     style={{ padding: "6px 8px", border: "1px solid #ddd", borderRadius: 6, minWidth: 160 }}
                   />
                 </div>
@@ -597,31 +646,31 @@ export default function TablePage({ params, searchParams }: any) {
           ))}
           <hr style={{ border: 0, borderTop: "1px solid #eee", margin: "10px 0" }} />
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <strong>Total</strong>
+            <strong>{t(lang, "total")}</strong>
             <strong>{money(cartTotalCents, "MDL")}</strong>
           </div>
           <button disabled={placing} onClick={placeOrder} style={{ marginTop: 10, padding: "10px 14px", width: "100%" }}>
-            {placing ? (lang === "ro" ? "Se trimite..." : lang === "en" ? "Sending..." : "Отправляем...") : (lang === "ro" ? "Trimite comanda" : lang === "en" ? "Place order" : "Сделать заказ")}
+            {placing ? t(lang, "sending") : t(lang, "placeOrder")}
           </button>
         </div>
       )}
 
-      <h2 style={{ marginTop: 24 }}>{lang === "ro" ? "Plată" : lang === "en" ? "Payment" : "Оплата"}</h2>
+      <h2 style={{ marginTop: 24 }}>{t(lang, "payment")}</h2>
       {!billOptions ? (
-        <p style={{ color: "#666" }}>{lang === "ro" ? "Se încarcă opțiunile..." : lang === "en" ? "Loading options..." : "Загрузка опций..."}</p>
+        <p style={{ color: "#666" }}>{t(lang, "loading")}</p>
       ) : (
         <div style={{ border: "1px solid #eee", borderRadius: 10, padding: 12 }}>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <label><input type="radio" checked={billMode === 'MY'} onChange={() => setBillMode('MY')} /> {lang === "ro" ? "Doar al meu" : lang === "en" ? "My items" : "Только моё"}</label>
-            <label><input type="radio" checked={billMode === 'SELECTED'} onChange={() => setBillMode('SELECTED')} /> {lang === "ro" ? "Ales" : lang === "en" ? "Selected" : "Выбранные"}</label>
+            <label><input type="radio" checked={billMode === 'MY'} onChange={() => setBillMode('MY')} /> {t(lang, "myItems")}</label>
+            <label><input type="radio" checked={billMode === 'SELECTED'} onChange={() => setBillMode('SELECTED')} /> {t(lang, "selected")}</label>
             {billOptions.allowPayWholeTable && (
-              <label><input type="radio" checked={billMode === 'WHOLE_TABLE'} onChange={() => setBillMode('WHOLE_TABLE')} /> {lang === "ro" ? "Totul la masă" : lang === "en" ? "Whole table" : "Весь стол"}</label>
+              <label><input type="radio" checked={billMode === 'WHOLE_TABLE'} onChange={() => setBillMode('WHOLE_TABLE')} /> {t(lang, "wholeTable")}</label>
             )}
           </div>
 
           <div style={{ marginTop: 12 }}>
             {billItemsForMode.length === 0 ? (
-              <p style={{ color: "#666" }}>{lang === "ro" ? "Nu există poziții neplătite" : lang === "en" ? "No unpaid items" : "Нет неоплаченных позиций"}</p>
+              <p style={{ color: "#666" }}>{t(lang, "noUnpaid")}</p>
             ) : (
               <div style={{ border: "1px solid #f0f0f0", borderRadius: 8, padding: 8 }}>
                 {billItemsForMode.map((it) => (
@@ -656,13 +705,27 @@ export default function TablePage({ params, searchParams }: any) {
           </div>
 
           <div style={{ marginTop: 12, display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <label><input type="radio" checked={billPayMethod === 'CASH'} onChange={() => setBillPayMethod('CASH')} /> {lang === "ro" ? "Numerar" : lang === "en" ? "Cash" : "Наличные"}</label>
-            <label><input type="radio" checked={billPayMethod === 'TERMINAL'} onChange={() => setBillPayMethod('TERMINAL')} /> {lang === "ro" ? "Terminal" : lang === "en" ? "Terminal" : "Терминал"}</label>
+            <label>
+              <input
+                type="radio"
+                disabled={billOptions.payCashEnabled === false}
+                checked={billPayMethod === 'CASH'}
+                onChange={() => setBillPayMethod('CASH')}
+              /> {t(lang, "cash")}
+            </label>
+            <label>
+              <input
+                type="radio"
+                disabled={billOptions.payTerminalEnabled === false}
+                checked={billPayMethod === 'TERMINAL'}
+                onChange={() => setBillPayMethod('TERMINAL')}
+              /> {t(lang, "terminal")}
+            </label>
           </div>
 
           {billOptions.tipsEnabled && (
             <div style={{ marginTop: 12 }}>
-              <div style={{ marginBottom: 6 }}>{lang === "ro" ? "Bacșiș" : lang === "en" ? "Tips" : "Чаевые"}</div>
+              <div style={{ marginBottom: 6 }}>{t(lang, "tips")}</div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {billOptions.tipsPercentages.map((p) => (
                   <button
@@ -674,7 +737,7 @@ export default function TablePage({ params, searchParams }: any) {
                   </button>
                 ))}
                 <button onClick={() => setBillTipsPercent('')} style={{ padding: "6px 10px", border: "1px solid #ddd", borderRadius: 8 }}>
-                  {lang === "ro" ? "Fără" : lang === "en" ? "None" : "Без"}
+                  {t(lang, "none")}
                 </button>
               </div>
             </div>

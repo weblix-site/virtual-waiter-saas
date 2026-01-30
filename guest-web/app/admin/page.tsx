@@ -29,6 +29,10 @@ type MenuItem = {
   weight?: string | null;
   tags?: string | null;
   photoUrls?: string | null;
+  kcal?: number | null;
+  proteinG?: number | null;
+  fatG?: number | null;
+  carbsG?: number | null;
   priceCents: number;
   currency: string;
   isActive: boolean;
@@ -63,6 +67,8 @@ type BranchSettings = {
   allowPayWholeTable: boolean;
   tipsEnabled: boolean;
   tipsPercentages: number[];
+  payCashEnabled: boolean;
+  payTerminalEnabled: boolean;
 };
 
 type StatsSummary = {
@@ -74,6 +80,15 @@ type StatsSummary = {
   grossCents: number;
   tipsCents: number;
   activeTablesCount: number;
+};
+
+type StatsDailyRow = {
+  day: string;
+  ordersCount: number;
+  callsCount: number;
+  paidBillsCount: number;
+  grossCents: number;
+  tipsCents: number;
 };
 
 type ModifierGroup = {
@@ -124,6 +139,7 @@ export default function AdminPage() {
   const [statsFrom, setStatsFrom] = useState("");
   const [statsTo, setStatsTo] = useState("");
   const [stats, setStats] = useState<StatsSummary | null>(null);
+  const [daily, setDaily] = useState<StatsDailyRow[]>([]);
 
   const [newCatNameRu, setNewCatNameRu] = useState("");
   const [newCatSort, setNewCatSort] = useState(0);
@@ -142,6 +158,10 @@ export default function AdminPage() {
   const [newItemWeight, setNewItemWeight] = useState("");
   const [newItemTags, setNewItemTags] = useState("");
   const [newItemPhotos, setNewItemPhotos] = useState("");
+  const [newItemKcal, setNewItemKcal] = useState(0);
+  const [newItemProtein, setNewItemProtein] = useState(0);
+  const [newItemFat, setNewItemFat] = useState(0);
+  const [newItemCarbs, setNewItemCarbs] = useState(0);
   const [newItemPrice, setNewItemPrice] = useState(0);
   const [newItemCurrency, setNewItemCurrency] = useState("MDL");
   const [newItemActive, setNewItemActive] = useState(true);
@@ -277,6 +297,10 @@ export default function AdminPage() {
         weight: newItemWeight,
         tags: newItemTags,
         photoUrls: newItemPhotos,
+        kcal: newItemKcal,
+        proteinG: newItemProtein,
+        fatG: newItemFat,
+        carbsG: newItemCarbs,
         priceCents: newItemPrice,
         currency: newItemCurrency,
         isActive: newItemActive,
@@ -297,6 +321,10 @@ export default function AdminPage() {
     setNewItemWeight("");
     setNewItemTags("");
     setNewItemPhotos("");
+    setNewItemKcal(0);
+    setNewItemProtein(0);
+    setNewItemFat(0);
+    setNewItemCarbs(0);
     setNewItemPrice(0);
     setNewItemCurrency("MDL");
     setNewItemActive(true);
@@ -462,6 +490,8 @@ export default function AdminPage() {
         allowPayWholeTable: settings.allowPayWholeTable,
         tipsEnabled: settings.tipsEnabled,
         tipsPercentages: settings.tipsPercentages,
+        payCashEnabled: settings.payCashEnabled,
+        payTerminalEnabled: settings.payTerminalEnabled,
       }),
     });
     loadAll();
@@ -474,6 +504,9 @@ export default function AdminPage() {
     const res = await api(`/api/admin/stats/summary?${qs.toString()}`);
     const body = await res.json();
     setStats(body);
+    const resDaily = await api(`/api/admin/stats/daily?${qs.toString()}`);
+    const dailyBody = await resDaily.json();
+    setDaily(dailyBody);
   }
 
   async function saveEditedCategory() {
@@ -511,6 +544,10 @@ export default function AdminPage() {
         weight: editItem.weight,
         tags: editItem.tags,
         photoUrls: editItem.photoUrls,
+        kcal: editItem.kcal,
+        proteinG: editItem.proteinG,
+        fatG: editItem.fatG,
+        carbsG: editItem.carbsG,
         priceCents: editItem.priceCents,
         currency: editItem.currency,
         isActive: editItem.isActive,
@@ -553,6 +590,8 @@ export default function AdminPage() {
             <label><input type="checkbox" checked={settings.allowPayOtherGuestsItems} onChange={(e) => setSettings({ ...settings, allowPayOtherGuestsItems: e.target.checked })} /> allowPayOtherGuestsItems</label>
             <label><input type="checkbox" checked={settings.allowPayWholeTable} onChange={(e) => setSettings({ ...settings, allowPayWholeTable: e.target.checked })} /> allowPayWholeTable</label>
             <label><input type="checkbox" checked={settings.tipsEnabled} onChange={(e) => setSettings({ ...settings, tipsEnabled: e.target.checked })} /> tipsEnabled</label>
+            <label><input type="checkbox" checked={settings.payCashEnabled} onChange={(e) => setSettings({ ...settings, payCashEnabled: e.target.checked })} /> payCashEnabled</label>
+            <label><input type="checkbox" checked={settings.payTerminalEnabled} onChange={(e) => setSettings({ ...settings, payTerminalEnabled: e.target.checked })} /> payTerminalEnabled</label>
             <label>otpTtlSeconds <input value={settings.otpTtlSeconds} onChange={(e) => setSettings({ ...settings, otpTtlSeconds: Number(e.target.value) })} /></label>
             <label>otpMaxAttempts <input value={settings.otpMaxAttempts} onChange={(e) => setSettings({ ...settings, otpMaxAttempts: Number(e.target.value) })} /></label>
             <label>otpResendCooldownSeconds <input value={settings.otpResendCooldownSeconds} onChange={(e) => setSettings({ ...settings, otpResendCooldownSeconds: Number(e.target.value) })} /></label>
@@ -580,6 +619,34 @@ export default function AdminPage() {
             <div>Gross: {money(stats.grossCents)}</div>
             <div>Tips: {money(stats.tipsCents)}</div>
             <div>Active tables: {stats.activeTablesCount}</div>
+          </div>
+        )}
+        {daily.length > 0 && (
+          <div style={{ marginTop: 12 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Day</th>
+                  <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Orders</th>
+                  <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Calls</th>
+                  <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Paid bills</th>
+                  <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Gross</th>
+                  <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Tips</th>
+                </tr>
+              </thead>
+              <tbody>
+                {daily.map((r) => (
+                  <tr key={r.day}>
+                    <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{r.day}</td>
+                    <td style={{ padding: "6px 4px", textAlign: "right", borderBottom: "1px solid #f0f0f0" }}>{r.ordersCount}</td>
+                    <td style={{ padding: "6px 4px", textAlign: "right", borderBottom: "1px solid #f0f0f0" }}>{r.callsCount}</td>
+                    <td style={{ padding: "6px 4px", textAlign: "right", borderBottom: "1px solid #f0f0f0" }}>{r.paidBillsCount}</td>
+                    <td style={{ padding: "6px 4px", textAlign: "right", borderBottom: "1px solid #f0f0f0" }}>{money(r.grossCents)}</td>
+                    <td style={{ padding: "6px 4px", textAlign: "right", borderBottom: "1px solid #f0f0f0" }}>{money(r.tipsCents)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </section>
@@ -648,6 +715,10 @@ export default function AdminPage() {
           <input placeholder="Weight" value={newItemWeight} onChange={(e) => setNewItemWeight(e.target.value)} />
           <input placeholder="Tags (csv)" value={newItemTags} onChange={(e) => setNewItemTags(e.target.value)} />
           <input placeholder="Photo URLs (csv)" value={newItemPhotos} onChange={(e) => setNewItemPhotos(e.target.value)} />
+          <input type="number" placeholder="Kcal" value={newItemKcal} onChange={(e) => setNewItemKcal(Number(e.target.value))} />
+          <input type="number" placeholder="Protein g" value={newItemProtein} onChange={(e) => setNewItemProtein(Number(e.target.value))} />
+          <input type="number" placeholder="Fat g" value={newItemFat} onChange={(e) => setNewItemFat(Number(e.target.value))} />
+          <input type="number" placeholder="Carbs g" value={newItemCarbs} onChange={(e) => setNewItemCarbs(Number(e.target.value))} />
           <input type="number" placeholder="Price cents" value={newItemPrice} onChange={(e) => setNewItemPrice(Number(e.target.value))} />
           <input placeholder="Currency" value={newItemCurrency} onChange={(e) => setNewItemCurrency(e.target.value)} />
           <label><input type="checkbox" checked={newItemActive} onChange={(e) => setNewItemActive(e.target.checked)} /> Active</label>
@@ -676,6 +747,10 @@ export default function AdminPage() {
               <input placeholder="Weight" value={editItem.weight ?? ""} onChange={(e) => setEditItem({ ...editItem, weight: e.target.value })} />
               <input placeholder="Tags csv" value={editItem.tags ?? ""} onChange={(e) => setEditItem({ ...editItem, tags: e.target.value })} />
               <input placeholder="Photo URLs csv" value={editItem.photoUrls ?? ""} onChange={(e) => setEditItem({ ...editItem, photoUrls: e.target.value })} />
+              <input type="number" placeholder="Kcal" value={editItem.kcal ?? 0} onChange={(e) => setEditItem({ ...editItem, kcal: Number(e.target.value) })} />
+              <input type="number" placeholder="Protein g" value={editItem.proteinG ?? 0} onChange={(e) => setEditItem({ ...editItem, proteinG: Number(e.target.value) })} />
+              <input type="number" placeholder="Fat g" value={editItem.fatG ?? 0} onChange={(e) => setEditItem({ ...editItem, fatG: Number(e.target.value) })} />
+              <input type="number" placeholder="Carbs g" value={editItem.carbsG ?? 0} onChange={(e) => setEditItem({ ...editItem, carbsG: Number(e.target.value) })} />
               <input type="number" placeholder="Price cents" value={editItem.priceCents ?? 0} onChange={(e) => setEditItem({ ...editItem, priceCents: Number(e.target.value) })} />
               <input placeholder="Currency" value={editItem.currency ?? "MDL"} onChange={(e) => setEditItem({ ...editItem, currency: e.target.value })} />
               <label><input type="checkbox" checked={!!editItem.isActive} onChange={(e) => setEditItem({ ...editItem, isActive: e.target.checked })} /> Active</label>
@@ -731,6 +806,15 @@ export default function AdminPage() {
               </select>
               <button onClick={() => getSignedUrl(t.publicId)}>QR URL</button>
               <button onClick={() => showQr(t.id, t.publicId)}>Show QR</button>
+              {qrByTable[t.id] && (
+                <a
+                  href={`https://api.qrserver.com/v1/create-qr-code/?size=512x512&data=${encodeURIComponent(qrByTable[t.id])}`}
+                  download={`table_${t.number}.png`}
+                  style={{ marginLeft: 8 }}
+                >
+                  Download QR
+                </a>
+              )}
               {qrByTable[t.id] && (
                 <img
                   src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(qrByTable[t.id])}`}

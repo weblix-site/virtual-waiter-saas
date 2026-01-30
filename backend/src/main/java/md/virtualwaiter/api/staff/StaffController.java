@@ -16,6 +16,8 @@ import md.virtualwaiter.repo.BillRequestRepo;
 import md.virtualwaiter.repo.BillRequestItemRepo;
 import md.virtualwaiter.security.QrSignatureService;
 import md.virtualwaiter.service.StaffNotificationService;
+import md.virtualwaiter.repo.NotificationEventRepo;
+import md.virtualwaiter.domain.NotificationEvent;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -39,6 +41,7 @@ public class StaffController {
   private final QrSignatureService qrSig;
   private final String publicBaseUrl;
   private final StaffNotificationService notificationService;
+  private final NotificationEventRepo notificationEventRepo;
 
   public StaffController(
     StaffUserRepo staffUserRepo,
@@ -50,7 +53,8 @@ public class StaffController {
     BillRequestItemRepo billRequestItemRepo,
     QrSignatureService qrSig,
     @Value("${app.publicBaseUrl:http://localhost:3000}") String publicBaseUrl,
-    StaffNotificationService notificationService
+    StaffNotificationService notificationService,
+    NotificationEventRepo notificationEventRepo
   ) {
     this.staffUserRepo = staffUserRepo;
     this.tableRepo = tableRepo;
@@ -62,6 +66,7 @@ public class StaffController {
     this.qrSig = qrSig;
     this.publicBaseUrl = publicBaseUrl;
     this.notificationService = notificationService;
+    this.notificationEventRepo = notificationEventRepo;
   }
 
   private StaffUser current(Authentication auth) {
@@ -93,7 +98,10 @@ public class StaffController {
   public record StaffOrderDto(long id, long tableId, int tableNumber, Long assignedWaiterId, String status, String createdAt, List<StaffOrderItemDto> items) {}
 
   @GetMapping("/orders/active")
-  public List<StaffOrderDto> activeOrders(Authentication auth) {
+  public List<StaffOrderDto> activeOrders(
+    @RequestParam(value = "statusIn", required = false) String statusIn,
+    Authentication auth
+  ) {
     StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
     List<CafeTable> tables = tableRepo.findByBranchId(u.branchId);
     List<Long> tableIds = tables.stream().map(t -> t.id).toList();
@@ -101,6 +109,16 @@ public class StaffController {
 
     List<String> closed = List.of("CLOSED", "CANCELLED");
     List<Order> orders = orderRepo.findTop100ByTableIdInAndStatusNotInOrderByCreatedAtDesc(tableIds, closed);
+    if (statusIn != null && !statusIn.isBlank()) {
+      Set<String> allow = new HashSet<>();
+      for (String s : statusIn.split(",")) {
+        String v = s.trim().toUpperCase(Locale.ROOT);
+        if (!v.isEmpty()) allow.add(v);
+      }
+      if (!allow.isEmpty()) {
+        orders = orders.stream().filter(o -> allow.contains(o.status)).toList();
+      }
+    }
     if (orders.isEmpty()) return List.of();
 
     Map<Long, Integer> tableNumberById = new HashMap<>();
@@ -194,6 +212,7 @@ public class StaffController {
   public record StaffBillRequestDto(
     long billRequestId,
     int tableNumber,
+    Long partyId,
     String paymentMethod,
     String mode,
     String status,
@@ -229,7 +248,7 @@ public class StaffController {
         if (oi == null) continue;
         lines.add(new StaffBillLine(oi.id, oi.nameSnapshot, oi.qty, oi.unitPriceCents, it.lineTotalCents));
       }
-      out.add(new StaffBillRequestDto(br.id, t.number, br.paymentMethod, br.mode, br.status, br.subtotalCents, br.tipsPercent, br.tipsAmountCents, br.totalCents, lines));
+      out.add(new StaffBillRequestDto(br.id, t.number, br.partyId, br.paymentMethod, br.mode, br.status, br.subtotalCents, br.tipsPercent, br.tipsAmountCents, br.totalCents, lines));
     }
     return out;
   }
@@ -265,7 +284,57 @@ public class StaffController {
       orderItemRepo.save(oi);
     }
 
+    // Auto-close party on WHOLE_TABLE payments
+    if ("WHOLE_TABLE".equals(br.mode) && br.partyId != null) {
+      TableParty p = partyRepo.findById(br.partyId).orElse(null);
+      if (p != null && "ACTIVE".equals(p.status)) {
+        p.status = "CLOSED";
+        p.closedAt = java.time.Instant.now();
+        partyRepo.save(p);
+      }
+    }
+
     return new ConfirmPaidResponse(br.id, br.status);
+  }
+
+  // --- Party close (staff) ---
+  public record ClosePartyResponse(long partyId, String status) {}
+
+  @PostMapping("/parties/{id}/close")
+  public ClosePartyResponse closeParty(@PathVariable("id") long id, Authentication auth) {
+    StaffUser staff = requireRole(auth, "WAITER", "ADMIN");
+    TableParty p = partyRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Party not found"));
+    CafeTable t = tableRepo.findById(p.tableId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
+    if (staff.branchId != null && !Objects.equals(t.branchId, staff.branchId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong branch");
+    }
+    if (!"ACTIVE".equals(p.status)) {
+      return new ClosePartyResponse(p.id, p.status);
+    }
+    p.status = "CLOSED";
+    p.closedAt = java.time.Instant.now();
+    partyRepo.save(p);
+    return new ClosePartyResponse(p.id, p.status);
+  }
+
+  // --- Notifications feed ---
+  public record NotificationEventDto(long id, String type, long refId, String createdAt) {}
+  public record NotificationFeedResponse(long lastId, List<NotificationEventDto> events) {}
+
+  @GetMapping("/notifications/feed")
+  public NotificationFeedResponse feed(@RequestParam(value = "sinceId", required = false) Long sinceId, Authentication auth) {
+    StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
+    long from = sinceId == null ? 0L : sinceId;
+    List<NotificationEvent> list = notificationEventRepo.findTop200ByBranchIdAndIdGreaterThanOrderByIdAsc(u.branchId, from);
+    List<NotificationEventDto> out = new ArrayList<>();
+    long last = from;
+    for (NotificationEvent e : list) {
+      out.add(new NotificationEventDto(e.id, e.eventType, e.refId, e.createdAt.toString()));
+      if (e.id > last) last = e.id;
+    }
+    return new NotificationFeedResponse(last, out);
   }
 
   // --- Notifications (polling) ---

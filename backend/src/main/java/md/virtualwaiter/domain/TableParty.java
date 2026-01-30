@@ -23,4 +23,7 @@ public class TableParty {
 
   @Column(name="created_at", nullable=false)
   public Instant createdAt = Instant.now();
+
+  @Column(name="closed_at")
+  public Instant closedAt;
 }

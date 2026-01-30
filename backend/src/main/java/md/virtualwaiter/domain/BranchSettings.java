@@ -42,4 +42,10 @@ public class BranchSettings {
   /** Comma-separated list (e.g., "5,10,15") */
   @Column(name = "tips_percentages")
   public String tipsPercentages;
+
+  @Column(name = "pay_cash_enabled")
+  public Boolean payCashEnabled;
+
+  @Column(name = "pay_terminal_enabled")
+  public Boolean payTerminalEnabled;
 }

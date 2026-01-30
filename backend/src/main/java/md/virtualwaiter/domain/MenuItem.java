@@ -56,6 +56,18 @@ public class MenuItem {
   @Column(name = "photo_urls")
   public String photoUrls;
 
+  @Column(name = "kcal")
+  public Integer kcal;
+
+  @Column(name = "protein_g")
+  public Integer proteinG;
+
+  @Column(name = "fat_g")
+  public Integer fatG;
+
+  @Column(name = "carbs_g")
+  public Integer carbsG;
+
   @Column(name = "price_cents", nullable = false)
   public int priceCents;
 

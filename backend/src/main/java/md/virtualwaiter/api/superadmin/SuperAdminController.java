@@ -95,6 +95,14 @@ public class SuperAdminController {
     return new TenantDto(t.id, t.name, t.isActive);
   }
 
+  @DeleteMapping("/tenants/{id}")
+  public void deleteTenant(@PathVariable long id, Authentication auth) {
+    requireSuper(auth);
+    Tenant t = tenantRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tenant not found"));
+    tenantRepo.delete(t);
+  }
+
   // --- Branches ---
   public record BranchDto(long id, long tenantId, String name, boolean isActive) {}
   public record CreateBranchRequest(@NotBlank String name) {}
@@ -136,6 +144,14 @@ public class SuperAdminController {
     return new BranchDto(b.id, b.tenantId, b.name, b.isActive);
   }
 
+  @DeleteMapping("/branches/{id}")
+  public void deleteBranch(@PathVariable long id, Authentication auth) {
+    requireSuper(auth);
+    Branch b = branchRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    branchRepo.delete(b);
+  }
+
   // --- Staff users (global create) ---
   public record StaffUserDto(long id, Long branchId, String username, String role, boolean isActive) {}
   public record CreateStaffUserRequest(@NotNull Long branchId, @NotBlank String username, @NotBlank String password, @NotBlank String role) {}
@@ -155,6 +171,36 @@ public class SuperAdminController {
     su.isActive = true;
     su = staffUserRepo.save(su);
     return new StaffUserDto(su.id, su.branchId, su.username, su.role, su.isActive);
+  }
+
+  public record UpdateStaffUserRequest(String password, String role, Boolean isActive) {}
+
+  @PatchMapping("/staff/{id}")
+  public StaffUserDto updateStaff(@PathVariable long id, @RequestBody UpdateStaffUserRequest req, Authentication auth) {
+    requireSuper(auth);
+    StaffUser su = staffUserRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Staff user not found"));
+    if (req.password != null && !req.password.isBlank()) {
+      su.passwordHash = passwordEncoder.encode(req.password);
+    }
+    if (req.role != null) {
+      String role = req.role.trim().toUpperCase(Locale.ROOT);
+      if (!Set.of("WAITER", "KITCHEN", "ADMIN", "SUPER_ADMIN").contains(role)) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported role");
+      }
+      su.role = role;
+    }
+    if (req.isActive != null) su.isActive = req.isActive;
+    su = staffUserRepo.save(su);
+    return new StaffUserDto(su.id, su.branchId, su.username, su.role, su.isActive);
+  }
+
+  @DeleteMapping("/staff/{id}")
+  public void deleteStaff(@PathVariable long id, Authentication auth) {
+    requireSuper(auth);
+    StaffUser su = staffUserRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Staff user not found"));
+    staffUserRepo.delete(su);
   }
 
   // --- Stats ---

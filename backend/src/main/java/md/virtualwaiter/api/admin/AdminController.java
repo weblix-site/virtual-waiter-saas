@@ -130,7 +130,9 @@ public class AdminController {
     boolean allowPayOtherGuestsItems,
     boolean allowPayWholeTable,
     boolean tipsEnabled,
-    List<Integer> tipsPercentages
+    List<Integer> tipsPercentages,
+    boolean payCashEnabled,
+    boolean payTerminalEnabled
   ) {}
 
   @GetMapping("/branch-settings")
@@ -150,7 +152,9 @@ public class AdminController {
       s.allowPayOtherGuestsItems(),
       s.allowPayWholeTable(),
       s.tipsEnabled(),
-      s.tipsPercentages()
+      s.tipsPercentages(),
+      s.payCashEnabled(),
+      s.payTerminalEnabled()
     );
   }
 
@@ -165,7 +169,9 @@ public class AdminController {
     Boolean allowPayOtherGuestsItems,
     Boolean allowPayWholeTable,
     Boolean tipsEnabled,
-    List<Integer> tipsPercentages
+    List<Integer> tipsPercentages,
+    Boolean payCashEnabled,
+    Boolean payTerminalEnabled
   ) {}
 
   @PutMapping("/branch-settings")
@@ -195,6 +201,8 @@ public class AdminController {
     if (req.tipsPercentages != null) {
       s.tipsPercentages = toCsv(req.tipsPercentages);
     }
+    if (req.payCashEnabled != null) s.payCashEnabled = req.payCashEnabled;
+    if (req.payTerminalEnabled != null) s.payTerminalEnabled = req.payTerminalEnabled;
 
     settingsRepo.save(s);
     BranchSettingsService.Resolved r = settingsService.resolveForBranch(bid);
@@ -210,7 +218,9 @@ public class AdminController {
       r.allowPayOtherGuestsItems(),
       r.allowPayWholeTable(),
       r.tipsEnabled(),
-      r.tipsPercentages()
+      r.tipsPercentages(),
+      r.payCashEnabled(),
+      r.payTerminalEnabled()
     );
   }
 
@@ -292,6 +302,10 @@ public class AdminController {
     String weight,
     String tags,
     String photoUrls,
+    Integer kcal,
+    Integer proteinG,
+    Integer fatG,
+    Integer carbsG,
     int priceCents,
     String currency,
     boolean isActive,
@@ -313,6 +327,10 @@ public class AdminController {
     String weight,
     String tags,
     String photoUrls,
+    Integer kcal,
+    Integer proteinG,
+    Integer fatG,
+    Integer carbsG,
     @NotNull Integer priceCents,
     String currency,
     Boolean isActive,
@@ -373,6 +391,10 @@ public class AdminController {
     it.weight = req.weight;
     it.tags = req.tags;
     it.photoUrls = req.photoUrls;
+    it.kcal = req.kcal;
+    it.proteinG = req.proteinG;
+    it.fatG = req.fatG;
+    it.carbsG = req.carbsG;
     it.priceCents = req.priceCents;
     if (req.currency != null && !req.currency.isBlank()) it.currency = req.currency.trim();
     it.isActive = req.isActive == null || req.isActive;
@@ -396,6 +418,10 @@ public class AdminController {
     String weight,
     String tags,
     String photoUrls,
+    Integer kcal,
+    Integer proteinG,
+    Integer fatG,
+    Integer carbsG,
     Integer priceCents,
     String currency,
     Boolean isActive,
@@ -430,6 +456,10 @@ public class AdminController {
     if (req.weight != null) it.weight = req.weight;
     if (req.tags != null) it.tags = req.tags;
     if (req.photoUrls != null) it.photoUrls = req.photoUrls;
+    if (req.kcal != null) it.kcal = req.kcal;
+    if (req.proteinG != null) it.proteinG = req.proteinG;
+    if (req.fatG != null) it.fatG = req.fatG;
+    if (req.carbsG != null) it.carbsG = req.carbsG;
     if (req.priceCents != null) it.priceCents = req.priceCents;
     if (req.currency != null && !req.currency.isBlank()) it.currency = req.currency.trim();
     if (req.isActive != null) it.isActive = req.isActive;
@@ -467,6 +497,10 @@ public class AdminController {
       it.weight,
       it.tags,
       it.photoUrls,
+      it.kcal,
+      it.proteinG,
+      it.fatG,
+      it.carbsG,
       it.priceCents,
       it.currency,
       it.isActive,
@@ -812,6 +846,15 @@ public class AdminController {
     long activeTablesCount
   ) {}
 
+  public record StatsDailyRow(
+    String day,
+    long ordersCount,
+    long callsCount,
+    long paidBillsCount,
+    long grossCents,
+    long tipsCents
+  ) {}
+
   @GetMapping("/stats/summary")
   public StatsSummaryResponse getSummary(
     @RequestParam(value = "from", required = false) String from,
@@ -834,6 +877,25 @@ public class AdminController {
       s.tipsCents(),
       s.activeTablesCount()
     );
+  }
+
+  @GetMapping("/stats/daily")
+  public List<StatsDailyRow> getDaily(
+    @RequestParam(value = "from", required = false) String from,
+    @RequestParam(value = "to", required = false) String to,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    Instant fromTs = parseInstantOrDate(from, true);
+    Instant toTs = parseInstantOrDate(to, false);
+    List<StatsService.DailyRow> rows = statsService.dailyForBranch(bid, fromTs, toTs);
+    List<StatsDailyRow> out = new ArrayList<>();
+    for (StatsService.DailyRow r : rows) {
+      out.add(new StatsDailyRow(r.day(), r.ordersCount(), r.callsCount(), r.paidBillsCount(), r.grossCents(), r.tipsCents()));
+    }
+    return out;
   }
 
   private static Instant parseInstantOrDate(String v, boolean isStart) {
