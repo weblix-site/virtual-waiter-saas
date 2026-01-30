@@ -18,6 +18,15 @@ public class GuestSession {
   @Column(name="expires_at", nullable=false)
   public Instant expiresAt;
 
+  @Column(name="session_secret")
+  public String sessionSecret;
+
+  @Column(name="created_by_ip")
+  public String createdByIp;
+
+  @Column(name="created_by_ua")
+  public String createdByUa;
+
   @Column(name="party_id")
   public Long partyId;
 

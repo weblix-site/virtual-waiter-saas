@@ -5,8 +5,18 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:audioplayers/audioplayers.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
-void main() {
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+}
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   runApp(const StaffApp());
 }
 
@@ -231,6 +241,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _registerDevice() async {
+    await _registerFcmToken();
     if (_deviceToken == null) {
       _deviceToken = _genToken();
     }
@@ -243,6 +254,20 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (_) {}
   }
 
+  Future<void> _registerFcmToken() async {
+    try {
+      final fcm = FirebaseMessaging.instance;
+      await fcm.requestPermission();
+      final token = await fcm.getToken();
+      if (token == null || token.isEmpty) return;
+      _deviceToken = token;
+      await http.post(
+        Uri.parse('$apiBase/api/staff/devices/register'),
+        headers: {'Authorization': 'Basic $_auth', 'Content-Type': 'application/json'},
+        body: jsonEncode({'token': token, 'platform': 'FCM'}),
+      );
+    } catch (_) {}
+  }
   String _genToken() {
     const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
     final rnd = Random();
@@ -252,9 +277,35 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _listenToFcm();
     _timer = Timer.periodic(const Duration(seconds: 15), (_) => _poll());
     _poll();
     _registerDevice();
+  }
+
+  void _listenToFcm() {
+    FirebaseMessaging.onMessage.listen((message) {
+      // Surface push in UI and play sound if needed.
+      final type = message.data['type']?.toString();
+      if (type == 'ORDER_NEW') {
+        _player.play(AssetSource('beep.wav'));
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Push: ${message.data['type'] ?? message.notification?.title ?? 'Notification'}')),
+        );
+      }
+    });
+    FirebaseMessaging.instance.onTokenRefresh.listen((token) async {
+      _deviceToken = token;
+      try {
+        await http.post(
+          Uri.parse('$apiBase/api/staff/devices/register'),
+          headers: {'Authorization': 'Basic $_auth', 'Content-Type': 'application/json'},
+          body: jsonEncode({'token': token, 'platform': 'FCM'}),
+        );
+      } catch (_) {}
+    });
   }
 
   @override
@@ -415,7 +466,7 @@ class _OrdersTabState extends State<OrdersTab> {
                             order: o,
                             username: widget.username,
                             password: widget.password,
-                            actions: const ['ACCEPTED', 'READY'],
+                            actions: const ['ACCEPTED', 'IN_PROGRESS', 'READY'],
                           ),
                         ));
                       },
@@ -488,14 +539,94 @@ class _CallsTabState extends State<CallsTab> {
                 itemBuilder: (ctx, i) {
                   final c = _calls[i] as Map<String, dynamic>;
                   final age = _ageFromIso(c['createdAt']?.toString());
-                  return ListTile(
-                    title: Text('Table #${c['tableNumber']}'),
-                    subtitle: Text('${c['status']} • ${c['createdAt']}'),
-                    leading: const Icon(Icons.notifications_active),
-                    trailing: _slaChip(age, slaCallWarnMin, slaCallCritMin),
-                  );
-                },
-              ),
+                    return ListTile(
+                      title: Text('Table #${c['tableNumber']}'),
+                      subtitle: Text('${c['status']} • ${c['createdAt']}'),
+                      leading: const Icon(Icons.notifications_active),
+                      trailing: _slaChip(age, slaCallWarnMin, slaCallCritMin),
+                      onTap: () async {
+                        final changed = await Navigator.of(context).push(MaterialPageRoute(
+                          builder: (_) => WaiterCallDetailsScreen(
+                            call: c,
+                            username: widget.username,
+                            password: widget.password,
+                          ),
+                        ));
+                        if (changed == true && mounted) {
+                          _load();
+                        }
+                      },
+                    );
+                  },
+                ),
+    );
+  }
+}
+
+class WaiterCallDetailsScreen extends StatelessWidget {
+  final Map<String, dynamic> call;
+  final String username;
+  final String password;
+
+  const WaiterCallDetailsScreen({
+    super.key,
+    required this.call,
+    required this.username,
+    required this.password,
+  });
+
+  String get _auth => base64Encode(utf8.encode('$username:$password'));
+
+  Future<void> _setStatus(BuildContext context, String status) async {
+    final id = call['id'];
+    final res = await http.post(
+      Uri.parse('$apiBase/api/staff/waiter-calls/$id/status'),
+      headers: {'Authorization': 'Basic $_auth', 'Content-Type': 'application/json'},
+      body: jsonEncode({'status': status}),
+    );
+    if (res.statusCode >= 300) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Status update failed (${res.statusCode})')));
+      return;
+    }
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Status -> $status')));
+    Navigator.of(context).pop(true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('Call #${call['id']}')),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Table #${call['tableNumber']}', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 8),
+            Text('Status: ${call['status']}'),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => _setStatus(context, 'ACKNOWLEDGED'),
+                    child: const Text('Acknowledge'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => _setStatus(context, 'CLOSED'),
+                    child: const Text('Close'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -649,7 +780,7 @@ class _KitchenTabState extends State<KitchenTab> {
   bool _loading = true;
   String? _error;
   List<dynamic> _orders = const [];
-  String _statusFilter = 'NEW,ACCEPTED,COOKING';
+  String _statusFilter = 'NEW,ACCEPTED,IN_PROGRESS';
   String _sortMode = 'time_desc';
 
   String get _auth => base64Encode(utf8.encode('${widget.username}:${widget.password}'));
@@ -706,7 +837,7 @@ class _KitchenTabState extends State<KitchenTab> {
               _load();
             },
             itemBuilder: (ctx) => const [
-              PopupMenuItem(value: 'NEW,ACCEPTED,COOKING', child: Text('Active (New/Accepted/Cooking)')),
+              PopupMenuItem(value: 'NEW,ACCEPTED,IN_PROGRESS', child: Text('Active (New/Accepted/In Progress)')),
               PopupMenuItem(value: 'READY', child: Text('Ready')),
               PopupMenuItem(value: 'NEW', child: Text('New only')),
             ],
@@ -745,7 +876,7 @@ class _KitchenTabState extends State<KitchenTab> {
                             order: o,
                             username: widget.username,
                             password: widget.password,
-                            actions: const ['ACCEPTED', 'COOKING', 'READY'],
+                            actions: const ['ACCEPTED', 'IN_PROGRESS', 'READY'],
                           ),
                         ));
                       },
@@ -762,6 +893,7 @@ class _KitchenTabState extends State<KitchenTab> {
       case 'ACCEPTED':
         return 1;
       case 'COOKING':
+      case 'IN_PROGRESS':
         return 2;
       case 'READY':
         return 3;

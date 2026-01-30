@@ -96,10 +96,10 @@ public class PublicController {
   }
 
   public record StartSessionRequest(@NotBlank String tablePublicId, @NotBlank String sig, @NotBlank String locale) {}
-  public record StartSessionResponse(long guestSessionId, long tableId, int tableNumber, long branchId, String locale, boolean otpRequired, boolean isVerified) {}
+  public record StartSessionResponse(long guestSessionId, long tableId, int tableNumber, long branchId, String locale, boolean otpRequired, boolean isVerified, String sessionSecret) {}
 
   @PostMapping("/session/start")
-  public StartSessionResponse startSession(@Valid @RequestBody StartSessionRequest req) {
+  public StartSessionResponse startSession(@Valid @RequestBody StartSessionRequest req, jakarta.servlet.http.HttpServletRequest httpReq) {
     if (!qrSig.verifyTablePublicId(req.tablePublicId(), req.sig())) {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Invalid QR signature");
     }
@@ -112,9 +112,12 @@ public class PublicController {
     s.tableId = table.id;
     s.locale = normalizeLocale(req.locale());
     s.expiresAt = Instant.now().plus(12, ChronoUnit.HOURS);
+    s.sessionSecret = java.util.UUID.randomUUID().toString().replace("-", "");
+    s.createdByIp = httpReq.getRemoteAddr();
+    s.createdByUa = httpReq.getHeader("User-Agent");
     s = sessionRepo.save(s);
 
-    return new StartSessionResponse(s.id, table.id, table.number, table.branchId, s.locale, settings.requireOtpForFirstOrder(), s.isVerified);
+    return new StartSessionResponse(s.id, table.id, table.number, table.branchId, s.locale, settings.requireOtpForFirstOrder(), s.isVerified, s.sessionSecret);
   }
 
   // --- Menu ---
@@ -333,6 +336,7 @@ public class PublicController {
   public CreateOrderResponse createOrder(@Valid @RequestBody CreateOrderRequest req, jakarta.servlet.http.HttpServletRequest httpReq) {
     GuestSession s = sessionRepo.findById(req.guestSessionId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
+    requireSessionSecret(s, httpReq);
     if (s.expiresAt.isBefore(Instant.now())) {
       throw new ResponseStatusException(HttpStatus.GONE, "Session expired");
     }
@@ -406,9 +410,10 @@ public class PublicController {
   public record CreatePartyResponse(long partyId, String pin, Instant expiresAt) {}
 
   @PostMapping("/party/create")
-  public CreatePartyResponse createParty(@Valid @RequestBody CreatePartyRequest req) {
+  public CreatePartyResponse createParty(@Valid @RequestBody CreatePartyRequest req, jakarta.servlet.http.HttpServletRequest httpReq) {
     GuestSession s = sessionRepo.findById(req.guestSessionId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
+    requireSessionSecret(s, httpReq);
     if (s.expiresAt.isBefore(Instant.now())) {
       throw new ResponseStatusException(HttpStatus.GONE, "Session expired");
     }
@@ -462,9 +467,10 @@ public class PublicController {
   public record JoinPartyResponse(long partyId, String pin, Instant expiresAt) {}
 
   @PostMapping("/party/join")
-  public JoinPartyResponse joinParty(@Valid @RequestBody JoinPartyRequest req) {
+  public JoinPartyResponse joinParty(@Valid @RequestBody JoinPartyRequest req, jakarta.servlet.http.HttpServletRequest httpReq) {
     GuestSession s = sessionRepo.findById(req.guestSessionId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
+    requireSessionSecret(s, httpReq);
     if (s.expiresAt.isBefore(Instant.now())) {
       throw new ResponseStatusException(HttpStatus.GONE, "Session expired");
     }
@@ -497,9 +503,10 @@ public class PublicController {
   public record ClosePartyResponse(long partyId, String status) {}
 
   @PostMapping("/party/close")
-  public ClosePartyResponse closeParty(@Valid @RequestBody ClosePartyRequest req) {
+  public ClosePartyResponse closeParty(@Valid @RequestBody ClosePartyRequest req, jakarta.servlet.http.HttpServletRequest httpReq) {
     GuestSession s = sessionRepo.findById(req.guestSessionId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
+    requireSessionSecret(s, httpReq);
     if (s.partyId == null) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Not in a party");
     }
@@ -532,7 +539,10 @@ public class PublicController {
   public record SendOtpResponse(long challengeId, int ttlSeconds, String devCode) {}
 
   @PostMapping("/otp/send")
-  public SendOtpResponse sendOtp(@Valid @RequestBody SendOtpRequest req) {
+  public SendOtpResponse sendOtp(@Valid @RequestBody SendOtpRequest req, jakarta.servlet.http.HttpServletRequest httpReq) {
+    GuestSession s = sessionRepo.findById(req.guestSessionId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
+    requireSessionSecret(s, httpReq);
     var r = otpService.sendOtp(req.guestSessionId, req.phoneE164, normalizeLocale(req.locale));
     return new SendOtpResponse(r.challengeId(), r.ttlSeconds(), r.devCode());
   }
@@ -541,7 +551,10 @@ public class PublicController {
   public record VerifyOtpResponse(boolean verified) {}
 
   @PostMapping("/otp/verify")
-  public VerifyOtpResponse verifyOtp(@Valid @RequestBody VerifyOtpRequest req) {
+  public VerifyOtpResponse verifyOtp(@Valid @RequestBody VerifyOtpRequest req, jakarta.servlet.http.HttpServletRequest httpReq) {
+    GuestSession s = sessionRepo.findById(req.guestSessionId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
+    requireSessionSecret(s, httpReq);
     otpService.verifyOtp(req.guestSessionId, req.challengeId, req.code);
     return new VerifyOtpResponse(true);
   }
@@ -555,6 +568,7 @@ public class PublicController {
   public WaiterCallResponse callWaiter(@Valid @RequestBody WaiterCallRequest req, jakarta.servlet.http.HttpServletRequest httpReq) {
     GuestSession s = sessionRepo.findById(req.guestSessionId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
+    requireSessionSecret(s, httpReq);
     if (s.expiresAt.isBefore(Instant.now())) {
       throw new ResponseStatusException(HttpStatus.GONE, "Session expired");
     }
@@ -613,6 +627,16 @@ public class PublicController {
 
   private static String getUserAgent(jakarta.servlet.http.HttpServletRequest req) {
     return req.getHeader("User-Agent");
+  }
+
+  private static void requireSessionSecret(GuestSession s, jakarta.servlet.http.HttpServletRequest req) {
+    String header = req.getHeader("X-Session-Secret");
+    if (s.sessionSecret == null || s.sessionSecret.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Session secret not set");
+    }
+    if (header == null || header.isBlank() || !s.sessionSecret.equals(header)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Invalid session secret");
+    }
   }
 
   private static class ModSelection {
@@ -852,6 +876,7 @@ public class PublicController {
   public BillRequestResponse createBillRequest(@Valid @RequestBody CreateBillRequest req, jakarta.servlet.http.HttpServletRequest httpReq) {
     GuestSession s = sessionRepo.findById(req.guestSessionId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
+    requireSessionSecret(s, httpReq);
     if (s.expiresAt.isBefore(Instant.now())) {
       throw new ResponseStatusException(HttpStatus.GONE, "Session expired");
     }

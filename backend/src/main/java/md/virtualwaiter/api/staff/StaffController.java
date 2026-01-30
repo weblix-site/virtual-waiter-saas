@@ -242,8 +242,48 @@ public class StaffController {
     if (req == null || req.status == null || req.status.isBlank()) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Missing status");
     }
-    o.status = req.status.trim().toUpperCase(Locale.ROOT);
+    String next = req.status.trim().toUpperCase(Locale.ROOT);
+    if ("COOKING".equals(next)) {
+      next = "IN_PROGRESS";
+    }
+    if (!isAllowedOrderStatus(next)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported status");
+    }
+    if (!isAllowedRoleTransition(u.role, o.status, next)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid status transition");
+    }
+    o.status = next;
     orderRepo.save(o);
+  }
+
+  private boolean isAllowedOrderStatus(String s) {
+    return Set.of("NEW", "ACCEPTED", "IN_PROGRESS", "READY", "SERVED", "CLOSED", "CANCELLED").contains(s);
+  }
+
+  private boolean isAllowedTransition(String current, String next) {
+    String cur = current == null ? "NEW" : current.toUpperCase(Locale.ROOT);
+    if (cur.equals(next)) return true;
+    return switch (cur) {
+      case "NEW" -> Set.of("ACCEPTED", "IN_PROGRESS", "READY", "CANCELLED").contains(next);
+      case "ACCEPTED" -> Set.of("IN_PROGRESS", "READY", "CANCELLED").contains(next);
+      case "IN_PROGRESS" -> Set.of("READY", "CANCELLED").contains(next);
+      case "READY" -> Set.of("SERVED", "CLOSED").contains(next);
+      case "SERVED" -> Set.of("CLOSED").contains(next);
+      case "CLOSED", "CANCELLED" -> false;
+      default -> false;
+    };
+  }
+
+  private boolean isAllowedRoleTransition(String role, String current, String next) {
+    String r = role == null ? "" : role.toUpperCase(Locale.ROOT);
+    if ("ADMIN".equals(r)) return isAllowedTransition(current, next);
+    if ("KITCHEN".equals(r)) {
+      return isAllowedTransition(current, next) && Set.of("ACCEPTED", "IN_PROGRESS", "READY").contains(next);
+    }
+    if ("WAITER".equals(r)) {
+      return isAllowedTransition(current, next) && Set.of("ACCEPTED", "READY", "SERVED", "CLOSED", "CANCELLED").contains(next);
+    }
+    return false;
   }
 
   public record StaffWaiterCallDto(long id, long tableId, int tableNumber, String status, String createdAt) {}
@@ -263,6 +303,35 @@ public class StaffController {
       out.add(new StaffWaiterCallDto(c.id, c.tableId, tableNumberById.getOrDefault(c.tableId, 0), c.status, c.createdAt.toString()));
     }
     return out;
+  }
+
+  public record UpdateWaiterCallStatusReq(String status) {}
+  public record UpdateWaiterCallStatusRes(long id, String status) {}
+
+  @PostMapping("/waiter-calls/{id}/status")
+  public UpdateWaiterCallStatusRes updateWaiterCallStatus(
+    @PathVariable("id") long id,
+    @RequestBody UpdateWaiterCallStatusReq req,
+    Authentication auth
+  ) {
+    StaffUser u = requireRole(auth, "WAITER", "ADMIN");
+    WaiterCall c = waiterCallRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Waiter call not found"));
+    CafeTable t = tableRepo.findById(c.tableId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
+    if (!Objects.equals(t.branchId, u.branchId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong branch");
+    }
+    if (req == null || req.status == null || req.status.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Missing status");
+    }
+    String next = req.status.trim().toUpperCase(Locale.ROOT);
+    if (!Set.of("NEW", "ACKNOWLEDGED", "CLOSED").contains(next)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported status");
+    }
+    c.status = next;
+    waiterCallRepo.save(c);
+    return new UpdateWaiterCallStatusRes(c.id, c.status);
   }
   // --- QR helper (for admin/staff tooling) ---
   public record SignedTableUrlResponse(String tablePublicId, String sig, String url) {}

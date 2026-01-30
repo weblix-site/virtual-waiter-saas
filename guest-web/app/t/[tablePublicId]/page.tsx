@@ -41,6 +41,7 @@ type StartSessionResponse = {
   locale: "ru" | "ro" | "en";
   otpRequired: boolean;
   isVerified: boolean;
+  sessionSecret: string;
 };
 
 type BillOptionsItem = {
@@ -259,6 +260,10 @@ export default function TablePage({ params, searchParams }: any) {
     return cart.some((l) => missingRequiredGroups(l.item.id, l.modifierOptionIds ?? []).length > 0);
   }, [cart, modifiersByItem]);
 
+  function sessionHeaders() {
+    return session?.sessionSecret ? { "X-Session-Secret": session.sessionSecret } : {};
+  }
+
   async function placeOrder() {
     if (!session) return;
     if (cart.length === 0) return;
@@ -274,7 +279,7 @@ export default function TablePage({ params, searchParams }: any) {
       }
       const res = await fetch(`${API_BASE}/api/public/orders`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...sessionHeaders() },
         body: JSON.stringify({
           guestSessionId: session.guestSessionId,
           items: cart.map((l) => ({
@@ -316,7 +321,7 @@ export default function TablePage({ params, searchParams }: any) {
     try {
       const res = await fetch(`${API_BASE}/api/public/otp/send`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...sessionHeaders() },
         body: JSON.stringify({ guestSessionId: session.guestSessionId, phoneE164: phone.trim(), locale: lang }),
       });
       if (!res.ok) throw new Error(`${t(lang, "otpSendFailed")} (${res.status})`);
@@ -344,7 +349,7 @@ export default function TablePage({ params, searchParams }: any) {
     try {
       const res = await fetch(`${API_BASE}/api/public/otp/verify`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...sessionHeaders() },
         body: JSON.stringify({ guestSessionId: session.guestSessionId, challengeId: otpChallengeId, code: otpCode.trim() }),
       });
       if (!res.ok) throw new Error(`${t(lang, "otpVerifyFailed")} (${res.status})`);
@@ -362,7 +367,7 @@ export default function TablePage({ params, searchParams }: any) {
     try {
       await fetch(`${API_BASE}/api/public/waiter-call`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...sessionHeaders() },
         body: JSON.stringify({ guestSessionId: session.guestSessionId }),
       });
       alert(t(lang, "waiterCalled"));
@@ -375,7 +380,7 @@ export default function TablePage({ params, searchParams }: any) {
     try {
       const res = await fetch(`${API_BASE}/api/public/party/create`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...sessionHeaders() },
         body: JSON.stringify({ guestSessionId: session.guestSessionId }),
       });
       if (!res.ok) throw new Error(`${t(lang, "pinCreateFailed")} (${res.status})`);
@@ -394,7 +399,7 @@ export default function TablePage({ params, searchParams }: any) {
     try {
       const res = await fetch(`${API_BASE}/api/public/party/join`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...sessionHeaders() },
         body: JSON.stringify({ guestSessionId: session.guestSessionId, pin }),
       });
       if (!res.ok) throw new Error(`${t(lang, "pinJoinFailed")} (${res.status})`);
@@ -411,7 +416,7 @@ export default function TablePage({ params, searchParams }: any) {
     try {
       const res = await fetch(`${API_BASE}/api/public/party/close`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...sessionHeaders() },
         body: JSON.stringify({ guestSessionId: session.guestSessionId }),
       });
       if (!res.ok) throw new Error(`${t(lang, "partyCloseFailed")} (${res.status})`);
@@ -441,7 +446,7 @@ export default function TablePage({ params, searchParams }: any) {
 
       const res = await fetch(`${API_BASE}/api/public/bill-request/create`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...sessionHeaders() },
         body: JSON.stringify(payload),
       });
       const body = await res.json().catch(() => ({}));
