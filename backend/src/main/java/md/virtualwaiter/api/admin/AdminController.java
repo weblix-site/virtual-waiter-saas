@@ -9,7 +9,11 @@ import md.virtualwaiter.service.AuditService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
@@ -38,6 +42,7 @@ public class AdminController {
   private final ModifierOptionRepo modifierOptionRepo;
   private final MenuItemModifierGroupRepo menuItemModifierGroupRepo;
   private final AuditService auditService;
+  private final AuditLogRepo auditLogRepo;
 
   public AdminController(
     StaffUserRepo staffUserRepo,
@@ -53,7 +58,8 @@ public class AdminController {
     ModifierGroupRepo modifierGroupRepo,
     ModifierOptionRepo modifierOptionRepo,
     MenuItemModifierGroupRepo menuItemModifierGroupRepo,
-    AuditService auditService
+    AuditService auditService,
+    AuditLogRepo auditLogRepo
   ) {
     this.staffUserRepo = staffUserRepo;
     this.categoryRepo = categoryRepo;
@@ -69,6 +75,7 @@ public class AdminController {
     this.modifierOptionRepo = modifierOptionRepo;
     this.menuItemModifierGroupRepo = menuItemModifierGroupRepo;
     this.auditService = auditService;
+    this.auditLogRepo = auditLogRepo;
   }
 
   private StaffUser current(Authentication auth) {
@@ -872,17 +879,29 @@ public class AdminController {
   ) {}
 
   @GetMapping("/stats/daily.csv")
-  public String getDailyCsv(
+  public ResponseEntity<String> getDailyCsv(
     @RequestParam(value = "from", required = false) String from,
     @RequestParam(value = "to", required = false) String to,
     @RequestParam(value = "branchId", required = false) Long branchId,
+    @RequestParam(value = "tableId", required = false) Long tableId,
+    @RequestParam(value = "waiterId", required = false) Long waiterId,
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
     long bid = resolveBranchId(u, branchId);
+    if (tableId != null) {
+      CafeTable t = tableRepo.findById(tableId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
+      requireBranchAccess(u, t.branchId);
+    }
+    if (waiterId != null) {
+      StaffUser w = staffUserRepo.findById(waiterId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Waiter not found"));
+      requireBranchAccess(u, w.branchId);
+    }
     Instant fromTs = parseInstantOrDate(from, true);
     Instant toTs = parseInstantOrDate(to, false);
-    List<StatsService.DailyRow> rows = statsService.dailyForBranch(bid, fromTs, toTs);
+    List<StatsService.DailyRow> rows = statsService.dailyForBranchFiltered(bid, fromTs, toTs, tableId, waiterId);
     StringBuilder sb = new StringBuilder();
     sb.append("day,orders,calls,paid_bills,gross_cents,tips_cents\n");
     for (StatsService.DailyRow r : rows) {
@@ -893,7 +912,11 @@ public class AdminController {
         .append(r.grossCents()).append(',')
         .append(r.tipsCents()).append('\n');
     }
-    return sb.toString();
+    String filename = "stats-daily-" + bid + ".csv";
+    return ResponseEntity.ok()
+      .contentType(MediaType.parseMediaType("text/csv"))
+      .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+      .body(sb.toString());
   }
 
   @GetMapping("/stats/summary")
@@ -901,13 +924,25 @@ public class AdminController {
     @RequestParam(value = "from", required = false) String from,
     @RequestParam(value = "to", required = false) String to,
     @RequestParam(value = "branchId", required = false) Long branchId,
+    @RequestParam(value = "tableId", required = false) Long tableId,
+    @RequestParam(value = "waiterId", required = false) Long waiterId,
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
     long bid = resolveBranchId(u, branchId);
+    if (tableId != null) {
+      CafeTable t = tableRepo.findById(tableId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
+      requireBranchAccess(u, t.branchId);
+    }
+    if (waiterId != null) {
+      StaffUser w = staffUserRepo.findById(waiterId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Waiter not found"));
+      requireBranchAccess(u, w.branchId);
+    }
     Instant fromTs = parseInstantOrDate(from, true);
     Instant toTs = parseInstantOrDate(to, false);
-    StatsService.Summary s = statsService.summaryForBranch(bid, fromTs, toTs);
+    StatsService.Summary s = statsService.summaryForBranchFiltered(bid, fromTs, toTs, tableId, waiterId);
     return new StatsSummaryResponse(
       s.from().toString(),
       s.to().toString(),
@@ -925,16 +960,97 @@ public class AdminController {
     @RequestParam(value = "from", required = false) String from,
     @RequestParam(value = "to", required = false) String to,
     @RequestParam(value = "branchId", required = false) Long branchId,
+    @RequestParam(value = "tableId", required = false) Long tableId,
+    @RequestParam(value = "waiterId", required = false) Long waiterId,
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
     long bid = resolveBranchId(u, branchId);
+    if (tableId != null) {
+      CafeTable t = tableRepo.findById(tableId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
+      requireBranchAccess(u, t.branchId);
+    }
+    if (waiterId != null) {
+      StaffUser w = staffUserRepo.findById(waiterId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Waiter not found"));
+      requireBranchAccess(u, w.branchId);
+    }
     Instant fromTs = parseInstantOrDate(from, true);
     Instant toTs = parseInstantOrDate(to, false);
-    List<StatsService.DailyRow> rows = statsService.dailyForBranch(bid, fromTs, toTs);
+    List<StatsService.DailyRow> rows = statsService.dailyForBranchFiltered(bid, fromTs, toTs, tableId, waiterId);
     List<StatsDailyRow> out = new ArrayList<>();
     for (StatsService.DailyRow r : rows) {
       out.add(new StatsDailyRow(r.day(), r.ordersCount(), r.callsCount(), r.paidBillsCount(), r.grossCents(), r.tipsCents()));
+    }
+    return out;
+  }
+
+  public record TopItemRow(long menuItemId, String name, long qty, long grossCents) {}
+  public record TopCategoryRow(long categoryId, String name, long qty, long grossCents) {}
+
+  @GetMapping("/stats/top-items")
+  public List<TopItemRow> topItems(
+    @RequestParam(value = "from", required = false) String from,
+    @RequestParam(value = "to", required = false) String to,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @RequestParam(value = "tableId", required = false) Long tableId,
+    @RequestParam(value = "waiterId", required = false) Long waiterId,
+    @RequestParam(value = "limit", required = false) Integer limit,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    if (tableId != null) {
+      CafeTable t = tableRepo.findById(tableId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
+      requireBranchAccess(u, t.branchId);
+    }
+    if (waiterId != null) {
+      StaffUser w = staffUserRepo.findById(waiterId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Waiter not found"));
+      requireBranchAccess(u, w.branchId);
+    }
+    Instant fromTs = parseInstantOrDate(from, true);
+    Instant toTs = parseInstantOrDate(to, false);
+    int lim = limit == null ? 10 : limit;
+    List<StatsService.TopItemRow> rows = statsService.topItemsForBranch(bid, fromTs, toTs, tableId, waiterId, lim);
+    List<TopItemRow> out = new ArrayList<>();
+    for (StatsService.TopItemRow r : rows) {
+      out.add(new TopItemRow(r.menuItemId(), r.name(), r.qty(), r.grossCents()));
+    }
+    return out;
+  }
+
+  @GetMapping("/stats/top-categories")
+  public List<TopCategoryRow> topCategories(
+    @RequestParam(value = "from", required = false) String from,
+    @RequestParam(value = "to", required = false) String to,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @RequestParam(value = "tableId", required = false) Long tableId,
+    @RequestParam(value = "waiterId", required = false) Long waiterId,
+    @RequestParam(value = "limit", required = false) Integer limit,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    if (tableId != null) {
+      CafeTable t = tableRepo.findById(tableId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
+      requireBranchAccess(u, t.branchId);
+    }
+    if (waiterId != null) {
+      StaffUser w = staffUserRepo.findById(waiterId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Waiter not found"));
+      requireBranchAccess(u, w.branchId);
+    }
+    Instant fromTs = parseInstantOrDate(from, true);
+    Instant toTs = parseInstantOrDate(to, false);
+    int lim = limit == null ? 10 : limit;
+    List<StatsService.TopCategoryRow> rows = statsService.topCategoriesForBranch(bid, fromTs, toTs, tableId, waiterId, lim);
+    List<TopCategoryRow> out = new ArrayList<>();
+    for (StatsService.TopCategoryRow r : rows) {
+      out.add(new TopCategoryRow(r.categoryId(), r.name(), r.qty(), r.grossCents()));
     }
     return out;
   }
@@ -952,5 +1068,115 @@ public class AdminController {
       return isStart ? d.atStartOfDay().toInstant(ZoneOffset.UTC)
         : d.plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC).minusSeconds(1);
     }
+  }
+
+  // --- Audit logs ---
+  public record AuditLogDto(
+    long id,
+    String createdAt,
+    Long actorUserId,
+    String actorUsername,
+    String actorRole,
+    Long branchId,
+    String action,
+    String entityType,
+    Long entityId,
+    String detailsJson
+  ) {}
+
+  @GetMapping("/audit-logs")
+  public List<AuditLogDto> listAuditLogs(
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @RequestParam(value = "action", required = false) String action,
+    @RequestParam(value = "entityType", required = false) String entityType,
+    @RequestParam(value = "actorUsername", required = false) String actorUsername,
+    @RequestParam(value = "beforeId", required = false) Long beforeId,
+    @RequestParam(value = "afterId", required = false) Long afterId,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    String actionVal = action == null || action.isBlank() ? null : action.trim();
+    String entityTypeVal = entityType == null || entityType.isBlank() ? null : entityType.trim();
+    String actorVal = actorUsername == null || actorUsername.isBlank() ? null : actorUsername.trim();
+    List<AuditLog> logs = auditLogRepo.findFiltered(
+      bid,
+      actionVal,
+      entityTypeVal,
+      actorVal,
+      beforeId,
+      afterId,
+      PageRequest.of(0, 200)
+    );
+    List<AuditLogDto> out = new ArrayList<>();
+    for (AuditLog a : logs) {
+      out.add(new AuditLogDto(
+        a.id,
+        a.createdAt.toString(),
+        a.actorUserId,
+        a.actorUsername,
+        a.actorRole,
+        a.branchId,
+        a.action,
+        a.entityType,
+        a.entityId,
+        a.detailsJson
+      ));
+    }
+    return out;
+  }
+
+  @GetMapping("/audit-logs.csv")
+  public ResponseEntity<String> exportAuditLogsCsv(
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @RequestParam(value = "action", required = false) String action,
+    @RequestParam(value = "entityType", required = false) String entityType,
+    @RequestParam(value = "actorUsername", required = false) String actorUsername,
+    @RequestParam(value = "beforeId", required = false) Long beforeId,
+    @RequestParam(value = "afterId", required = false) Long afterId,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    String actionVal = action == null || action.isBlank() ? null : action.trim();
+    String entityTypeVal = entityType == null || entityType.isBlank() ? null : entityType.trim();
+    String actorVal = actorUsername == null || actorUsername.isBlank() ? null : actorUsername.trim();
+    List<AuditLog> logs = auditLogRepo.findFiltered(
+      bid,
+      actionVal,
+      entityTypeVal,
+      actorVal,
+      beforeId,
+      afterId,
+      PageRequest.of(0, 200)
+    );
+    StringBuilder sb = new StringBuilder();
+    sb.append("id,created_at,actor_user_id,actor_username,actor_role,branch_id,action,entity_type,entity_id,details_json\n");
+    for (AuditLog a : logs) {
+      sb.append(a.id).append(',')
+        .append(a.createdAt).append(',')
+        .append(a.actorUserId == null ? "" : a.actorUserId).append(',')
+        .append(csv(a.actorUsername)).append(',')
+        .append(csv(a.actorRole)).append(',')
+        .append(a.branchId == null ? "" : a.branchId).append(',')
+        .append(csv(a.action)).append(',')
+        .append(csv(a.entityType)).append(',')
+        .append(a.entityId == null ? "" : a.entityId).append(',')
+        .append(csv(a.detailsJson)).append('\n');
+    }
+    String filename = "audit-logs-" + bid + ".csv";
+    return ResponseEntity.ok()
+      .contentType(MediaType.parseMediaType("text/csv"))
+      .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+      .body(sb.toString());
+  }
+
+  private static String csv(String v) {
+    if (v == null) return "";
+    String s = v.replace("\"", "\"\"");
+    if (s.contains(",") || s.contains("\n") || s.contains("\r")) {
+      return "\"" + s + "\"";
+    }
+    return s;
   }
 }

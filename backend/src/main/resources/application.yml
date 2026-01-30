@@ -29,3 +29,9 @@ app:
   bill:
     allowPayOtherGuestsItems: false
     allowPayWholeTable: false
+
+push:
+  provider: LOG
+  fcmServerKey: ""
+  fcmApiUrl: "https://fcm.googleapis.com/fcm/send"
+  dryRun: false

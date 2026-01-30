@@ -44,6 +44,8 @@ export default function SuperAdminPage() {
   const [staff, setStaff] = useState<StaffUser[]>([]);
   const [tenantId, setTenantId] = useState<number | "">("");
   const [branchId, setBranchId] = useState<number | "">("");
+  const [tenantStatusFilter, setTenantStatusFilter] = useState<"" | "ACTIVE" | "INACTIVE">("");
+  const [branchStatusFilter, setBranchStatusFilter] = useState<"" | "ACTIVE" | "INACTIVE">("");
   const [statsFrom, setStatsFrom] = useState("");
   const [statsTo, setStatsTo] = useState("");
   const [stats, setStats] = useState<StatsSummary | null>(null);
@@ -105,9 +107,14 @@ export default function SuperAdminPage() {
     if (!authReady) return;
     setError(null);
     try {
-      const res = await api("/api/super/tenants");
+      const qsTenants = new URLSearchParams();
+      if (tenantStatusFilter) qsTenants.set("isActive", tenantStatusFilter === "ACTIVE" ? "true" : "false");
+      const res = await api(`/api/super/tenants${qsTenants.toString() ? `?${qsTenants.toString()}` : ""}`);
       setTenants(await res.json());
-      const resBranches = await api("/api/super/branches");
+      const qsBranches = new URLSearchParams();
+      if (tenantId) qsBranches.set("tenantId", String(tenantId));
+      if (branchStatusFilter) qsBranches.set("isActive", branchStatusFilter === "ACTIVE" ? "true" : "false");
+      const resBranches = await api(`/api/super/branches${qsBranches.toString() ? `?${qsBranches.toString()}` : ""}`);
       setBranches(await resBranches.json());
     } catch (e: any) {
       setError(e?.message ?? "Load error");
@@ -117,7 +124,7 @@ export default function SuperAdminPage() {
   useEffect(() => {
     loadTenants();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authReady]);
+  }, [authReady, tenantStatusFilter, branchStatusFilter, tenantId]);
 
   async function loadStats() {
     if (!tenantId) return;
@@ -130,6 +137,42 @@ export default function SuperAdminPage() {
     setStats(body);
     const resBranches = await api(`/api/super/stats/branches?${qs.toString()}`);
     setBranchStats(await resBranches.json());
+  }
+
+  async function downloadSummaryCsv() {
+    if (!tenantId) return;
+    const qs = new URLSearchParams();
+    qs.set("tenantId", String(tenantId));
+    if (statsFrom) qs.set("from", statsFrom);
+    if (statsTo) qs.set("to", statsTo);
+    const res = await api(`/api/super/stats/summary.csv?${qs.toString()}`, { headers: { Authorization: authHeader } });
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "tenant-summary.csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function downloadBranchesCsv() {
+    if (!tenantId) return;
+    const qs = new URLSearchParams();
+    qs.set("tenantId", String(tenantId));
+    if (statsFrom) qs.set("from", statsFrom);
+    if (statsTo) qs.set("to", statsTo);
+    const res = await api(`/api/super/stats/branches.csv?${qs.toString()}`, { headers: { Authorization: authHeader } });
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "tenant-branches.csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   }
 
   async function createTenant() {
@@ -243,6 +286,11 @@ export default function SuperAdminPage() {
       <section style={{ marginTop: 24 }}>
         <h2>Tenants</h2>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <select value={tenantStatusFilter} onChange={(e) => setTenantStatusFilter(e.target.value as any)}>
+            <option value="">All statuses</option>
+            <option value="ACTIVE">Active</option>
+            <option value="INACTIVE">Inactive</option>
+          </select>
           <select value={tenantId} onChange={(e) => setTenantId(e.target.value ? Number(e.target.value) : "")}>
             <option value="">Select tenant</option>
             {tenants.map((t) => (
@@ -267,6 +315,11 @@ export default function SuperAdminPage() {
       <section style={{ marginTop: 24 }}>
         <h2>Branches</h2>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <select value={branchStatusFilter} onChange={(e) => setBranchStatusFilter(e.target.value as any)}>
+            <option value="">All statuses</option>
+            <option value="ACTIVE">Active</option>
+            <option value="INACTIVE">Inactive</option>
+          </select>
           <select value={tenantId} onChange={(e) => setTenantId(e.target.value ? Number(e.target.value) : "")}>
             <option value="">Tenant</option>
             {tenants.map((t) => (
@@ -345,6 +398,8 @@ export default function SuperAdminPage() {
           <label>From <input type="date" value={statsFrom} onChange={(e) => setStatsFrom(e.target.value)} /></label>
           <label>To <input type="date" value={statsTo} onChange={(e) => setStatsTo(e.target.value)} /></label>
           <button onClick={loadStats} disabled={!tenantId}>Load</button>
+          <button onClick={downloadSummaryCsv} disabled={!tenantId}>Summary CSV</button>
+          <button onClick={downloadBranchesCsv} disabled={!tenantId}>Branches CSV</button>
         </div>
         {stats && (
           <div style={{ marginTop: 10, border: "1px solid #eee", borderRadius: 8, padding: 10 }}>

@@ -7,6 +7,7 @@ import md.virtualwaiter.domain.StaffUser;
 import md.virtualwaiter.domain.WaiterCall;
 import md.virtualwaiter.domain.BillRequest;
 import md.virtualwaiter.domain.BillRequestItem;
+import md.virtualwaiter.domain.TableParty;
 import md.virtualwaiter.repo.CafeTableRepo;
 import md.virtualwaiter.repo.OrderItemRepo;
 import md.virtualwaiter.repo.OrderRepo;
@@ -14,7 +15,9 @@ import md.virtualwaiter.repo.StaffUserRepo;
 import md.virtualwaiter.repo.WaiterCallRepo;
 import md.virtualwaiter.repo.BillRequestRepo;
 import md.virtualwaiter.repo.BillRequestItemRepo;
+import md.virtualwaiter.repo.TablePartyRepo;
 import md.virtualwaiter.security.QrSignatureService;
+import md.virtualwaiter.service.PartyService;
 import md.virtualwaiter.service.StaffNotificationService;
 import md.virtualwaiter.repo.NotificationEventRepo;
 import md.virtualwaiter.domain.NotificationEvent;
@@ -40,11 +43,13 @@ public class StaffController {
   private final WaiterCallRepo waiterCallRepo;
   private final BillRequestRepo billRequestRepo;
   private final BillRequestItemRepo billRequestItemRepo;
+  private final TablePartyRepo partyRepo;
   private final QrSignatureService qrSig;
   private final String publicBaseUrl;
   private final StaffNotificationService notificationService;
   private final NotificationEventRepo notificationEventRepo;
   private final StaffDeviceTokenRepo staffDeviceTokenRepo;
+  private final PartyService partyService;
 
   public StaffController(
     StaffUserRepo staffUserRepo,
@@ -54,11 +59,13 @@ public class StaffController {
     WaiterCallRepo waiterCallRepo,
     BillRequestRepo billRequestRepo,
     BillRequestItemRepo billRequestItemRepo,
+    TablePartyRepo partyRepo,
     QrSignatureService qrSig,
     @Value("${app.publicBaseUrl:http://localhost:3000}") String publicBaseUrl,
     StaffNotificationService notificationService,
     NotificationEventRepo notificationEventRepo,
-    StaffDeviceTokenRepo staffDeviceTokenRepo
+    StaffDeviceTokenRepo staffDeviceTokenRepo,
+    PartyService partyService
   ) {
     this.staffUserRepo = staffUserRepo;
     this.tableRepo = tableRepo;
@@ -67,11 +74,13 @@ public class StaffController {
     this.waiterCallRepo = waiterCallRepo;
     this.billRequestRepo = billRequestRepo;
     this.billRequestItemRepo = billRequestItemRepo;
+    this.partyRepo = partyRepo;
     this.qrSig = qrSig;
     this.publicBaseUrl = publicBaseUrl;
     this.notificationService = notificationService;
     this.notificationEventRepo = notificationEventRepo;
     this.staffDeviceTokenRepo = staffDeviceTokenRepo;
+    this.partyService = partyService;
   }
 
   private StaffUser current(Authentication auth) {
@@ -281,6 +290,7 @@ public class StaffController {
     String paymentMethod,
     String mode,
     String status,
+    String createdAt,
     int subtotalCents,
     Integer tipsPercent,
     int tipsAmountCents,
@@ -313,7 +323,7 @@ public class StaffController {
         if (oi == null) continue;
         lines.add(new StaffBillLine(oi.id, oi.nameSnapshot, oi.qty, oi.unitPriceCents, it.lineTotalCents));
       }
-      out.add(new StaffBillRequestDto(br.id, t.number, br.partyId, br.paymentMethod, br.mode, br.status, br.subtotalCents, br.tipsPercent, br.tipsAmountCents, br.totalCents, lines));
+      out.add(new StaffBillRequestDto(br.id, t.number, br.partyId, br.paymentMethod, br.mode, br.status, br.createdAt.toString(), br.subtotalCents, br.tipsPercent, br.tipsAmountCents, br.totalCents, lines));
     }
     return out;
   }
@@ -352,10 +362,8 @@ public class StaffController {
     // Auto-close party on WHOLE_TABLE payments
     if ("WHOLE_TABLE".equals(br.mode) && br.partyId != null) {
       TableParty p = partyRepo.findById(br.partyId).orElse(null);
-      if (p != null && "ACTIVE".equals(p.status)) {
-        p.status = "CLOSED";
-        p.closedAt = java.time.Instant.now();
-        partyRepo.save(p);
+      if (p != null) {
+        partyService.closeParty(p, java.time.Instant.now());
       }
     }
 
@@ -378,9 +386,7 @@ public class StaffController {
     if (!"ACTIVE".equals(p.status)) {
       return new ClosePartyResponse(p.id, p.status);
     }
-    p.status = "CLOSED";
-    p.closedAt = java.time.Instant.now();
-    partyRepo.save(p);
+    partyService.closeParty(p, java.time.Instant.now());
     return new ClosePartyResponse(p.id, p.status);
   }
 

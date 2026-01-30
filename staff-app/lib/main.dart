@@ -12,6 +12,55 @@ void main() {
 
 const String apiBase = String.fromEnvironment('API_BASE', defaultValue: 'http://localhost:8080');
 
+const int slaOrderWarnMin = 5;
+const int slaOrderCritMin = 10;
+const int slaCallWarnMin = 2;
+const int slaCallCritMin = 5;
+const int slaBillWarnMin = 5;
+const int slaBillCritMin = 10;
+const int slaKitchenWarnMin = 7;
+const int slaKitchenCritMin = 15;
+
+DateTime? _parseIso(String? value) {
+  if (value == null || value.isEmpty) return null;
+  try {
+    return DateTime.parse(value).toLocal();
+  } catch (_) {
+    return null;
+  }
+}
+
+Duration _ageFromIso(String? value) {
+  final dt = _parseIso(value);
+  if (dt == null) return Duration.zero;
+  final now = DateTime.now();
+  return now.difference(dt).isNegative ? Duration.zero : now.difference(dt);
+}
+
+Color _slaColor(Duration age, int warnMin, int critMin) {
+  final minutes = age.inMinutes;
+  if (minutes >= critMin) return Colors.red.shade600;
+  if (minutes >= warnMin) return Colors.orange.shade600;
+  return Colors.green.shade600;
+}
+
+Widget _slaChip(Duration age, int warnMin, int critMin) {
+  final minutes = age.inMinutes;
+  final label = minutes < 1 ? '<1m' : '${minutes}m';
+  final color = _slaColor(age, warnMin, critMin);
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    decoration: BoxDecoration(
+      color: color.withOpacity(0.1),
+      borderRadius: BorderRadius.circular(999),
+      border: Border.all(color: color, width: 1),
+    ),
+    child: Text(
+      label,
+      style: TextStyle(color: color, fontWeight: FontWeight.w600),
+    ),
+  );
+}
 class StaffApp extends StatelessWidget {
   const StaffApp({super.key});
 
@@ -355,9 +404,11 @@ class _OrdersTabState extends State<OrdersTab> {
                     final items = (o['items'] as List<dynamic>? ?? const []).cast<Map<String, dynamic>>();
                     final tableNumber = o['tableNumber'];
                     final assigned = o['assignedWaiterId'];
+                    final age = _ageFromIso(o['createdAt']?.toString());
                     return ListTile(
                       title: Text('Table #$tableNumber  •  Order #${o['id']}'),
                       subtitle: Text('${o['status']} • ${items.length} item(s)' + (assigned != null ? ' • waiter #$assigned' : '')),
+                      trailing: _slaChip(age, slaOrderWarnMin, slaOrderCritMin),
                       onTap: () {
                         Navigator.of(context).push(MaterialPageRoute(
                           builder: (_) => OrderDetailsScreen(
@@ -434,15 +485,17 @@ class _CallsTabState extends State<CallsTab> {
               : ListView.separated(
                   itemCount: _calls.length,
                   separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (ctx, i) {
-                    final c = _calls[i] as Map<String, dynamic>;
-                    return ListTile(
-                      title: Text('Table #${c['tableNumber']}'),
-                      subtitle: Text('${c['status']} • ${c['createdAt']}'),
-                      leading: const Icon(Icons.notifications_active),
-                    );
-                  },
-                ),
+                itemBuilder: (ctx, i) {
+                  final c = _calls[i] as Map<String, dynamic>;
+                  final age = _ageFromIso(c['createdAt']?.toString());
+                  return ListTile(
+                    title: Text('Table #${c['tableNumber']}'),
+                    subtitle: Text('${c['status']} • ${c['createdAt']}'),
+                    leading: const Icon(Icons.notifications_active),
+                    trailing: _slaChip(age, slaCallWarnMin, slaCallCritMin),
+                  );
+                },
+              ),
     );
   }
 }
@@ -525,9 +578,17 @@ class _BillsTabState extends State<BillsTab> {
                     final b = _bills[i] as Map<String, dynamic>;
                     final items = (b['items'] as List<dynamic>? ?? const []).cast<Map<String, dynamic>>();
                     final partyId = b['partyId'];
+                    final age = _ageFromIso(b['createdAt']?.toString());
                     return ExpansionTile(
                       title: Text('Table #${b['tableNumber']} • ${b['paymentMethod']}'),
-                      subtitle: Text('${b['mode']} • ${b['totalCents']} cents'),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('${b['mode']} • ${b['totalCents']} cents'),
+                          const SizedBox(height: 6),
+                          _slaChip(age, slaBillWarnMin, slaBillCritMin),
+                        ],
+                      ),
                       children: [
                         ...items.map((it) => ListTile(
                               title: Text('${it['name']} × ${it['qty']}'),
@@ -673,9 +734,11 @@ class _KitchenTabState extends State<KitchenTab> {
                     final tableNumber = o['tableNumber'];
                     final ageSec = (o['ageSeconds'] ?? 0) as int;
                     final ageMin = (ageSec / 60).floor();
+                    final age = Duration(seconds: ageSec);
                     return ListTile(
                       title: Text('Table #$tableNumber  •  Order #${o['id']}'),
                       subtitle: Text('${o['status']} • ${items.length} item(s) • ${ageMin}m'),
+                      trailing: _slaChip(age, slaKitchenWarnMin, slaKitchenCritMin),
                       onTap: () {
                         Navigator.of(context).push(MaterialPageRoute(
                           builder: (_) => OrderDetailsScreen(

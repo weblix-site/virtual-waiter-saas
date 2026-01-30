@@ -28,10 +28,7 @@ public class StatsService {
   ) {}
 
   public Summary summaryForBranch(long branchId, Instant from, Instant to) {
-    String tableFilter = "t.branch_id = :branchId";
-    Map<String, Object> params = baseParams(from, to);
-    params.put("branchId", branchId);
-    return runSummary(tableFilter, params);
+    return summaryForBranchFiltered(branchId, from, to, null, null);
   }
 
   public Summary summaryForTenant(long tenantId, Instant from, Instant to) {
@@ -51,10 +48,79 @@ public class StatsService {
   ) {}
 
   public java.util.List<DailyRow> dailyForBranch(long branchId, Instant from, Instant to) {
-    String tableFilter = "t.branch_id = :branchId";
+    return dailyForBranchFiltered(branchId, from, to, null, null);
+  }
+
+  public Summary summaryForBranchFiltered(long branchId, Instant from, Instant to, Long tableId, Long waiterId) {
     Map<String, Object> params = baseParams(from, to);
     params.put("branchId", branchId);
+    String tableFilter = buildTableFilter(params, tableId, waiterId);
+    return runSummary(tableFilter, params);
+  }
+
+  public java.util.List<DailyRow> dailyForBranchFiltered(long branchId, Instant from, Instant to, Long tableId, Long waiterId) {
+    Map<String, Object> params = baseParams(from, to);
+    params.put("branchId", branchId);
+    String tableFilter = buildTableFilter(params, tableId, waiterId);
     return runDaily(tableFilter, params);
+  }
+
+  public record TopItemRow(long menuItemId, String name, long qty, long grossCents) {}
+  public record TopCategoryRow(long categoryId, String name, long qty, long grossCents) {}
+
+  public java.util.List<TopItemRow> topItemsForBranch(long branchId, Instant from, Instant to, Long tableId, Long waiterId, int limit) {
+    Map<String, Object> params = baseParams(from, to);
+    params.put("branchId", branchId);
+    params.put("limit", Math.max(1, Math.min(limit, 200)));
+    String tableFilter = buildTableFilter(params, tableId, waiterId);
+    String sql =
+      "SELECT oi.menu_item_id AS menu_item_id,\n" +
+      "       COALESCE(oi.name_snapshot, mi.name_ru, 'Unknown') AS name,\n" +
+      "       COALESCE(SUM(oi.qty),0) AS qty,\n" +
+      "       COALESCE(SUM(bri.line_total_cents),0) AS gross_cents\n" +
+      "FROM bill_request_items bri\n" +
+      "JOIN bill_requests br ON br.id = bri.bill_request_id\n" +
+      "JOIN order_items oi ON oi.id = bri.order_item_id\n" +
+      "JOIN tables t ON t.id = br.table_id\n" +
+      "LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id\n" +
+      "WHERE " + tableFilter + " AND br.status = 'PAID_CONFIRMED' AND br.confirmed_at BETWEEN :fromTs AND :toTs\n" +
+      "GROUP BY oi.menu_item_id, name\n" +
+      "ORDER BY gross_cents DESC\n" +
+      "LIMIT :limit";
+    return jdbc.query(sql, params, (rs, rowNum) -> new TopItemRow(
+      rs.getLong("menu_item_id"),
+      rs.getString("name"),
+      rs.getLong("qty"),
+      rs.getLong("gross_cents")
+    ));
+  }
+
+  public java.util.List<TopCategoryRow> topCategoriesForBranch(long branchId, Instant from, Instant to, Long tableId, Long waiterId, int limit) {
+    Map<String, Object> params = baseParams(from, to);
+    params.put("branchId", branchId);
+    params.put("limit", Math.max(1, Math.min(limit, 200)));
+    String tableFilter = buildTableFilter(params, tableId, waiterId);
+    String sql =
+      "SELECT mc.id AS category_id,\n" +
+      "       COALESCE(mc.name_ru, 'Unknown') AS name,\n" +
+      "       COALESCE(SUM(oi.qty),0) AS qty,\n" +
+      "       COALESCE(SUM(bri.line_total_cents),0) AS gross_cents\n" +
+      "FROM bill_request_items bri\n" +
+      "JOIN bill_requests br ON br.id = bri.bill_request_id\n" +
+      "JOIN order_items oi ON oi.id = bri.order_item_id\n" +
+      "JOIN tables t ON t.id = br.table_id\n" +
+      "LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id\n" +
+      "LEFT JOIN menu_categories mc ON mc.id = mi.category_id\n" +
+      "WHERE " + tableFilter + " AND br.status = 'PAID_CONFIRMED' AND br.confirmed_at BETWEEN :fromTs AND :toTs\n" +
+      "GROUP BY mc.id, name\n" +
+      "ORDER BY gross_cents DESC\n" +
+      "LIMIT :limit";
+    return jdbc.query(sql, params, (rs, rowNum) -> new TopCategoryRow(
+      rs.getLong("category_id"),
+      rs.getString("name"),
+      rs.getLong("qty"),
+      rs.getLong("gross_cents")
+    ));
   }
 
   public record BranchSummaryRow(
@@ -163,6 +229,19 @@ public class StatsService {
     params.put("fromTs", Timestamp.from(from));
     params.put("toTs", Timestamp.from(to));
     return params;
+  }
+
+  private String buildTableFilter(Map<String, Object> params, Long tableId, Long waiterId) {
+    StringBuilder sb = new StringBuilder("t.branch_id = :branchId");
+    if (tableId != null) {
+      sb.append(" AND t.id = :tableId");
+      params.put("tableId", tableId);
+    }
+    if (waiterId != null) {
+      sb.append(" AND t.assigned_waiter_id = :waiterId");
+      params.put("waiterId", waiterId);
+    }
+    return sb.toString();
   }
 
   private Summary runSummary(String tableFilter, Map<String, Object> params) {

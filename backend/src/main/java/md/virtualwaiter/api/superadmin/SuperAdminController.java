@@ -10,7 +10,10 @@ import md.virtualwaiter.service.StatsService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
@@ -66,9 +69,12 @@ public class SuperAdminController {
   public record UpdateTenantRequest(String name, Boolean isActive) {}
 
   @GetMapping("/tenants")
-  public List<TenantDto> listTenants(Authentication auth) {
+  public List<TenantDto> listTenants(@RequestParam(value = "isActive", required = false) Boolean isActive, Authentication auth) {
     requireSuper(auth);
     List<Tenant> list = tenantRepo.findAll();
+    if (isActive != null) {
+      list = list.stream().filter(t -> t.isActive == isActive).toList();
+    }
     List<TenantDto> out = new ArrayList<>();
     for (Tenant t : list) out.add(new TenantDto(t.id, t.name, t.isActive));
     return out;
@@ -109,9 +115,16 @@ public class SuperAdminController {
   public record UpdateBranchRequest(String name, Boolean isActive) {}
 
   @GetMapping("/branches")
-  public List<BranchDto> listBranches(@RequestParam(value = "tenantId", required = false) Long tenantId, Authentication auth) {
+  public List<BranchDto> listBranches(
+    @RequestParam(value = "tenantId", required = false) Long tenantId,
+    @RequestParam(value = "isActive", required = false) Boolean isActive,
+    Authentication auth
+  ) {
     requireSuper(auth);
     List<Branch> list = (tenantId == null) ? branchRepo.findAll() : branchRepo.findByTenantId(tenantId);
+    if (isActive != null) {
+      list = list.stream().filter(b -> b.isActive == isActive).toList();
+    }
     List<BranchDto> out = new ArrayList<>();
     for (Branch b : list) out.add(new BranchDto(b.id, b.tenantId, b.name, b.isActive));
     return out;
@@ -264,6 +277,63 @@ public class SuperAdminController {
       out.add(new BranchSummaryRow(r.branchId(), r.branchName(), r.ordersCount(), r.callsCount(), r.paidBillsCount(), r.grossCents(), r.tipsCents()));
     }
     return out;
+  }
+
+  @GetMapping("/stats/summary.csv")
+  public ResponseEntity<String> getSummaryCsv(
+    @RequestParam(value = "tenantId") Long tenantId,
+    @RequestParam(value = "from", required = false) String from,
+    @RequestParam(value = "to", required = false) String to,
+    Authentication auth
+  ) {
+    requireSuper(auth);
+    Instant fromTs = parseInstantOrDate(from, true);
+    Instant toTs = parseInstantOrDate(to, false);
+    StatsService.Summary s = statsService.summaryForTenant(tenantId, fromTs, toTs);
+    StringBuilder sb = new StringBuilder();
+    sb.append("from,to,orders,calls,paid_bills,gross_cents,tips_cents,active_tables\n");
+    sb.append(s.from()).append(',')
+      .append(s.to()).append(',')
+      .append(s.ordersCount()).append(',')
+      .append(s.callsCount()).append(',')
+      .append(s.paidBillsCount()).append(',')
+      .append(s.grossCents()).append(',')
+      .append(s.tipsCents()).append(',')
+      .append(s.activeTablesCount()).append('\n');
+    String filename = "tenant-summary-" + tenantId + ".csv";
+    return ResponseEntity.ok()
+      .contentType(MediaType.parseMediaType("text/csv"))
+      .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+      .body(sb.toString());
+  }
+
+  @GetMapping("/stats/branches.csv")
+  public ResponseEntity<String> getBranchSummaryCsv(
+    @RequestParam(value = "tenantId") Long tenantId,
+    @RequestParam(value = "from", required = false) String from,
+    @RequestParam(value = "to", required = false) String to,
+    Authentication auth
+  ) {
+    requireSuper(auth);
+    Instant fromTs = parseInstantOrDate(from, true);
+    Instant toTs = parseInstantOrDate(to, false);
+    List<StatsService.BranchSummaryRow> rows = statsService.summaryByBranchForTenant(tenantId, fromTs, toTs);
+    StringBuilder sb = new StringBuilder();
+    sb.append("branch_id,branch_name,orders,calls,paid_bills,gross_cents,tips_cents\n");
+    for (StatsService.BranchSummaryRow r : rows) {
+      sb.append(r.branchId()).append(',')
+        .append(r.branchName()).append(',')
+        .append(r.ordersCount()).append(',')
+        .append(r.callsCount()).append(',')
+        .append(r.paidBillsCount()).append(',')
+        .append(r.grossCents()).append(',')
+        .append(r.tipsCents()).append('\n');
+    }
+    String filename = "tenant-branches-" + tenantId + ".csv";
+    return ResponseEntity.ok()
+      .contentType(MediaType.parseMediaType("text/csv"))
+      .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+      .body(sb.toString());
   }
 
   private static Instant parseInstantOrDate(String v, boolean isStart) {

@@ -17,6 +17,7 @@ import md.virtualwaiter.repo.ModifierOptionRepo;
 import md.virtualwaiter.repo.MenuItemModifierGroupRepo;
 import md.virtualwaiter.otp.OtpService;
 import md.virtualwaiter.service.BranchSettingsService;
+import md.virtualwaiter.service.PartyService;
 import md.virtualwaiter.service.NotificationEventService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -52,6 +53,7 @@ public class PublicController {
   private final OtpService otpService;
   private final BranchSettingsService settingsService;
   private final NotificationEventService notificationEventService;
+  private final PartyService partyService;
 
   public PublicController(
     CafeTableRepo tableRepo,
@@ -70,7 +72,8 @@ public class PublicController {
     QrSignatureService qrSig,
     OtpService otpService,
     BranchSettingsService settingsService,
-    NotificationEventService notificationEventService
+    NotificationEventService notificationEventService,
+    PartyService partyService
   ) {
     this.tableRepo = tableRepo;
     this.sessionRepo = sessionRepo;
@@ -89,6 +92,7 @@ public class PublicController {
     this.otpService = otpService;
     this.settingsService = settingsService;
     this.notificationEventService = notificationEventService;
+    this.partyService = partyService;
   }
 
   public record StartSessionRequest(@NotBlank String tablePublicId, @NotBlank String sig, @NotBlank String locale) {}
@@ -336,6 +340,7 @@ public class PublicController {
     CafeTable table = tableRepo.findById(s.tableId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
     BranchSettingsService.Resolved settings = settingsService.resolveForBranch(table.branchId);
+    TableParty activeParty = partyService.getActivePartyOrNull(s, table.id, Instant.now());
     if (settings.requireOtpForFirstOrder() && !s.isVerified) {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "OTP required before first order");
     }
@@ -503,9 +508,7 @@ public class PublicController {
     if (!"ACTIVE".equals(p.status)) {
       return new ClosePartyResponse(p.id, p.status);
     }
-    p.status = "CLOSED";
-    p.closedAt = Instant.now();
-    partyRepo.save(p);
+    partyService.closeParty(p, Instant.now());
     return new ClosePartyResponse(p.id, p.status);
   }
 
@@ -514,17 +517,7 @@ public class PublicController {
     if (key == null || !key.equals(System.getenv("ADMIN_KEY"))) {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Admin key required");
     }
-    Instant now = Instant.now();
-    List<TableParty> parties = partyRepo.findByStatus("ACTIVE");
-    int closed = 0;
-    for (TableParty p : parties) {
-      if (p.expiresAt.isBefore(now)) {
-        p.status = "CLOSED";
-        p.closedAt = now;
-        partyRepo.save(p);
-        closed++;
-      }
-    }
+    int closed = partyService.closeExpiredParties(Instant.now());
     return Map.of("closed", closed);
   }
 
@@ -718,14 +711,8 @@ public class PublicController {
       return Set.of();
     }
     if (s.partyId == null) return Set.of();
-    TableParty p = partyRepo.findById(s.partyId)
-      .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Party not found"));
-    if (!Objects.equals(p.tableId, tableId)) {
-      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Party does not belong to table");
-    }
-    if (!"ACTIVE".equals(p.status) || p.expiresAt.isBefore(Instant.now())) {
-      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Party expired");
-    }
+    TableParty p = partyService.getActivePartyOrNull(s, tableId, Instant.now());
+    if (p == null) return Set.of();
     List<GuestSession> sessions = sessionRepo.findByPartyId(p.id);
     Set<Long> ids = new HashSet<>();
     for (GuestSession gs : sessions) ids.add(gs.id);
@@ -751,6 +738,8 @@ public class PublicController {
     Long partyId,
     String partyStatus,
     Instant partyExpiresAt,
+    List<Long> partyGuestSessionIds,
+    int partyGuestCount,
     List<BillOptionsItem> myItems,
     List<BillOptionsItem> tableItems,
     boolean payCashEnabled,
@@ -806,12 +795,18 @@ public class PublicController {
     boolean partyActive = !partySessionIds.isEmpty();
     String partyStatus = null;
     Instant partyExpiresAt = null;
-    if (s.partyId != null) {
-      TableParty p = partyRepo.findById(s.partyId).orElse(null);
-      if (p != null) {
-        partyStatus = p.status;
-        partyExpiresAt = p.expiresAt;
-      }
+    List<Long> partyGuestSessionIds = List.of();
+    int partyGuestCount = 0;
+    TableParty activeParty = partyService.getActivePartyOrNull(s, table.id, Instant.now());
+    if (activeParty != null) {
+      partyStatus = activeParty.status;
+      partyExpiresAt = activeParty.expiresAt;
+      List<GuestSession> sessions = sessionRepo.findByPartyId(activeParty.id);
+      partyGuestSessionIds = sessions.stream()
+        .filter(gs -> gs.expiresAt.isAfter(Instant.now()))
+        .map(gs -> gs.id)
+        .toList();
+      partyGuestCount = partyGuestSessionIds.size();
     }
     return new BillOptionsResponse(
       partyActive && settings.allowPayOtherGuestsItems(),
@@ -822,6 +817,8 @@ public class PublicController {
       s.partyId,
       partyStatus,
       partyExpiresAt,
+      partyGuestSessionIds,
+      partyGuestCount,
       myItems,
       tableItems,
       settings.payCashEnabled(),
@@ -892,7 +889,7 @@ public class PublicController {
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "orderItemIds required for SELECTED");
       }
       if (settings.allowPayOtherGuestsItems()) {
-        if (s.partyId == null) {
+        if (activeParty == null) {
           throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Party required to pay other guests items");
         }
         orders = orderRepo.findByTableIdOrderByCreatedAtDesc(s.tableId);
@@ -910,7 +907,7 @@ public class PublicController {
       if (!settings.allowPayWholeTable()) {
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Whole table payment is disabled");
       }
-      if (s.partyId == null) {
+      if (activeParty == null) {
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Party required to pay whole table");
       }
       orders = orderRepo.findByTableIdOrderByCreatedAtDesc(s.tableId);

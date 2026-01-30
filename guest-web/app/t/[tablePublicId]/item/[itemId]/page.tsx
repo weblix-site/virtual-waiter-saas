@@ -35,6 +35,7 @@ export default function ItemPage({ params, searchParams }: any) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [item, setItem] = useState<ItemDetail | null>(null);
+  const [activePhoto, setActivePhoto] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -43,11 +44,14 @@ export default function ItemPage({ params, searchParams }: any) {
       setError(null);
       try {
         const res = await fetch(`${API_BASE}/api/public/menu-item/${itemId}?tablePublicId=${encodeURIComponent(tablePublicId)}&sig=${encodeURIComponent(sig)}&locale=${lang}`);
-        if (!res.ok) throw new Error(`Load failed (${res.status})`);
+        if (!res.ok) throw new Error(`${t(lang, "loadFailed")} (${res.status})`);
         const data = await res.json();
-        if (!cancelled) setItem(data);
+        if (!cancelled) {
+          setItem(data);
+          setActivePhoto(0);
+        }
       } catch (e: any) {
-        if (!cancelled) setError(e?.message ?? "Error");
+        if (!cancelled) setError(e?.message ?? t(lang, "errorGeneric"));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -68,12 +72,27 @@ export default function ItemPage({ params, searchParams }: any) {
       <h1 style={{ marginTop: 8 }}>{item.name}</h1>
       <div style={{ color: "#666", marginBottom: 8 }}>{money(item.priceCents, item.currency)}</div>
 
-      {item.photos && item.photos.length > 0 && (
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-          {item.photos.map((p, i) => (
-            <img key={i} src={p} alt={item.name} style={{ width: 200, height: 140, objectFit: "cover", borderRadius: 8 }} />
-          ))}
+      {item.photos && item.photos.length > 0 ? (
+        <div style={{ marginBottom: 12 }}>
+          <img
+            src={item.photos[Math.min(activePhoto, item.photos.length - 1)]}
+            alt={item.name}
+            style={{ width: "100%", maxHeight: 360, objectFit: "cover", borderRadius: 12, marginBottom: 8 }}
+          />
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {item.photos.map((p, i) => (
+              <button
+                key={i}
+                onClick={() => setActivePhoto(i)}
+                style={{ border: activePhoto === i ? "2px solid #333" : "1px solid #ddd", padding: 0, borderRadius: 8 }}
+              >
+                <img src={p} alt={item.name} style={{ width: 96, height: 72, objectFit: "cover", borderRadius: 6 }} />
+              </button>
+            ))}
+          </div>
         </div>
+      ) : (
+        <div style={{ color: "#666", marginBottom: 12 }}>{t(lang, "noPhotos")}</div>
       )}
 
       {item.description && <p>{item.description}</p>}

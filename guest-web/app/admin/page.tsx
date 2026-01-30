@@ -91,6 +91,20 @@ type StatsDailyRow = {
   tipsCents: number;
 };
 
+type TopItemRow = {
+  menuItemId: number;
+  name: string;
+  qty: number;
+  grossCents: number;
+};
+
+type TopCategoryRow = {
+  categoryId: number;
+  name: string;
+  qty: number;
+  grossCents: number;
+};
+
 type ModifierGroup = {
   id: number;
   nameRu: string;
@@ -117,6 +131,19 @@ type ItemModifierGroup = {
   sortOrder: number;
 };
 
+type AuditLog = {
+  id: number;
+  createdAt: string;
+  actorUserId?: number | null;
+  actorUsername?: string | null;
+  actorRole?: string | null;
+  branchId?: number | null;
+  action: string;
+  entityType: string;
+  entityId?: number | null;
+  detailsJson?: string | null;
+};
+
 function money(priceCents: number, currency = "MDL") {
   return `${(priceCents / 100).toFixed(2)} ${currency}`;
 }
@@ -138,8 +165,20 @@ export default function AdminPage() {
   const [qrByTable, setQrByTable] = useState<Record<number, string>>({});
   const [statsFrom, setStatsFrom] = useState("");
   const [statsTo, setStatsTo] = useState("");
+  const [statsTableId, setStatsTableId] = useState<number | "">("");
+  const [statsWaiterId, setStatsWaiterId] = useState<number | "">("");
+  const [statsLimit, setStatsLimit] = useState(10);
   const [stats, setStats] = useState<StatsSummary | null>(null);
   const [daily, setDaily] = useState<StatsDailyRow[]>([]);
+  const [topItems, setTopItems] = useState<TopItemRow[]>([]);
+  const [topCategories, setTopCategories] = useState<TopCategoryRow[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditBeforeId, setAuditBeforeId] = useState<number | "">("");
+  const [auditAfterId, setAuditAfterId] = useState<number | "">("");
+  const [auditAction, setAuditAction] = useState("");
+  const [auditEntityType, setAuditEntityType] = useState("");
+  const [auditActor, setAuditActor] = useState("");
 
   const [newCatNameRu, setNewCatNameRu] = useState("");
   const [newCatSort, setNewCatSort] = useState(0);
@@ -501,21 +540,40 @@ export default function AdminPage() {
     const qs = new URLSearchParams();
     if (statsFrom) qs.set("from", statsFrom);
     if (statsTo) qs.set("to", statsTo);
+    if (statsTableId !== "") qs.set("tableId", String(statsTableId));
+    if (statsWaiterId !== "") qs.set("waiterId", String(statsWaiterId));
     const res = await api(`/api/admin/stats/summary?${qs.toString()}`);
     const body = await res.json();
     setStats(body);
     const resDaily = await api(`/api/admin/stats/daily?${qs.toString()}`);
     const dailyBody = await resDaily.json();
     setDaily(dailyBody);
+    const qsTop = new URLSearchParams(qs);
+    qsTop.set("limit", String(statsLimit || 10));
+    const resTopItems = await api(`/api/admin/stats/top-items?${qsTop.toString()}`);
+    setTopItems(await resTopItems.json());
+    const resTopCategories = await api(`/api/admin/stats/top-categories?${qsTop.toString()}`);
+    setTopCategories(await resTopCategories.json());
   }
 
-  function downloadCsv() {
+  async function downloadCsv() {
     const qs = new URLSearchParams();
     if (statsFrom) qs.set("from", statsFrom);
     if (statsTo) qs.set("to", statsTo);
-    const url = `${API_BASE}/api/admin/stats/daily.csv?${qs.toString()}`;
-    // Basic auth via URL is not supported; prompt user to open in new tab after login.
-    window.open(url, "_blank");
+    if (statsTableId !== "") qs.set("tableId", String(statsTableId));
+    if (statsWaiterId !== "") qs.set("waiterId", String(statsWaiterId));
+    const res = await api(`/api/admin/stats/daily.csv?${qs.toString()}`, {
+      headers: { Authorization: authHeader },
+    });
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "stats-daily.csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   }
 
   async function saveEditedCategory() {
@@ -568,6 +626,54 @@ export default function AdminPage() {
     loadAll();
   }
 
+  async function loadAuditLogs() {
+    setAuditLoading(true);
+    try {
+      const qs = new URLSearchParams();
+      if (auditAction.trim()) qs.set("action", auditAction.trim());
+      if (auditEntityType.trim()) qs.set("entityType", auditEntityType.trim());
+      if (auditActor.trim()) qs.set("actorUsername", auditActor.trim());
+      if (auditBeforeId !== "") qs.set("beforeId", String(auditBeforeId));
+      if (auditAfterId !== "") qs.set("afterId", String(auditAfterId));
+      const res = await api(`/api/admin/audit-logs?${qs.toString()}`);
+      const body = await res.json();
+      setAuditLogs(body);
+    } catch (e: any) {
+      setError(e?.message ?? "Audit load error");
+    } finally {
+      setAuditLoading(false);
+    }
+  }
+
+  async function downloadAuditCsv() {
+    const qs = new URLSearchParams();
+    if (auditAction.trim()) qs.set("action", auditAction.trim());
+    if (auditEntityType.trim()) qs.set("entityType", auditEntityType.trim());
+    if (auditActor.trim()) qs.set("actorUsername", auditActor.trim());
+    if (auditBeforeId !== "") qs.set("beforeId", String(auditBeforeId));
+    if (auditAfterId !== "") qs.set("afterId", String(auditAfterId));
+    const res = await api(`/api/admin/audit-logs.csv?${qs.toString()}`, {
+      headers: { Authorization: authHeader },
+    });
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "audit-logs.csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function clearAuditFilters() {
+    setAuditAction("");
+    setAuditEntityType("");
+    setAuditActor("");
+    setAuditBeforeId("");
+    setAuditAfterId("");
+  }
+
   if (!authReady) {
     return (
       <main style={{ padding: 24, maxWidth: 520, margin: "0 auto", fontFamily: "system-ui, -apple-system, Segoe UI, Roboto" }}>
@@ -617,6 +723,25 @@ export default function AdminPage() {
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <label>From <input type="date" value={statsFrom} onChange={(e) => setStatsFrom(e.target.value)} /></label>
           <label>To <input type="date" value={statsTo} onChange={(e) => setStatsTo(e.target.value)} /></label>
+          <label>
+            Table
+            <select value={statsTableId} onChange={(e) => setStatsTableId(e.target.value ? Number(e.target.value) : "")}>
+              <option value="">All</option>
+              {tables.map((t) => (
+                <option key={t.id} value={t.id}>#{t.number}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Waiter
+            <select value={statsWaiterId} onChange={(e) => setStatsWaiterId(e.target.value ? Number(e.target.value) : "")}>
+              <option value="">All</option>
+              {staff.filter((s) => s.role === "WAITER").map((w) => (
+                <option key={w.id} value={w.id}>{w.username} #{w.id}</option>
+              ))}
+            </select>
+          </label>
+          <label>Top limit <input type="number" min={1} max={100} value={statsLimit} onChange={(e) => setStatsLimit(Number(e.target.value))} style={{ width: 80 }} /></label>
           <button onClick={loadStats}>Load</button>
           <button onClick={downloadCsv}>Download CSV</button>
         </div>
@@ -653,6 +778,125 @@ export default function AdminPage() {
                     <td style={{ padding: "6px 4px", textAlign: "right", borderBottom: "1px solid #f0f0f0" }}>{r.paidBillsCount}</td>
                     <td style={{ padding: "6px 4px", textAlign: "right", borderBottom: "1px solid #f0f0f0" }}>{money(r.grossCents)}</td>
                     <td style={{ padding: "6px 4px", textAlign: "right", borderBottom: "1px solid #f0f0f0" }}>{money(r.tipsCents)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {(topItems.length > 0 || topCategories.length > 0) && (
+          <div style={{ marginTop: 16, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
+            <div style={{ border: "1px solid #eee", borderRadius: 8, padding: 10 }}>
+              <strong>Top items</strong>
+              {topItems.length === 0 ? (
+                <div style={{ color: "#666", marginTop: 6 }}>No data</div>
+              ) : (
+                <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 6 }}>
+                  <thead>
+                    <tr>
+                      <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Item</th>
+                      <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Qty</th>
+                      <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Gross</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {topItems.map((r) => (
+                      <tr key={r.menuItemId}>
+                        <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{r.name}</td>
+                        <td style={{ padding: "6px 4px", textAlign: "right", borderBottom: "1px solid #f0f0f0" }}>{r.qty}</td>
+                        <td style={{ padding: "6px 4px", textAlign: "right", borderBottom: "1px solid #f0f0f0" }}>{money(r.grossCents)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            <div style={{ border: "1px solid #eee", borderRadius: 8, padding: 10 }}>
+              <strong>Top categories</strong>
+              {topCategories.length === 0 ? (
+                <div style={{ color: "#666", marginTop: 6 }}>No data</div>
+              ) : (
+                <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 6 }}>
+                  <thead>
+                    <tr>
+                      <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Category</th>
+                      <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Qty</th>
+                      <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Gross</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {topCategories.map((r) => (
+                      <tr key={r.categoryId}>
+                        <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{r.name}</td>
+                        <td style={{ padding: "6px 4px", textAlign: "right", borderBottom: "1px solid #f0f0f0" }}>{r.qty}</td>
+                        <td style={{ padding: "6px 4px", textAlign: "right", borderBottom: "1px solid #f0f0f0" }}>{money(r.grossCents)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section style={{ marginTop: 24 }}>
+        <h2>Audit Logs</h2>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <label>
+            Action
+            <input list="audit-actions" value={auditAction} onChange={(e) => setAuditAction(e.target.value)} placeholder="CREATE/UPDATE/DELETE" />
+          </label>
+          <label>
+            Entity
+            <input list="audit-entities" value={auditEntityType} onChange={(e) => setAuditEntityType(e.target.value)} placeholder="MenuItem/StaffUser" />
+          </label>
+          <label>Actor <input value={auditActor} onChange={(e) => setAuditActor(e.target.value)} placeholder="username" /></label>
+          <label>Before ID <input type="number" value={auditBeforeId} onChange={(e) => setAuditBeforeId(e.target.value ? Number(e.target.value) : "")} /></label>
+          <label>After ID <input type="number" value={auditAfterId} onChange={(e) => setAuditAfterId(e.target.value ? Number(e.target.value) : "")} /></label>
+          <button onClick={loadAuditLogs} disabled={auditLoading}>{auditLoading ? "Loading..." : "Load"}</button>
+          <button onClick={downloadAuditCsv} disabled={auditLoading}>CSV</button>
+          <button onClick={() => { setAuditAfterId(""); setAuditBeforeId(""); loadAuditLogs(); }} disabled={auditLoading}>Latest</button>
+          <button onClick={clearAuditFilters} disabled={auditLoading}>Clear</button>
+        </div>
+        <datalist id="audit-actions">
+          <option value="CREATE" />
+          <option value="UPDATE" />
+          <option value="DELETE" />
+        </datalist>
+        <datalist id="audit-entities">
+          <option value="MenuCategory" />
+          <option value="MenuItem" />
+          <option value="CafeTable" />
+          <option value="StaffUser" />
+          <option value="ModifierGroup" />
+          <option value="ModifierOption" />
+        </datalist>
+        {auditLogs.length > 0 && (
+          <div style={{ marginTop: 10 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>ID</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>When</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Actor</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Action</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Entity</th>
+                </tr>
+              </thead>
+              <tbody>
+                {auditLogs.map((a) => (
+                  <tr key={a.id}>
+                    <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{a.id}</td>
+                    <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{a.createdAt}</td>
+                    <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>
+                      {a.actorUsername ?? "-"} {a.actorRole ? `(${a.actorRole})` : ""}
+                    </td>
+                    <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{a.action}</td>
+                    <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>
+                      {a.entityType} {a.entityId ? `#${a.entityId}` : ""}
+                    </td>
                   </tr>
                 ))}
               </tbody>
