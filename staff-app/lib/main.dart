@@ -683,6 +683,21 @@ class _BillsTabState extends State<BillsTab> {
     _load();
   }
 
+  Future<void> _cancelBill(int id) async {
+    final res = await http.post(
+      Uri.parse('$apiBase/api/staff/bill-requests/$id/cancel'),
+      headers: {'Authorization': 'Basic $_auth'},
+    );
+    if (res.statusCode >= 300) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Cancel failed (${res.statusCode})')));
+      return;
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Bill cancelled')));
+    _load();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -709,13 +724,14 @@ class _BillsTabState extends State<BillsTab> {
                     final b = _bills[i] as Map<String, dynamic>;
                     final items = (b['items'] as List<dynamic>? ?? const []).cast<Map<String, dynamic>>();
                     final partyId = b['partyId'];
+                    final status = b['status']?.toString();
                     final age = _ageFromIso(b['createdAt']?.toString());
                     return ExpansionTile(
                       title: Text('Table #${b['tableNumber']} • ${b['paymentMethod']}'),
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('${b['mode']} • ${b['totalCents']} cents'),
+                          Text('${b['mode']} • ${b['totalCents']} cents • ${status ?? ""}'),
                           const SizedBox(height: 6),
                           _slaChip(age, slaBillWarnMin, slaBillCritMin),
                         ],
@@ -735,6 +751,17 @@ class _BillsTabState extends State<BillsTab> {
                             ),
                           ),
                         ),
+                        if (status == 'CREATED')
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            child: SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton(
+                                onPressed: () => _cancelBill(b['billRequestId']),
+                                child: const Text('Cancel bill'),
+                              ),
+                            ),
+                          ),
                         if (partyId != null)
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

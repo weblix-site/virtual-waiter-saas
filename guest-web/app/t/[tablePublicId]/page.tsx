@@ -116,6 +116,7 @@ export default function TablePage({ params, searchParams }: any) {
   const [otpCode, setOtpCode] = useState("");
   const [otpSending, setOtpSending] = useState(false);
   const [otpVerifying, setOtpVerifying] = useState(false);
+  const [billRefreshLoading, setBillRefreshLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -263,6 +264,31 @@ export default function TablePage({ params, searchParams }: any) {
   function sessionHeaders() {
     return session?.sessionSecret ? { "X-Session-Secret": session.sessionSecret } : {};
   }
+
+  async function refreshBillStatus() {
+    if (!session || !billRequestId) return;
+    setBillRefreshLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/public/bill-request/${billRequestId}?guestSessionId=${session.guestSessionId}`, {
+        headers: { ...sessionHeaders() },
+      });
+      if (!res.ok) throw new Error(`Bill status failed (${res.status})`);
+      const body = await res.json();
+      setBillStatus(body.status);
+    } catch (e: any) {
+      setBillError(e?.message ?? t(lang, "billRequestFailed"));
+    } finally {
+      setBillRefreshLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!billRequestId || !session) return;
+    const id = setInterval(() => {
+      refreshBillStatus();
+    }, 10000);
+    return () => clearInterval(id);
+  }, [billRequestId, session]);
 
   async function placeOrder() {
     if (!session) return;
@@ -454,6 +480,27 @@ export default function TablePage({ params, searchParams }: any) {
       setBillRequestId(body.billRequestId);
       setBillStatus(body.status);
       alert(t(lang, "billRequested"));
+    } catch (e: any) {
+      setBillError(e?.message ?? t(lang, "billRequestFailed"));
+    } finally {
+      setBillLoading(false);
+    }
+  }
+
+  async function cancelBillRequest() {
+    if (!session || !billRequestId) return;
+    setBillError(null);
+    setBillLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/public/bill-request/${billRequestId}/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...sessionHeaders() },
+        body: JSON.stringify({ guestSessionId: session.guestSessionId }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.message ?? `Cancel failed (${res.status})`);
+      setBillStatus(body.status);
+      alert(body.status === "CANCELLED" ? (lang === "en" ? "Bill cancelled" : lang === "ro" ? "Nota anulată" : "Счёт отменён") : t(lang, "billRequested"));
     } catch (e: any) {
       setBillError(e?.message ?? t(lang, "billRequestFailed"));
     } finally {
@@ -859,6 +906,21 @@ export default function TablePage({ params, searchParams }: any) {
           )}
 
           {billError && <div style={{ color: "#b11e46", marginTop: 10 }}>{billError}</div>}
+          {billRequestId && (
+            <div style={{ marginTop: 12, paddingTop: 8, borderTop: "1px dashed #eee" }}>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <strong>{t(lang, "status")}:</strong> <span>{billStatus ?? "?"}</span>
+                <button onClick={refreshBillStatus} disabled={billRefreshLoading} style={{ padding: "6px 10px" }}>
+                  {billRefreshLoading ? t(lang, "loading") : (lang === "en" ? "Refresh" : lang === "ro" ? "Reîmprospătează" : "Обновить")}
+                </button>
+                {billStatus === "CREATED" && (
+                  <button onClick={cancelBillRequest} disabled={billLoading} style={{ padding: "6px 10px" }}>
+                    {lang === "en" ? "Cancel bill" : lang === "ro" ? "Anulează nota" : "Отменить счёт"}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </main>

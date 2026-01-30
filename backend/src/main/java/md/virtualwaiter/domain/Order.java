@@ -16,6 +16,9 @@ public class Order {
   @Column(name = "guest_session_id", nullable = false)
   public Long guestSessionId;
 
+  @Column(name = "handled_by_staff_id")
+  public Long handledByStaffId;
+
   /** NEW | ACCEPTED | IN_PROGRESS | READY | SERVED | CLOSED | CANCELLED */
   @Column(nullable = false)
   public String status = "NEW";

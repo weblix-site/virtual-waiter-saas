@@ -113,8 +113,8 @@ public class PublicController {
     s.locale = normalizeLocale(req.locale());
     s.expiresAt = Instant.now().plus(12, ChronoUnit.HOURS);
     s.sessionSecret = java.util.UUID.randomUUID().toString().replace("-", "");
-    s.createdByIp = httpReq.getRemoteAddr();
-    s.createdByUa = httpReq.getHeader("User-Agent");
+    s.createdByIp = getClientIp(httpReq);
+    s.createdByUa = getUserAgent(httpReq);
     s = sessionRepo.save(s);
 
     return new StartSessionResponse(s.id, table.id, table.number, table.branchId, s.locale, settings.requireOtpForFirstOrder(), s.isVerified, s.sessionSecret);
@@ -1034,9 +1034,19 @@ public class PublicController {
   }
 
   @GetMapping("/bill-request/{id}")
-  public BillRequestResponse getBillRequest(@PathVariable("id") long id) {
+  public BillRequestResponse getBillRequest(
+    @PathVariable("id") long id,
+    @RequestParam("guestSessionId") long guestSessionId,
+    jakarta.servlet.http.HttpServletRequest httpReq
+  ) {
+    GuestSession s = sessionRepo.findById(guestSessionId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
+    requireSessionSecret(s, httpReq);
     BillRequest br = billRequestRepo.findById(id)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "BillRequest not found"));
+    if (!Objects.equals(br.guestSessionId, s.id)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bill request does not belong to session");
+    }
     List<BillRequestItem> items = billRequestItemRepo.findByBillRequestId(br.id);
     List<BillItemLine> lines = new ArrayList<>();
     for (BillRequestItem it : items) {
@@ -1045,6 +1055,45 @@ public class PublicController {
       lines.add(new BillItemLine(oi.id, oi.nameSnapshot, oi.qty, oi.unitPriceCents, it.lineTotalCents));
     }
     return new BillRequestResponse(br.id, br.status, br.paymentMethod, br.mode, br.subtotalCents, br.tipsPercent, br.tipsAmountCents, br.totalCents, lines);
+  }
+
+  public record CancelBillRequestResponse(long billRequestId, String status) {}
+
+  @PostMapping("/bill-request/{id}/cancel")
+  public CancelBillRequestResponse cancelBillRequest(
+    @PathVariable("id") long id,
+    @RequestBody Map<String, Object> body,
+    jakarta.servlet.http.HttpServletRequest httpReq
+  ) {
+    Object raw = body == null ? null : body.get("guestSessionId");
+    if (!(raw instanceof Number)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "guestSessionId required");
+    }
+    long guestSessionId = ((Number) raw).longValue();
+    GuestSession s = sessionRepo.findById(guestSessionId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
+    requireSessionSecret(s, httpReq);
+    BillRequest br = billRequestRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "BillRequest not found"));
+    if (!Objects.equals(br.guestSessionId, s.id)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bill request does not belong to session");
+    }
+    if (!"CREATED".equals(br.status)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Bill request is not active");
+    }
+    br.status = "CANCELLED";
+    billRequestRepo.save(br);
+
+    List<BillRequestItem> items = billRequestItemRepo.findByBillRequestId(br.id);
+    for (BillRequestItem it : items) {
+      OrderItem oi = orderItemRepo.findById(it.orderItemId).orElse(null);
+      if (oi == null) continue;
+      if (Objects.equals(oi.billRequestId, br.id)) {
+        oi.billRequestId = null;
+        orderItemRepo.save(oi);
+      }
+    }
+    return new CancelBillRequestResponse(br.id, br.status);
   }
 
 }

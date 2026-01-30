@@ -253,6 +253,12 @@ public class StaffController {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid status transition");
     }
     o.status = next;
+    if (o.handledByStaffId == null) {
+      String role = u.role == null ? "" : u.role.toUpperCase(Locale.ROOT);
+      if (Set.of("WAITER", "ADMIN").contains(role)) {
+        o.handledByStaffId = u.id;
+      }
+    }
     orderRepo.save(o);
   }
 
@@ -437,6 +443,36 @@ public class StaffController {
     }
 
     return new ConfirmPaidResponse(br.id, br.status);
+  }
+
+  public record CancelBillRequestResponse(long billRequestId, String status) {}
+
+  @PostMapping("/bill-requests/{id}/cancel")
+  public CancelBillRequestResponse cancelBillRequest(@PathVariable("id") long id, Authentication auth) {
+    StaffUser staff = requireRole(auth, "WAITER", "ADMIN");
+    BillRequest br = billRequestRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Bill request not found"));
+    CafeTable t = tableRepo.findById(br.tableId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
+    if (staff.branchId != null && !Objects.equals(t.branchId, staff.branchId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong branch");
+    }
+    if (!"CREATED".equals(br.status)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Bill request is not active");
+    }
+    br.status = "CANCELLED";
+    billRequestRepo.save(br);
+
+    List<BillRequestItem> items = billRequestItemRepo.findByBillRequestId(br.id);
+    for (BillRequestItem it : items) {
+      OrderItem oi = orderItemRepo.findById(it.orderItemId).orElse(null);
+      if (oi == null) continue;
+      if (Objects.equals(oi.billRequestId, br.id)) {
+        oi.billRequestId = null;
+        orderItemRepo.save(oi);
+      }
+    }
+    return new CancelBillRequestResponse(br.id, br.status);
   }
 
   // --- Party close (staff) ---

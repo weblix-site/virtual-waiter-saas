@@ -54,14 +54,16 @@ public class StatsService {
   public Summary summaryForBranchFiltered(long branchId, Instant from, Instant to, Long tableId, Long waiterId) {
     Map<String, Object> params = baseParams(from, to);
     params.put("branchId", branchId);
-    String tableFilter = buildTableFilter(params, tableId, waiterId);
+    params.put("waiterId", waiterId);
+    String tableFilter = buildTableFilter(params, tableId);
     return runSummary(tableFilter, params);
   }
 
   public java.util.List<DailyRow> dailyForBranchFiltered(long branchId, Instant from, Instant to, Long tableId, Long waiterId) {
     Map<String, Object> params = baseParams(from, to);
     params.put("branchId", branchId);
-    String tableFilter = buildTableFilter(params, tableId, waiterId);
+    params.put("waiterId", waiterId);
+    String tableFilter = buildTableFilter(params, tableId);
     return runDaily(tableFilter, params);
   }
 
@@ -71,8 +73,9 @@ public class StatsService {
   public java.util.List<TopItemRow> topItemsForBranch(long branchId, Instant from, Instant to, Long tableId, Long waiterId, int limit) {
     Map<String, Object> params = baseParams(from, to);
     params.put("branchId", branchId);
+    params.put("waiterId", waiterId);
     params.put("limit", Math.max(1, Math.min(limit, 200)));
-    String tableFilter = buildTableFilter(params, tableId, waiterId);
+    String tableFilter = buildTableFilter(params, tableId);
     String sql =
       "SELECT oi.menu_item_id AS menu_item_id,\n" +
       "       COALESCE(oi.name_snapshot, mi.name_ru, 'Unknown') AS name,\n" +
@@ -84,6 +87,7 @@ public class StatsService {
       "JOIN tables t ON t.id = br.table_id\n" +
       "LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id\n" +
       "WHERE " + tableFilter + " AND br.status = 'PAID_CONFIRMED' AND br.confirmed_at BETWEEN :fromTs AND :toTs\n" +
+      "  AND (:waiterId IS NULL OR br.confirmed_by_staff_id = :waiterId)\n" +
       "GROUP BY oi.menu_item_id, name\n" +
       "ORDER BY gross_cents DESC\n" +
       "LIMIT :limit";
@@ -98,8 +102,9 @@ public class StatsService {
   public java.util.List<TopCategoryRow> topCategoriesForBranch(long branchId, Instant from, Instant to, Long tableId, Long waiterId, int limit) {
     Map<String, Object> params = baseParams(from, to);
     params.put("branchId", branchId);
+    params.put("waiterId", waiterId);
     params.put("limit", Math.max(1, Math.min(limit, 200)));
-    String tableFilter = buildTableFilter(params, tableId, waiterId);
+    String tableFilter = buildTableFilter(params, tableId);
     String sql =
       "SELECT mc.id AS category_id,\n" +
       "       COALESCE(mc.name_ru, 'Unknown') AS name,\n" +
@@ -112,6 +117,7 @@ public class StatsService {
       "LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id\n" +
       "LEFT JOIN menu_categories mc ON mc.id = mi.category_id\n" +
       "WHERE " + tableFilter + " AND br.status = 'PAID_CONFIRMED' AND br.confirmed_at BETWEEN :fromTs AND :toTs\n" +
+      "  AND (:waiterId IS NULL OR br.confirmed_by_staff_id = :waiterId)\n" +
       "GROUP BY mc.id, name\n" +
       "ORDER BY gross_cents DESC\n" +
       "LIMIT :limit";
@@ -185,12 +191,14 @@ public class StatsService {
       "  SELECT date_trunc('day', o.created_at) AS day, COUNT(*) AS cnt\n" +
       "  FROM orders o JOIN tables t ON t.id = o.table_id\n" +
       "  WHERE " + tableFilter + " AND o.created_at BETWEEN :fromTs AND :toTs\n" +
+      "    AND (:waiterId IS NULL OR o.handled_by_staff_id = :waiterId)\n" +
       "  GROUP BY 1\n" +
       "),\n" +
       "calls AS (\n" +
       "  SELECT date_trunc('day', wc.created_at) AS day, COUNT(*) AS cnt\n" +
       "  FROM waiter_calls wc JOIN tables t ON t.id = wc.table_id\n" +
       "  WHERE " + tableFilter + " AND wc.created_at BETWEEN :fromTs AND :toTs\n" +
+      "    AND (:waiterId IS NULL OR t.assigned_waiter_id = :waiterId)\n" +
       "  GROUP BY 1\n" +
       "),\n" +
       "bills AS (\n" +
@@ -200,6 +208,7 @@ public class StatsService {
       "         COALESCE(SUM(br.tips_amount_cents),0) AS tips\n" +
       "  FROM bill_requests br JOIN tables t ON t.id = br.table_id\n" +
       "  WHERE " + tableFilter + " AND br.status = 'PAID_CONFIRMED' AND br.confirmed_at BETWEEN :fromTs AND :toTs\n" +
+      "    AND (:waiterId IS NULL OR br.confirmed_by_staff_id = :waiterId)\n" +
       "  GROUP BY 1\n" +
       ")\n" +
       "SELECT d.day,\n" +
@@ -231,15 +240,11 @@ public class StatsService {
     return params;
   }
 
-  private String buildTableFilter(Map<String, Object> params, Long tableId, Long waiterId) {
+  private String buildTableFilter(Map<String, Object> params, Long tableId) {
     StringBuilder sb = new StringBuilder("t.branch_id = :branchId");
     if (tableId != null) {
       sb.append(" AND t.id = :tableId");
       params.put("tableId", tableId);
-    }
-    if (waiterId != null) {
-      sb.append(" AND t.assigned_waiter_id = :waiterId");
-      params.put("waiterId", waiterId);
     }
     return sb.toString();
   }
@@ -247,32 +252,38 @@ public class StatsService {
   private Summary runSummary(String tableFilter, Map<String, Object> params) {
     long ordersCount = queryLong(
       "SELECT COUNT(*) FROM orders o JOIN tables t ON t.id = o.table_id " +
-        "WHERE " + tableFilter + " AND o.created_at BETWEEN :fromTs AND :toTs",
+        "WHERE " + tableFilter + " AND o.created_at BETWEEN :fromTs AND :toTs " +
+        "AND (:waiterId IS NULL OR o.handled_by_staff_id = :waiterId)",
       params
     );
     long callsCount = queryLong(
       "SELECT COUNT(*) FROM waiter_calls wc JOIN tables t ON t.id = wc.table_id " +
-        "WHERE " + tableFilter + " AND wc.created_at BETWEEN :fromTs AND :toTs",
+        "WHERE " + tableFilter + " AND wc.created_at BETWEEN :fromTs AND :toTs " +
+        "AND (:waiterId IS NULL OR t.assigned_waiter_id = :waiterId)",
       params
     );
     long paidBillsCount = queryLong(
       "SELECT COUNT(*) FROM bill_requests br JOIN tables t ON t.id = br.table_id " +
-        "WHERE " + tableFilter + " AND br.status = 'PAID_CONFIRMED' AND br.confirmed_at BETWEEN :fromTs AND :toTs",
+        "WHERE " + tableFilter + " AND br.status = 'PAID_CONFIRMED' AND br.confirmed_at BETWEEN :fromTs AND :toTs " +
+        "AND (:waiterId IS NULL OR br.confirmed_by_staff_id = :waiterId)",
       params
     );
     long grossCents = queryLong(
       "SELECT COALESCE(SUM(br.total_cents),0) FROM bill_requests br JOIN tables t ON t.id = br.table_id " +
-        "WHERE " + tableFilter + " AND br.status = 'PAID_CONFIRMED' AND br.confirmed_at BETWEEN :fromTs AND :toTs",
+        "WHERE " + tableFilter + " AND br.status = 'PAID_CONFIRMED' AND br.confirmed_at BETWEEN :fromTs AND :toTs " +
+        "AND (:waiterId IS NULL OR br.confirmed_by_staff_id = :waiterId)",
       params
     );
     long tipsCents = queryLong(
       "SELECT COALESCE(SUM(br.tips_amount_cents),0) FROM bill_requests br JOIN tables t ON t.id = br.table_id " +
-        "WHERE " + tableFilter + " AND br.status = 'PAID_CONFIRMED' AND br.confirmed_at BETWEEN :fromTs AND :toTs",
+        "WHERE " + tableFilter + " AND br.status = 'PAID_CONFIRMED' AND br.confirmed_at BETWEEN :fromTs AND :toTs " +
+        "AND (:waiterId IS NULL OR br.confirmed_by_staff_id = :waiterId)",
       params
     );
     long activeTablesCount = queryLong(
       "SELECT COUNT(DISTINCT o.table_id) FROM orders o JOIN tables t ON t.id = o.table_id " +
-        "WHERE " + tableFilter + " AND o.created_at BETWEEN :fromTs AND :toTs",
+        "WHERE " + tableFilter + " AND o.created_at BETWEEN :fromTs AND :toTs " +
+        "AND (:waiterId IS NULL OR o.handled_by_staff_id = :waiterId)",
       params
     );
 
