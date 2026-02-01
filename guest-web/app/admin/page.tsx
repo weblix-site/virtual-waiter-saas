@@ -433,6 +433,22 @@ export default function AdminPage() {
     setQrByTable((prev) => ({ ...prev, [tableId]: url }));
   }
 
+  async function refreshAllQrs() {
+    const updates: Record<number, string> = {};
+    for (const t of tables) {
+      try {
+        const res = await api(`/api/admin/tables/${t.publicId}/signed-url`);
+        const body = await res.json();
+        updates[t.id] = body.url as string;
+      } catch {
+        // ignore per-table failures
+      }
+    }
+    if (Object.keys(updates).length > 0) {
+      setQrByTable((prev) => ({ ...prev, ...updates }));
+    }
+  }
+
   async function createStaff() {
     await api("/api/admin/staff", {
       method: "POST",
@@ -1046,6 +1062,9 @@ export default function AdminPage() {
 
       <section style={{ marginTop: 24 }}>
         <h2>Tables & QR</h2>
+        <div style={{ marginBottom: 8, color: "#666" }}>
+          Note: QR links include a timestamp. Re‑generate before printing if links were created long ago.
+        </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <input type="number" placeholder="Table #" value={newTableNumber} onChange={(e) => setNewTableNumber(Number(e.target.value))} />
           <input placeholder="Public ID (optional)" value={newTablePublicId} onChange={(e) => setNewTablePublicId(e.target.value)} />
@@ -1056,6 +1075,7 @@ export default function AdminPage() {
             ))}
           </select>
           <button onClick={createTable}>Add</button>
+          <button onClick={refreshAllQrs}>Refresh all QR</button>
         </div>
         <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <input placeholder="Filter by table # or publicId" value={tableFilterText} onChange={(e) => setTableFilterText(e.target.value)} />
@@ -1096,6 +1116,7 @@ export default function AdminPage() {
               )}
               <button onClick={() => getSignedUrl(t.publicId)}>QR URL</button>
               <button onClick={() => showQr(t.id, t.publicId)}>Show QR</button>
+              <button onClick={() => showQr(t.id, t.publicId)}>Refresh QR</button>
               {qrByTable[t.id] && (
                 <a
                   href={`https://api.qrserver.com/v1/create-qr-code/?size=512x512&data=${encodeURIComponent(qrByTable[t.id])}`}

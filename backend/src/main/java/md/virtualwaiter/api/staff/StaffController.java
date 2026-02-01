@@ -8,7 +8,9 @@ import md.virtualwaiter.domain.WaiterCall;
 import md.virtualwaiter.domain.BillRequest;
 import md.virtualwaiter.domain.BillRequestItem;
 import md.virtualwaiter.domain.TableParty;
+import md.virtualwaiter.domain.GuestSession;
 import md.virtualwaiter.repo.CafeTableRepo;
+import md.virtualwaiter.repo.GuestSessionRepo;
 import md.virtualwaiter.repo.OrderItemRepo;
 import md.virtualwaiter.repo.OrderRepo;
 import md.virtualwaiter.repo.StaffUserRepo;
@@ -44,6 +46,7 @@ public class StaffController {
   private final BillRequestRepo billRequestRepo;
   private final BillRequestItemRepo billRequestItemRepo;
   private final TablePartyRepo partyRepo;
+  private final GuestSessionRepo guestSessionRepo;
   private final QrSignatureService qrSig;
   private final String publicBaseUrl;
   private final StaffNotificationService notificationService;
@@ -60,6 +63,7 @@ public class StaffController {
     BillRequestRepo billRequestRepo,
     BillRequestItemRepo billRequestItemRepo,
     TablePartyRepo partyRepo,
+    GuestSessionRepo guestSessionRepo,
     QrSignatureService qrSig,
     @Value("${app.publicBaseUrl:http://localhost:3000}") String publicBaseUrl,
     StaffNotificationService notificationService,
@@ -75,6 +79,7 @@ public class StaffController {
     this.billRequestRepo = billRequestRepo;
     this.billRequestItemRepo = billRequestItemRepo;
     this.partyRepo = partyRepo;
+    this.guestSessionRepo = guestSessionRepo;
     this.qrSig = qrSig;
     this.publicBaseUrl = publicBaseUrl;
     this.notificationService = notificationService;
@@ -106,6 +111,137 @@ public class StaffController {
   public MeResponse me(Authentication auth) {
     StaffUser u = current(auth);
     return new MeResponse(u.id, u.username, u.role, u.branchId);
+  }
+
+  public record StaffTableDto(long id, int number, String publicId, Long assignedWaiterId) {}
+
+  @GetMapping("/tables")
+  public List<StaffTableDto> tables(Authentication auth) {
+    StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
+    List<CafeTable> tables = tableRepo.findByBranchId(u.branchId);
+    List<StaffTableDto> out = new ArrayList<>();
+    for (CafeTable t : tables) {
+      out.add(new StaffTableDto(t.id, t.number, t.publicId, t.assignedWaiterId));
+    }
+    return out;
+  }
+
+  public record StaffGuestSessionDto(
+    long id,
+    long tableId,
+    Long partyId,
+    boolean isVerified,
+    String lastOrderAt,
+    String lastBillRequestAt,
+    String lastWaiterCallAt
+  ) {}
+
+  @GetMapping("/guest-sessions")
+  public List<StaffGuestSessionDto> guestSessions(
+    @RequestParam("tableId") long tableId,
+    Authentication auth
+  ) {
+    StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
+    CafeTable t = tableRepo.findById(tableId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
+    if (!Objects.equals(t.branchId, u.branchId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong branch");
+    }
+    List<GuestSession> sessions = guestSessionRepo.findByTableIdOrderByIdDesc(tableId);
+    List<StaffGuestSessionDto> out = new ArrayList<>();
+    for (GuestSession s : sessions) {
+      out.add(new StaffGuestSessionDto(
+        s.id,
+        s.tableId,
+        s.partyId,
+        s.isVerified,
+        s.lastOrderAt == null ? null : s.lastOrderAt.toString(),
+        s.lastBillRequestAt == null ? null : s.lastBillRequestAt.toString(),
+        s.lastWaiterCallAt == null ? null : s.lastWaiterCallAt.toString()
+      ));
+    }
+    return out;
+  }
+
+  public record StaffHistoryOrderDto(
+    long id,
+    long tableId,
+    int tableNumber,
+    long guestSessionId,
+    String status,
+    String createdAt,
+    List<StaffOrderItemDto> items
+  ) {}
+
+  @GetMapping("/orders/history")
+  public List<StaffHistoryOrderDto> orderHistory(
+    @RequestParam(value = "tableId", required = false) Long tableId,
+    @RequestParam(value = "guestSessionId", required = false) Long guestSessionId,
+    Authentication auth
+  ) {
+    StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
+    if (tableId == null && guestSessionId == null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "tableId or guestSessionId required");
+    }
+    Long resolvedTableId = tableId;
+    if (guestSessionId != null) {
+      GuestSession gs = guestSessionRepo.findById(guestSessionId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Guest session not found"));
+      if (resolvedTableId == null) {
+        resolvedTableId = gs.tableId;
+      } else if (!Objects.equals(resolvedTableId, gs.tableId)) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "guestSessionId does not belong to tableId");
+      }
+    }
+    if (resolvedTableId != null) {
+      CafeTable t = tableRepo.findById(resolvedTableId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
+      if (!Objects.equals(t.branchId, u.branchId)) {
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong branch");
+      }
+    }
+
+    List<Order> orders;
+    if (guestSessionId != null && tableId == null) {
+      orders = orderRepo.findTop200ByGuestSessionIdOrderByCreatedAtDesc(guestSessionId);
+    } else if (resolvedTableId != null) {
+      orders = orderRepo.findTop200ByTableIdOrderByCreatedAtDesc(resolvedTableId);
+      if (guestSessionId != null) {
+        orders = orders.stream().filter(o -> Objects.equals(o.guestSessionId, guestSessionId)).toList();
+      }
+    } else {
+      orders = List.of();
+    }
+    if (orders.isEmpty()) return List.of();
+
+    Map<Long, Integer> tableNumberById = new HashMap<>();
+    if (resolvedTableId != null) {
+      CafeTable t = tableRepo.findById(resolvedTableId).orElse(null);
+      if (t != null) tableNumberById.put(t.id, t.number);
+    }
+
+    List<Long> orderIds = orders.stream().map(o -> o.id).toList();
+    List<OrderItem> items = orderItemRepo.findByOrderIdIn(orderIds);
+    Map<Long, List<StaffOrderItemDto>> itemsByOrder = new HashMap<>();
+    for (OrderItem it : items) {
+      itemsByOrder.computeIfAbsent(it.orderId, k -> new ArrayList<>()).add(
+        new StaffOrderItemDto(it.id, it.menuItemId, it.nameSnapshot, it.unitPriceCents, it.qty, it.comment)
+      );
+    }
+
+    List<StaffHistoryOrderDto> out = new ArrayList<>();
+    for (Order o : orders) {
+      out.add(new StaffHistoryOrderDto(
+        o.id,
+        o.tableId,
+        tableNumberById.getOrDefault(o.tableId, 0),
+        o.guestSessionId,
+        o.status,
+        o.createdAt.toString(),
+        itemsByOrder.getOrDefault(o.id, List.of())
+      ));
+    }
+    return out;
   }
 
   public record StaffOrderItemDto(long id, long menuItemId, String name, int unitPriceCents, int qty, String comment) {}

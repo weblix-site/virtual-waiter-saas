@@ -335,6 +335,8 @@ public class PublicController {
 
   public record CreateOrderResponse(long orderId, String status) {}
   public record OrderStatusResponse(long orderId, String status, String createdAt) {}
+  public record OrderItemSummary(long id, String name, int qty, int unitPriceCents, String comment) {}
+  public record OrderSummary(long orderId, String status, String createdAt, List<OrderItemSummary> items) {}
 
   @PostMapping("/orders")
   public CreateOrderResponse createOrder(@Valid @RequestBody CreateOrderRequest req, jakarta.servlet.http.HttpServletRequest httpReq) {
@@ -423,6 +425,33 @@ public class PublicController {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Order does not belong to session");
     }
     return new OrderStatusResponse(o.id, o.status, o.createdAt.toString());
+  }
+
+  @GetMapping("/orders")
+  public List<OrderSummary> listOrders(
+    @RequestParam("guestSessionId") long guestSessionId,
+    jakarta.servlet.http.HttpServletRequest httpReq
+  ) {
+    GuestSession s = sessionRepo.findById(guestSessionId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
+    requireSessionSecret(s, httpReq);
+    if (s.expiresAt.isBefore(Instant.now())) {
+      throw new ResponseStatusException(HttpStatus.GONE, "Session expired");
+    }
+    List<Order> orders = orderRepo.findByGuestSessionIdOrderByCreatedAtDesc(s.id);
+    if (orders.isEmpty()) return List.of();
+    List<Long> orderIds = orders.stream().map(o -> o.id).toList();
+    List<OrderItem> items = orderItemRepo.findByOrderIdIn(orderIds);
+    Map<Long, List<OrderItemSummary>> itemsByOrder = new HashMap<>();
+    for (OrderItem it : items) {
+      itemsByOrder.computeIfAbsent(it.orderId, k -> new ArrayList<>())
+        .add(new OrderItemSummary(it.id, it.nameSnapshot, it.qty, it.unitPriceCents, it.comment));
+    }
+    List<OrderSummary> out = new ArrayList<>();
+    for (Order o : orders) {
+      out.add(new OrderSummary(o.id, o.status, o.createdAt.toString(), itemsByOrder.getOrDefault(o.id, List.of())));
+    }
+    return out;
   }
 
 

@@ -120,6 +120,8 @@ export default function TablePage({ params, searchParams }: any) {
   const [otpSending, setOtpSending] = useState(false);
   const [otpVerifying, setOtpVerifying] = useState(false);
   const [billRefreshLoading, setBillRefreshLoading] = useState(false);
+  const [ordersHistory, setOrdersHistory] = useState<any[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -268,6 +270,23 @@ export default function TablePage({ params, searchParams }: any) {
     return session?.sessionSecret ? { "X-Session-Secret": session.sessionSecret } : {};
   }
 
+  async function loadOrdersHistory() {
+    if (!session) return;
+    setOrdersLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/public/orders?guestSessionId=${session.guestSessionId}`, {
+        headers: { ...sessionHeaders() },
+      });
+      if (!res.ok) throw new Error(`Orders load failed (${res.status})`);
+      const body = await res.json();
+      setOrdersHistory(body);
+    } catch (e: any) {
+      setError(e?.message ?? t(lang, "errorGeneric"));
+    } finally {
+      setOrdersLoading(false);
+    }
+  }
+
   async function refreshOrderStatus() {
     if (!session || !orderId) return;
     setOrderRefreshLoading(true);
@@ -318,6 +337,15 @@ export default function TablePage({ params, searchParams }: any) {
     return () => clearInterval(id);
   }, [orderId, session]);
 
+  useEffect(() => {
+    if (!session) return;
+    loadOrdersHistory();
+    const id = setInterval(() => {
+      loadOrdersHistory();
+    }, 15000);
+    return () => clearInterval(id);
+  }, [session]);
+
   async function placeOrder() {
     if (!session) return;
     if (cart.length === 0) return;
@@ -356,6 +384,7 @@ export default function TablePage({ params, searchParams }: any) {
       setOrderId(body.orderId);
       setOrderStatus(body.status);
       setCart([]);
+      loadOrdersHistory();
       // refresh bill options after ordering
       const boRes = await fetch(`${API_BASE}/api/public/bill-options?guestSessionId=${session.guestSessionId}`);
       if (boRes.ok) setBillOptions(await boRes.json());
@@ -849,6 +878,32 @@ export default function TablePage({ params, searchParams }: any) {
           <button disabled={placing || cartHasMissingModifiers} onClick={placeOrder} style={{ marginTop: 10, padding: "10px 14px", width: "100%" }}>
             {placing ? t(lang, "sending") : t(lang, "placeOrder")}
           </button>
+        </div>
+      )}
+
+      <h2 style={{ marginTop: 24 }}>{lang === "en" ? "My orders" : lang === "ro" ? "Comenzile mele" : "Мои заказы"}</h2>
+      {ordersLoading ? (
+        <p style={{ color: "#666" }}>{t(lang, "loading")}</p>
+      ) : ordersHistory.length === 0 ? (
+        <p style={{ color: "#666" }}>{lang === "en" ? "No orders yet" : lang === "ro" ? "Nu există comenzi" : "Заказов пока нет"}</p>
+      ) : (
+        <div style={{ border: "1px solid #eee", borderRadius: 10, padding: 12 }}>
+          {ordersHistory.map((o) => (
+            <div key={o.orderId} style={{ padding: "8px 0", borderBottom: "1px dashed #eee" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                <strong>{lang === "en" ? "Order" : lang === "ro" ? "Comanda" : "Заказ"} #{o.orderId}</strong>
+                <span>{o.status}</span>
+              </div>
+              <div style={{ color: "#666", fontSize: 12 }}>{o.createdAt}</div>
+              <div style={{ marginTop: 6 }}>
+                {(o.items ?? []).map((it: any) => (
+                  <div key={it.id} style={{ fontSize: 13 }}>
+                    {it.name} × {it.qty} — {money(it.unitPriceCents, "MDL")}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       )}
 

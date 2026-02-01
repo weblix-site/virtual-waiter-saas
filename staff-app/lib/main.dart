@@ -348,6 +348,7 @@ class _HomeScreenState extends State<HomeScreen> {
       CallsTab(username: widget.username, password: widget.password),
       BillsTab(username: widget.username, password: widget.password),
       KitchenTab(username: widget.username, password: widget.password),
+      HistoryTab(username: widget.username, password: widget.password),
       NotificationsTab(events: _events),
     ];
     return Scaffold(
@@ -384,6 +385,7 @@ class _HomeScreenState extends State<HomeScreen> {
             label: 'Bills',
           ),
           const NavigationDestination(icon: Icon(Icons.kitchen), label: 'Kitchen'),
+          const NavigationDestination(icon: Icon(Icons.history), label: 'History'),
           const NavigationDestination(icon: Icon(Icons.notifications), label: 'Events'),
         ],
       ),
@@ -1086,6 +1088,219 @@ class _KitchenTabState extends State<KitchenTab> {
       default:
         return 9;
     }
+  }
+}
+
+class HistoryTab extends StatefulWidget {
+  final String username;
+  final String password;
+
+  const HistoryTab({super.key, required this.username, required this.password});
+
+  @override
+  State<HistoryTab> createState() => _HistoryTabState();
+}
+
+class _HistoryTabState extends State<HistoryTab> {
+  bool _loading = true;
+  String? _error;
+  List<Map<String, dynamic>> _tables = const [];
+  List<Map<String, dynamic>> _sessions = const [];
+  List<Map<String, dynamic>> _orders = const [];
+  int? _selectedTableId;
+  int? _selectedGuestSessionId;
+
+  String get _auth => base64Encode(utf8.encode('${widget.username}:${widget.password}'));
+
+  Future<void> _loadTables() async {
+    try {
+      final res = await http.get(
+        Uri.parse('$apiBase/api/staff/tables'),
+        headers: {'Authorization': 'Basic $_auth'},
+      );
+      if (res.statusCode != 200) throw Exception('Load tables failed (${res.statusCode})');
+      final body = (jsonDecode(res.body) as List<dynamic>).cast<Map<String, dynamic>>();
+      setState(() {
+        _tables = body;
+        if (_tables.isNotEmpty) {
+          _selectedTableId = (_tables.first['id'] as num).toInt();
+        }
+      });
+    } catch (e) {
+      setState(() => _error = e.toString());
+    }
+  }
+
+  Future<void> _loadSessions() async {
+    if (_selectedTableId == null) return;
+    try {
+      final res = await http.get(
+        Uri.parse('$apiBase/api/staff/guest-sessions?tableId=$_selectedTableId'),
+        headers: {'Authorization': 'Basic $_auth'},
+      );
+      if (res.statusCode != 200) throw Exception('Load sessions failed (${res.statusCode})');
+      final body = (jsonDecode(res.body) as List<dynamic>).cast<Map<String, dynamic>>();
+      setState(() {
+        _sessions = body;
+        _selectedGuestSessionId = null;
+      });
+    } catch (e) {
+      setState(() => _error = e.toString());
+    }
+  }
+
+  Future<void> _loadOrders() async {
+    if (_selectedTableId == null) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final params = <String>['tableId=$_selectedTableId'];
+      if (_selectedGuestSessionId != null) {
+        params.add('guestSessionId=$_selectedGuestSessionId');
+      }
+      final res = await http.get(
+        Uri.parse('$apiBase/api/staff/orders/history?${params.join("&")}'),
+        headers: {'Authorization': 'Basic $_auth'},
+      );
+      if (res.statusCode != 200) throw Exception('Load history failed (${res.statusCode})');
+      final body = (jsonDecode(res.body) as List<dynamic>).cast<Map<String, dynamic>>();
+      setState(() => _orders = body);
+    } catch (e) {
+      setState(() => _error = e.toString());
+    } finally {
+      setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _refreshAll() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    await _loadTables();
+    await _loadSessions();
+    await _loadOrders();
+    setState(() => _loading = false);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshAll();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final groups = <int, List<Map<String, dynamic>>>{};
+    for (final o in _orders) {
+      final gs = (o['guestSessionId'] as num).toInt();
+      groups.putIfAbsent(gs, () => []).add(o);
+    }
+    final groupKeys = groups.keys.toList()..sort((a, b) => b.compareTo(a));
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('History'),
+        actions: [
+          IconButton(onPressed: _refreshAll, icon: const Icon(Icons.refresh)),
+        ],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(child: Text(_error!))
+              : Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: Row(
+                        children: [
+                          const Text('Table:'),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: DropdownButton<int?>(
+                              isExpanded: true,
+                              value: _selectedTableId,
+                              items: _tables
+                                  .map((t) => DropdownMenuItem<int?>(
+                                        value: (t['id'] as num).toInt(),
+                                        child: Text('Table #${t['number']}'),
+                                      ))
+                                  .toList(),
+                              onChanged: (v) async {
+                                setState(() => _selectedTableId = v);
+                                await _loadSessions();
+                                await _loadOrders();
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                      child: Row(
+                        children: [
+                          const Text('Guest:'),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: DropdownButton<int?>(
+                              isExpanded: true,
+                              value: _selectedGuestSessionId,
+                              items: [
+                                const DropdownMenuItem<int?>(value: null, child: Text('All guests')),
+                                ..._sessions.map((s) {
+                                  final id = (s['id'] as num).toInt();
+                                  final lastOrderAt = s['lastOrderAt']?.toString();
+                                  final label = lastOrderAt == null ? 'Guest #$id' : 'Guest #$id • last order';
+                                  return DropdownMenuItem<int?>(value: id, child: Text(label));
+                                }),
+                              ],
+                              onChanged: (v) async {
+                                setState(() => _selectedGuestSessionId = v);
+                                await _loadOrders();
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: _orders.isEmpty
+                          ? const Center(child: Text('No history for selection'))
+                          : ListView.separated(
+                              itemCount: groupKeys.length,
+                              separatorBuilder: (_, __) => const Divider(height: 1),
+                              itemBuilder: (ctx, i) {
+                                final gs = groupKeys[i];
+                                final list = groups[gs] ?? const [];
+                                return ExpansionTile(
+                                  title: Text('Guest #$gs • ${list.length} order(s)'),
+                                  children: list.map((o) {
+                                    final items = (o['items'] as List<dynamic>? ?? const []).cast<Map<String, dynamic>>();
+                                    return ListTile(
+                                      title: Text('Order #${o['id']} • ${o['status']}'),
+                                      subtitle: Text('${o['createdAt']} • ${items.length} item(s)'),
+                                      onTap: () {
+                                        Navigator.of(context).push(MaterialPageRoute(
+                                          builder: (_) => OrderDetailsScreen(
+                                            order: o,
+                                            username: widget.username,
+                                            password: widget.password,
+                                            actions: const ['ACCEPTED', 'IN_PROGRESS', 'READY', 'SERVED', 'CLOSED', 'CANCELLED'],
+                                          ),
+                                        ));
+                                      },
+                                    );
+                                  }).toList(),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+    );
   }
 }
 
