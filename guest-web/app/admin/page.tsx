@@ -219,10 +219,15 @@ export default function AdminPage() {
   const [newTableNumber, setNewTableNumber] = useState(1);
   const [newTablePublicId, setNewTablePublicId] = useState("");
   const [newTableWaiterId, setNewTableWaiterId] = useState<number | "">("");
+  const [tableFilterText, setTableFilterText] = useState("");
+  const [tableFilterWaiterId, setTableFilterWaiterId] = useState<number | "">("");
 
   const [newStaffUser, setNewStaffUser] = useState("");
   const [newStaffPass, setNewStaffPass] = useState("");
   const [newStaffRole, setNewStaffRole] = useState("WAITER");
+  const [staffFilterText, setStaffFilterText] = useState("");
+  const [staffFilterRole, setStaffFilterRole] = useState<string | "">("");
+  const [staffFilterActive, setStaffFilterActive] = useState<string | "">("");
   const [newModGroupNameRu, setNewModGroupNameRu] = useState("");
   const [newModOptionNameRu, setNewModOptionNameRu] = useState("");
   const [newModOptionPrice, setNewModOptionPrice] = useState(0);
@@ -499,6 +504,14 @@ export default function AdminPage() {
     await api(`/api/admin/staff/${su.id}`, {
       method: "PATCH",
       body: JSON.stringify({ isActive: !su.isActive }),
+    });
+    loadAll();
+  }
+
+  async function updateStaffRole(su: StaffUser, role: string) {
+    await api(`/api/admin/staff/${su.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ role }),
     });
     loadAll();
   }
@@ -1044,8 +1057,28 @@ export default function AdminPage() {
           </select>
           <button onClick={createTable}>Add</button>
         </div>
+        <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <input placeholder="Filter by table # or publicId" value={tableFilterText} onChange={(e) => setTableFilterText(e.target.value)} />
+          <select value={tableFilterWaiterId} onChange={(e) => setTableFilterWaiterId(e.target.value ? Number(e.target.value) : "")}>
+            <option value="">All waiters</option>
+            {staff.filter((s) => s.role === "WAITER").map((s) => (
+              <option key={s.id} value={s.id}>{s.username}</option>
+            ))}
+          </select>
+          <button onClick={() => { setTableFilterText(""); setTableFilterWaiterId(""); }}>Clear</button>
+        </div>
         <div style={{ marginTop: 10 }}>
-          {tables.map((t) => (
+          {tables
+            .filter((t) => {
+              const q = tableFilterText.trim().toLowerCase();
+              if (q) {
+                const hit = String(t.number).includes(q) || t.publicId.toLowerCase().includes(q);
+                if (!hit) return false;
+              }
+              if (tableFilterWaiterId !== "" && t.assignedWaiterId !== tableFilterWaiterId) return false;
+              return true;
+            })
+            .map((t) => (
             <div key={t.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "6px 0", borderBottom: "1px solid #eee" }}>
               <strong>Table #{t.number}</strong>
               <span>{t.publicId}</span>
@@ -1058,6 +1091,9 @@ export default function AdminPage() {
                   <option key={s.id} value={s.id}>{s.username}</option>
                 ))}
               </select>
+              {t.assignedWaiterId && (
+                <button onClick={() => assignWaiter(t.id, null)}>Clear waiter</button>
+              )}
               <button onClick={() => getSignedUrl(t.publicId)}>QR URL</button>
               <button onClick={() => showQr(t.id, t.publicId)}>Show QR</button>
               {qrByTable[t.id] && (
@@ -1093,11 +1129,41 @@ export default function AdminPage() {
           </select>
           <button onClick={createStaff}>Add</button>
         </div>
+        <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <input placeholder="Filter by username" value={staffFilterText} onChange={(e) => setStaffFilterText(e.target.value)} />
+          <select value={staffFilterRole} onChange={(e) => setStaffFilterRole(e.target.value)}>
+            <option value="">All roles</option>
+            <option value="WAITER">WAITER</option>
+            <option value="KITCHEN">KITCHEN</option>
+            <option value="ADMIN">ADMIN</option>
+          </select>
+          <select value={staffFilterActive} onChange={(e) => setStaffFilterActive(e.target.value)}>
+            <option value="">All statuses</option>
+            <option value="ACTIVE">Active</option>
+            <option value="INACTIVE">Inactive</option>
+          </select>
+          <button onClick={() => { setStaffFilterText(""); setStaffFilterRole(""); setStaffFilterActive(""); }}>Clear</button>
+        </div>
         <div style={{ marginTop: 10 }}>
-          {staff.map((su) => (
+          {staff
+            .filter((su) => {
+              const q = staffFilterText.trim().toLowerCase();
+              if (q && !su.username.toLowerCase().includes(q)) return false;
+              if (staffFilterRole && su.role !== staffFilterRole) return false;
+              if (staffFilterActive) {
+                const active = staffFilterActive === "ACTIVE";
+                if (su.isActive !== active) return false;
+              }
+              return true;
+            })
+            .map((su) => (
             <div key={su.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "6px 0", borderBottom: "1px solid #eee" }}>
               <strong>{su.username}</strong>
-              <span>{su.role}</span>
+              <select value={su.role} onChange={(e) => updateStaffRole(su, e.target.value)}>
+                <option value="WAITER">WAITER</option>
+                <option value="KITCHEN">KITCHEN</option>
+                <option value="ADMIN">ADMIN</option>
+              </select>
               <span>{su.isActive ? "ACTIVE" : "INACTIVE"}</span>
               <button onClick={() => resetStaffPassword(su)}>Reset password</button>
               <button onClick={() => toggleStaff(su)}>{su.isActive ? "Disable" : "Enable"}</button>

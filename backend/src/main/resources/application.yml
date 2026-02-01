@@ -14,6 +14,9 @@ spring:
 app:
   qr:
     hmacSecret: "CHANGE_ME_DEV_SECRET"
+    signatureTtlSeconds: 86400
+    allowedClockSkewSeconds: 120
+    allowLegacySig: false
   publicBaseUrl: "http://localhost:3000"
   otp:
     requireForFirstOrder: false

@@ -95,12 +95,12 @@ public class PublicController {
     this.partyService = partyService;
   }
 
-  public record StartSessionRequest(@NotBlank String tablePublicId, @NotBlank String sig, @NotBlank String locale) {}
+  public record StartSessionRequest(@NotBlank String tablePublicId, @NotBlank String sig, @NotNull Long ts, @NotBlank String locale) {}
   public record StartSessionResponse(long guestSessionId, long tableId, int tableNumber, long branchId, String locale, boolean otpRequired, boolean isVerified, String sessionSecret) {}
 
   @PostMapping("/session/start")
   public StartSessionResponse startSession(@Valid @RequestBody StartSessionRequest req, jakarta.servlet.http.HttpServletRequest httpReq) {
-    if (!qrSig.verifyTablePublicId(req.tablePublicId(), req.sig())) {
+    if (!qrSig.verifyTablePublicId(req.tablePublicId(), req.sig(), req.ts())) {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Invalid QR signature");
     }
 
@@ -178,9 +178,10 @@ public class PublicController {
     @PathVariable("id") long id,
     @RequestParam("tablePublicId") String tablePublicId,
     @RequestParam("sig") String sig,
+    @RequestParam("ts") Long ts,
     @RequestParam(value = "locale", required = false) String locale
   ) {
-    if (!qrSig.verifyTablePublicId(tablePublicId, sig)) {
+    if (!qrSig.verifyTablePublicId(tablePublicId, sig, ts)) {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Invalid QR signature");
     }
     CafeTable table = tableRepo.findByPublicId(tablePublicId)
@@ -217,9 +218,10 @@ public class PublicController {
     @PathVariable("id") long id,
     @RequestParam("tablePublicId") String tablePublicId,
     @RequestParam("sig") String sig,
+    @RequestParam("ts") Long ts,
     @RequestParam(value = "locale", required = false) String locale
   ) {
-    if (!qrSig.verifyTablePublicId(tablePublicId, sig)) {
+    if (!qrSig.verifyTablePublicId(tablePublicId, sig, ts)) {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Invalid QR signature");
     }
     CafeTable table = tableRepo.findByPublicId(tablePublicId)
@@ -270,9 +272,10 @@ public class PublicController {
   public MenuResponse getMenu(
     @RequestParam("tablePublicId") String tablePublicId,
     @RequestParam("sig") String sig,
+    @RequestParam("ts") Long ts,
     @RequestParam(value = "locale", required = false) String locale
   ) {
-    if (!qrSig.verifyTablePublicId(tablePublicId, sig)) {
+    if (!qrSig.verifyTablePublicId(tablePublicId, sig, ts)) {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Invalid QR signature");
     }
     CafeTable table = tableRepo.findByPublicId(tablePublicId)
@@ -331,6 +334,7 @@ public class PublicController {
   ) {}
 
   public record CreateOrderResponse(long orderId, String status) {}
+  public record OrderStatusResponse(long orderId, String status, String createdAt) {}
 
   @PostMapping("/orders")
   public CreateOrderResponse createOrder(@Valid @RequestBody CreateOrderRequest req, jakarta.servlet.http.HttpServletRequest httpReq) {
@@ -402,6 +406,23 @@ public class PublicController {
     notificationEventService.emit(table.branchId, "ORDER_NEW", o.id);
 
     return new CreateOrderResponse(o.id, o.status);
+  }
+
+  @GetMapping("/orders/{id}")
+  public OrderStatusResponse getOrderStatus(
+    @PathVariable("id") long id,
+    @RequestParam("guestSessionId") long guestSessionId,
+    jakarta.servlet.http.HttpServletRequest httpReq
+  ) {
+    GuestSession s = sessionRepo.findById(guestSessionId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
+    requireSessionSecret(s, httpReq);
+    Order o = orderRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Order not found"));
+    if (!Objects.equals(o.guestSessionId, s.id)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Order does not belong to session");
+    }
+    return new OrderStatusResponse(o.id, o.status, o.createdAt.toString());
   }
 
 

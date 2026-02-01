@@ -71,6 +71,32 @@ Widget _slaChip(Duration age, int warnMin, int critMin) {
     ),
   );
 }
+
+Widget _slaSummaryRow(int warn, int crit) {
+  return Row(
+    children: [
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.orange.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: Colors.orange, width: 1),
+        ),
+        child: Text('Warn: $warn', style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.w600)),
+      ),
+      const SizedBox(width: 8),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.red.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: Colors.red, width: 1),
+        ),
+        child: Text('Crit: $crit', style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w600)),
+      ),
+    ],
+  );
+}
 class StaffApp extends StatelessWidget {
   const StaffApp({super.key});
 
@@ -405,6 +431,7 @@ class _OrdersTabState extends State<OrdersTab> {
   bool _loading = true;
   String? _error;
   List<dynamic> _orders = const [];
+  String _sortMode = 'time_desc';
 
   String get _auth => base64Encode(utf8.encode('${widget.username}:${widget.password}'));
 
@@ -440,6 +467,13 @@ class _OrdersTabState extends State<OrdersTab> {
       appBar: AppBar(
         title: const Text('Active Orders'),
         actions: [
+          PopupMenuButton<String>(
+            onSelected: (v) => setState(() => _sortMode = v),
+            itemBuilder: (ctx) => const [
+              PopupMenuItem(value: 'time_desc', child: Text('Sort: newest first')),
+              PopupMenuItem(value: 'sla_desc', child: Text('Sort: SLA (oldest first)')),
+            ],
+          ),
           IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
         ],
       ),
@@ -447,11 +481,35 @@ class _OrdersTabState extends State<OrdersTab> {
           ? const Center(child: CircularProgressIndicator())
           : _error != null
               ? Center(child: Text(_error!))
-              : ListView.separated(
-                  itemCount: _orders.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (ctx, i) {
-                    final o = _orders[i] as Map<String, dynamic>;
+              : Builder(builder: (context) {
+                  final orders = _orders.toList();
+                  orders.sort((a, b) {
+                    if (_sortMode == 'sla_desc') {
+                      final aa = _ageFromIso(a['createdAt']?.toString()).inSeconds;
+                      final bb = _ageFromIso(b['createdAt']?.toString()).inSeconds;
+                      return bb.compareTo(aa);
+                    }
+                    return (b['createdAt'] ?? '').toString().compareTo((a['createdAt'] ?? '').toString());
+                  });
+                  int warn = 0;
+                  int crit = 0;
+                  for (final o in orders) {
+                    final age = _ageFromIso(o['createdAt']?.toString());
+                    if (age.inMinutes >= slaOrderCritMin) crit++;
+                    else if (age.inMinutes >= slaOrderWarnMin) warn++;
+                  }
+                  return Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                        child: _slaSummaryRow(warn, crit),
+                      ),
+                      Expanded(
+                        child: ListView.separated(
+                          itemCount: orders.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (ctx, i) {
+                            final o = orders[i] as Map<String, dynamic>;
                     final items = (o['items'] as List<dynamic>? ?? const []).cast<Map<String, dynamic>>();
                     final tableNumber = o['tableNumber'];
                     final assigned = o['assignedWaiterId'];
@@ -471,8 +529,12 @@ class _OrdersTabState extends State<OrdersTab> {
                         ));
                       },
                     );
-                  },
-                ),
+                          },
+                        ),
+                      ),
+                    ],
+                  );
+                }),
     );
   }
 }
@@ -491,6 +553,7 @@ class _CallsTabState extends State<CallsTab> {
   bool _loading = true;
   String? _error;
   List<dynamic> _calls = const [];
+  String _sortMode = 'time_desc';
 
   String get _auth => base64Encode(utf8.encode('${widget.username}:${widget.password}'));
 
@@ -526,6 +589,13 @@ class _CallsTabState extends State<CallsTab> {
       appBar: AppBar(
         title: const Text('Waiter Calls'),
         actions: [
+          PopupMenuButton<String>(
+            onSelected: (v) => setState(() => _sortMode = v),
+            itemBuilder: (ctx) => const [
+              PopupMenuItem(value: 'time_desc', child: Text('Sort: newest first')),
+              PopupMenuItem(value: 'sla_desc', child: Text('Sort: SLA (oldest first)')),
+            ],
+          ),
           IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
         ],
       ),
@@ -533,32 +603,60 @@ class _CallsTabState extends State<CallsTab> {
           ? const Center(child: CircularProgressIndicator())
           : _error != null
               ? Center(child: Text(_error!))
-              : ListView.separated(
-                  itemCount: _calls.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                itemBuilder: (ctx, i) {
-                  final c = _calls[i] as Map<String, dynamic>;
-                  final age = _ageFromIso(c['createdAt']?.toString());
-                    return ListTile(
-                      title: Text('Table #${c['tableNumber']}'),
-                      subtitle: Text('${c['status']} • ${c['createdAt']}'),
-                      leading: const Icon(Icons.notifications_active),
-                      trailing: _slaChip(age, slaCallWarnMin, slaCallCritMin),
-                      onTap: () async {
-                        final changed = await Navigator.of(context).push(MaterialPageRoute(
-                          builder: (_) => WaiterCallDetailsScreen(
-                            call: c,
-                            username: widget.username,
-                            password: widget.password,
-                          ),
-                        ));
-                        if (changed == true && mounted) {
-                          _load();
-                        }
-                      },
-                    );
-                  },
-                ),
+              : Builder(builder: (context) {
+                  final calls = _calls.toList();
+                  calls.sort((a, b) {
+                    if (_sortMode == 'sla_desc') {
+                      final aa = _ageFromIso(a['createdAt']?.toString()).inSeconds;
+                      final bb = _ageFromIso(b['createdAt']?.toString()).inSeconds;
+                      return bb.compareTo(aa);
+                    }
+                    return (b['createdAt'] ?? '').toString().compareTo((a['createdAt'] ?? '').toString());
+                  });
+                  int warn = 0;
+                  int crit = 0;
+                  for (final c in calls) {
+                    final age = _ageFromIso(c['createdAt']?.toString());
+                    if (age.inMinutes >= slaCallCritMin) crit++;
+                    else if (age.inMinutes >= slaCallWarnMin) warn++;
+                  }
+                  return Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                        child: _slaSummaryRow(warn, crit),
+                      ),
+                      Expanded(
+                        child: ListView.separated(
+                          itemCount: calls.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (ctx, i) {
+                            final c = calls[i] as Map<String, dynamic>;
+                            final age = _ageFromIso(c['createdAt']?.toString());
+                            return ListTile(
+                              title: Text('Table #${c['tableNumber']}'),
+                              subtitle: Text('${c['status']} • ${c['createdAt']}'),
+                              leading: const Icon(Icons.notifications_active),
+                              trailing: _slaChip(age, slaCallWarnMin, slaCallCritMin),
+                              onTap: () async {
+                                final changed = await Navigator.of(context).push(MaterialPageRoute(
+                                  builder: (_) => WaiterCallDetailsScreen(
+                                    call: c,
+                                    username: widget.username,
+                                    password: widget.password,
+                                  ),
+                                ));
+                                if (changed == true && mounted) {
+                                  _load();
+                                }
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  );
+                }),
     );
   }
 }
@@ -645,6 +743,7 @@ class _BillsTabState extends State<BillsTab> {
   bool _loading = true;
   String? _error;
   List<dynamic> _bills = const [];
+  String _sortMode = 'time_desc';
 
   String get _auth => base64Encode(utf8.encode('${widget.username}:${widget.password}'));
 
@@ -710,6 +809,13 @@ class _BillsTabState extends State<BillsTab> {
       appBar: AppBar(
         title: const Text('Bill Requests'),
         actions: [
+          PopupMenuButton<String>(
+            onSelected: (v) => setState(() => _sortMode = v),
+            itemBuilder: (ctx) => const [
+              PopupMenuItem(value: 'time_desc', child: Text('Sort: newest first')),
+              PopupMenuItem(value: 'sla_desc', child: Text('Sort: SLA (oldest first)')),
+            ],
+          ),
           IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
         ],
       ),
@@ -717,11 +823,35 @@ class _BillsTabState extends State<BillsTab> {
           ? const Center(child: CircularProgressIndicator())
           : _error != null
               ? Center(child: Text(_error!))
-              : ListView.separated(
-                  itemCount: _bills.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (ctx, i) {
-                    final b = _bills[i] as Map<String, dynamic>;
+              : Builder(builder: (context) {
+                  final bills = _bills.toList();
+                  bills.sort((a, b) {
+                    if (_sortMode == 'sla_desc') {
+                      final aa = _ageFromIso(a['createdAt']?.toString()).inSeconds;
+                      final bb = _ageFromIso(b['createdAt']?.toString()).inSeconds;
+                      return bb.compareTo(aa);
+                    }
+                    return (b['createdAt'] ?? '').toString().compareTo((a['createdAt'] ?? '').toString());
+                  });
+                  int warn = 0;
+                  int crit = 0;
+                  for (final b in bills) {
+                    final age = _ageFromIso(b['createdAt']?.toString());
+                    if (age.inMinutes >= slaBillCritMin) crit++;
+                    else if (age.inMinutes >= slaBillWarnMin) warn++;
+                  }
+                  return Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                        child: _slaSummaryRow(warn, crit),
+                      ),
+                      Expanded(
+                        child: ListView.separated(
+                          itemCount: bills.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (ctx, i) {
+                            final b = bills[i] as Map<String, dynamic>;
                     final items = (b['items'] as List<dynamic>? ?? const []).cast<Map<String, dynamic>>();
                     final partyId = b['partyId'];
                     final status = b['status']?.toString();
@@ -787,8 +917,12 @@ class _BillsTabState extends State<BillsTab> {
                           ),
                       ],
                     );
-                  },
-                ),
+                          },
+                        ),
+                      ),
+                    ],
+                  );
+                }),
     );
   }
 }
@@ -850,6 +984,11 @@ class _KitchenTabState extends State<KitchenTab> {
         if (pa != pb) return pa.compareTo(pb);
         return (b['createdAt'] ?? '').toString().compareTo((a['createdAt'] ?? '').toString());
       }
+      if (_sortMode == 'sla_desc') {
+        final aa = (a['ageSeconds'] ?? 0) as int;
+        final bb = (b['ageSeconds'] ?? 0) as int;
+        return bb.compareTo(aa);
+      }
       // time_desc default
       return (b['createdAt'] ?? '').toString().compareTo((a['createdAt'] ?? '').toString());
     });
@@ -874,6 +1013,7 @@ class _KitchenTabState extends State<KitchenTab> {
             itemBuilder: (ctx) => const [
               PopupMenuItem(value: 'time_desc', child: Text('Sort: newest first')),
               PopupMenuItem(value: 'priority_time', child: Text('Sort: priority then time')),
+              PopupMenuItem(value: 'sla_desc', child: Text('Sort: SLA (oldest first)')),
             ],
           ),
           IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
@@ -883,33 +1023,52 @@ class _KitchenTabState extends State<KitchenTab> {
           ? const Center(child: CircularProgressIndicator())
           : _error != null
               ? Center(child: Text(_error!))
-              : ListView.separated(
-                  itemCount: orders.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (ctx, i) {
-                    final o = orders[i] as Map<String, dynamic>;
-                    final items = (o['items'] as List<dynamic>? ?? const []).cast<Map<String, dynamic>>();
-                    final tableNumber = o['tableNumber'];
+              : Builder(builder: (context) {
+                  int warn = 0;
+                  int crit = 0;
+                  for (final o in orders) {
                     final ageSec = (o['ageSeconds'] ?? 0) as int;
-                    final ageMin = (ageSec / 60).floor();
-                    final age = Duration(seconds: ageSec);
-                    return ListTile(
-                      title: Text('Table #$tableNumber  •  Order #${o['id']}'),
-                      subtitle: Text('${o['status']} • ${items.length} item(s) • ${ageMin}m'),
-                      trailing: _slaChip(age, slaKitchenWarnMin, slaKitchenCritMin),
-                      onTap: () {
-                        Navigator.of(context).push(MaterialPageRoute(
-                          builder: (_) => OrderDetailsScreen(
-                            order: o,
-                            username: widget.username,
-                            password: widget.password,
-                            actions: const ['ACCEPTED', 'IN_PROGRESS', 'READY'],
-                          ),
-                        ));
-                      },
-                    );
-                  },
-                ),
+                    if (ageSec >= slaKitchenCritMin * 60) crit++;
+                    else if (ageSec >= slaKitchenWarnMin * 60) warn++;
+                  }
+                  return Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                        child: _slaSummaryRow(warn, crit),
+                      ),
+                      Expanded(
+                        child: ListView.separated(
+                          itemCount: orders.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (ctx, i) {
+                            final o = orders[i] as Map<String, dynamic>;
+                            final items = (o['items'] as List<dynamic>? ?? const []).cast<Map<String, dynamic>>();
+                            final tableNumber = o['tableNumber'];
+                            final ageSec = (o['ageSeconds'] ?? 0) as int;
+                            final ageMin = (ageSec / 60).floor();
+                            final age = Duration(seconds: ageSec);
+                            return ListTile(
+                              title: Text('Table #$tableNumber  •  Order #${o['id']}'),
+                              subtitle: Text('${o['status']} • ${items.length} item(s) • ${ageMin}m'),
+                              trailing: _slaChip(age, slaKitchenWarnMin, slaKitchenCritMin),
+                              onTap: () {
+                                Navigator.of(context).push(MaterialPageRoute(
+                                  builder: (_) => OrderDetailsScreen(
+                                    order: o,
+                                    username: widget.username,
+                                    password: widget.password,
+                                    actions: const ['ACCEPTED', 'IN_PROGRESS', 'READY'],
+                                  ),
+                                ));
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  );
+                }),
     );
   }
 

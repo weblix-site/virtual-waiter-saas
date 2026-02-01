@@ -88,6 +88,7 @@ export default function TablePage({ params, searchParams }: any) {
   const rawLang = String(searchParams?.lang ?? "ru").toLowerCase();
   const lang: Lang = rawLang === "ro" || rawLang === "en" ? rawLang : "ru";
   const sig: string = (searchParams?.sig ?? "");
+  const ts: string = (searchParams?.ts ?? "");
   // If QR signature is missing (e.g., dev link), show a friendly error.
   // In production, all QR links must include ?sig=...
 
@@ -99,6 +100,8 @@ export default function TablePage({ params, searchParams }: any) {
   const [cart, setCart] = useState<CartLine[]>([]);
   const [placing, setPlacing] = useState(false);
   const [orderId, setOrderId] = useState<number | null>(null);
+  const [orderStatus, setOrderStatus] = useState<string | null>(null);
+  const [orderRefreshLoading, setOrderRefreshLoading] = useState(false);
   const [billRequestId, setBillRequestId] = useState<number | null>(null);
   const [billStatus, setBillStatus] = useState<string | null>(null);
   const [billError, setBillError] = useState<string | null>(null);
@@ -127,14 +130,14 @@ export default function TablePage({ params, searchParams }: any) {
         const ssRes = await fetch(`${API_BASE}/api/public/session/start`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tablePublicId, sig, locale: lang }),
+          body: JSON.stringify({ tablePublicId, sig, ts: Number(ts), locale: lang }),
         });
         if (!ssRes.ok) throw new Error(`${t(lang, "sessionStartFailed")} (${ssRes.status})`);
         const ss: StartSessionResponse = await ssRes.json();
         if (cancelled) return;
         setSession(ss);
 
-        const mRes = await fetch(`${API_BASE}/api/public/menu?tablePublicId=${encodeURIComponent(tablePublicId)}&sig=${encodeURIComponent(sig)}&locale=${lang}`);
+        const mRes = await fetch(`${API_BASE}/api/public/menu?tablePublicId=${encodeURIComponent(tablePublicId)}&sig=${encodeURIComponent(sig)}&ts=${encodeURIComponent(ts)}&locale=${lang}`);
         if (!mRes.ok) throw new Error(`${t(lang, "menuLoadFailed")} (${mRes.status})`);
         const m: MenuResponse = await mRes.json();
         if (cancelled) return;
@@ -221,7 +224,7 @@ export default function TablePage({ params, searchParams }: any) {
 
   async function ensureModifiersLoaded(itemId: number) {
     if (modifiersByItem[itemId]) return modifiersByItem[itemId];
-    const res = await fetch(`${API_BASE}/api/public/menu-item/${itemId}/modifiers?tablePublicId=${encodeURIComponent(tablePublicId)}&sig=${encodeURIComponent(sig)}&locale=${lang}`);
+    const res = await fetch(`${API_BASE}/api/public/menu-item/${itemId}/modifiers?tablePublicId=${encodeURIComponent(tablePublicId)}&sig=${encodeURIComponent(sig)}&ts=${encodeURIComponent(ts)}&locale=${lang}`);
     if (res.ok) {
       const body: MenuItemModifiersResponse = await res.json();
       setModifiersByItem((prev) => ({ ...prev, [itemId]: body }));
@@ -265,6 +268,23 @@ export default function TablePage({ params, searchParams }: any) {
     return session?.sessionSecret ? { "X-Session-Secret": session.sessionSecret } : {};
   }
 
+  async function refreshOrderStatus() {
+    if (!session || !orderId) return;
+    setOrderRefreshLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/public/orders/${orderId}?guestSessionId=${session.guestSessionId}`, {
+        headers: { ...sessionHeaders() },
+      });
+      if (!res.ok) throw new Error(`Order status failed (${res.status})`);
+      const body = await res.json();
+      setOrderStatus(body.status);
+    } catch (e: any) {
+      setError(e?.message ?? t(lang, "orderFailed"));
+    } finally {
+      setOrderRefreshLoading(false);
+    }
+  }
+
   async function refreshBillStatus() {
     if (!session || !billRequestId) return;
     setBillRefreshLoading(true);
@@ -289,6 +309,14 @@ export default function TablePage({ params, searchParams }: any) {
     }, 10000);
     return () => clearInterval(id);
   }, [billRequestId, session]);
+
+  useEffect(() => {
+    if (!orderId || !session) return;
+    const id = setInterval(() => {
+      refreshOrderStatus();
+    }, 10000);
+    return () => clearInterval(id);
+  }, [orderId, session]);
 
   async function placeOrder() {
     if (!session) return;
@@ -326,6 +354,7 @@ export default function TablePage({ params, searchParams }: any) {
       }
       const body = await res.json();
       setOrderId(body.orderId);
+      setOrderStatus(body.status);
       setCart([]);
       // refresh bill options after ordering
       const boRes = await fetch(`${API_BASE}/api/public/bill-options?guestSessionId=${session.guestSessionId}`);
@@ -511,7 +540,7 @@ export default function TablePage({ params, searchParams }: any) {
   async function toggleModifiers(itemId: number) {
     const isOpen = !!modOpenByItem[itemId];
     if (!isOpen && !modifiersByItem[itemId]) {
-      const res = await fetch(`${API_BASE}/api/public/menu-item/${itemId}/modifiers?tablePublicId=${encodeURIComponent(tablePublicId)}&sig=${encodeURIComponent(sig)}&locale=${lang}`);
+      const res = await fetch(`${API_BASE}/api/public/menu-item/${itemId}/modifiers?tablePublicId=${encodeURIComponent(tablePublicId)}&sig=${encodeURIComponent(sig)}&ts=${encodeURIComponent(ts)}&locale=${lang}`);
       if (res.ok) {
         const body: MenuItemModifiersResponse = await res.json();
         setModifiersByItem((prev) => ({ ...prev, [itemId]: body }));
@@ -590,9 +619,9 @@ export default function TablePage({ params, searchParams }: any) {
           <div style={{ color: "#666" }}>{t(lang, "session")}: {session?.guestSessionId}</div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <a href={`/t/${tablePublicId}?lang=ru&sig=${encodeURIComponent(sig)}`}>RU</a>
-          <a href={`/t/${tablePublicId}?lang=ro&sig=${encodeURIComponent(sig)}`}>RO</a>
-          <a href={`/t/${tablePublicId}?lang=en&sig=${encodeURIComponent(sig)}`}>EN</a>
+          <a href={`/t/${tablePublicId}?lang=ru&sig=${encodeURIComponent(sig)}&ts=${encodeURIComponent(ts)}`}>RU</a>
+          <a href={`/t/${tablePublicId}?lang=ro&sig=${encodeURIComponent(sig)}&ts=${encodeURIComponent(ts)}`}>RO</a>
+          <a href={`/t/${tablePublicId}?lang=en&sig=${encodeURIComponent(sig)}&ts=${encodeURIComponent(ts)}`}>EN</a>
         </div>
       </div>
 
@@ -685,6 +714,12 @@ export default function TablePage({ params, searchParams }: any) {
       {orderId && (
         <div style={{ marginTop: 12, padding: 12, border: "1px solid #ddd", borderRadius: 8 }}>
           #{orderId} {t(lang, "orderSent")}.
+          <div style={{ marginTop: 6, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <strong>{t(lang, "status")}:</strong> <span>{orderStatus ?? "?"}</span>
+            <button onClick={refreshOrderStatus} disabled={orderRefreshLoading} style={{ padding: "6px 10px" }}>
+              {orderRefreshLoading ? t(lang, "loading") : (lang === "en" ? "Refresh" : lang === "ro" ? "Reîmprospătează" : "Обновить")}
+            </button>
+          </div>
         </div>
       )}
 
@@ -726,7 +761,7 @@ export default function TablePage({ params, searchParams }: any) {
                     {t(lang, "modifiers")}
                   </button>
                 </div>
-                <a href={`/t/${tablePublicId}/item/${it.id}?lang=${lang}&sig=${encodeURIComponent(sig)}`} style={{ display: "inline-block", marginTop: 6 }}>
+                <a href={`/t/${tablePublicId}/item/${it.id}?lang=${lang}&sig=${encodeURIComponent(sig)}&ts=${encodeURIComponent(ts)}`} style={{ display: "inline-block", marginTop: 6 }}>
                   {t(lang, "details")}
                 </a>
                 {modOpenByItem[it.id] && modifiersByItem[it.id]?.groups?.length ? (

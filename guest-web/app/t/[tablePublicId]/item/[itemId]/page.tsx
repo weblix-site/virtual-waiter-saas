@@ -31,6 +31,7 @@ export default function ItemPage({ params, searchParams }: any) {
   const itemId: string = params.itemId;
   const lang: Lang = (searchParams?.lang ?? "ru").toLowerCase();
   const sig: string = (searchParams?.sig ?? "");
+  const ts: string = (searchParams?.ts ?? "");
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +44,7 @@ export default function ItemPage({ params, searchParams }: any) {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`${API_BASE}/api/public/menu-item/${itemId}?tablePublicId=${encodeURIComponent(tablePublicId)}&sig=${encodeURIComponent(sig)}&locale=${lang}`);
+        const res = await fetch(`${API_BASE}/api/public/menu-item/${itemId}?tablePublicId=${encodeURIComponent(tablePublicId)}&sig=${encodeURIComponent(sig)}&ts=${encodeURIComponent(ts)}&locale=${lang}`);
         if (!res.ok) throw new Error(`${t(lang, "loadFailed")} (${res.status})`);
         const data = await res.json();
         if (!cancelled) {
@@ -68,7 +69,7 @@ export default function ItemPage({ params, searchParams }: any) {
 
   return (
     <main style={{ padding: 16, maxWidth: 900, margin: "0 auto", fontFamily: "system-ui, -apple-system, Segoe UI, Roboto" }}>
-      <a href={`/t/${tablePublicId}?lang=${lang}&sig=${encodeURIComponent(sig)}`}>{t(lang, "back")}</a>
+      <a href={`/t/${tablePublicId}?lang=${lang}&sig=${encodeURIComponent(sig)}&ts=${encodeURIComponent(ts)}`}>{t(lang, "back")}</a>
       <h1 style={{ marginTop: 8 }}>{item.name}</h1>
       <div style={{ color: "#666", marginBottom: 8 }}>{money(item.priceCents, item.currency)}</div>
 

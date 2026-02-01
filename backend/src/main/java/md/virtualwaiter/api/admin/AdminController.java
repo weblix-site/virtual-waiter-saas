@@ -582,7 +582,7 @@ public class AdminController {
     auditService.log(u, "DELETE", "CafeTable", t.id, null);
   }
 
-  public record SignedTableUrlResponse(String tablePublicId, String sig, String url) {}
+  public record SignedTableUrlResponse(String tablePublicId, String sig, long ts, String url) {}
 
   @GetMapping("/tables/{tablePublicId}/signed-url")
   public SignedTableUrlResponse getSignedTableUrl(@PathVariable String tablePublicId, Authentication auth) {
@@ -592,9 +592,10 @@ public class AdminController {
     if (!isSuperAdmin(u) && !Objects.equals(table.branchId, u.branchId)) {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong branch");
     }
-    String sig = qrSig.signTablePublicId(tablePublicId);
-    String url = publicBaseUrl + "/t/" + table.publicId + "?sig=" + sig;
-    return new SignedTableUrlResponse(table.publicId, sig, url);
+    long ts = java.time.Instant.now().getEpochSecond();
+    String sig = qrSig.signTablePublicId(tablePublicId, ts);
+    String url = publicBaseUrl + "/t/" + table.publicId + "?sig=" + sig + "&ts=" + ts;
+    return new SignedTableUrlResponse(table.publicId, sig, ts, url);
   }
 
   // --- Staff users ---
