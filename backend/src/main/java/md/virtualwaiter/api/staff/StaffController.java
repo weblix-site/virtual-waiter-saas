@@ -149,12 +149,22 @@ public class StaffController {
     throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Insufficient role");
   }
 
-  public record MeResponse(long id, String username, String role, long branchId) {}
+  public record MeResponse(
+    long id,
+    String username,
+    String role,
+    long branchId,
+    String firstName,
+    String lastName,
+    Integer age,
+    String gender,
+    String photoUrl
+  ) {}
 
   @GetMapping("/me")
   public MeResponse me(Authentication auth) {
     StaffUser u = current(auth);
-    return new MeResponse(u.id, u.username, u.role, u.branchId);
+    return new MeResponse(u.id, u.username, u.role, u.branchId, u.firstName, u.lastName, u.age, u.gender, u.photoUrl);
   }
 
   public record StaffTableDto(

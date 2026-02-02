@@ -11,6 +11,8 @@ const dict: Record<string, Record<Lang, string>> = {
   username: { ru: "Логин", ro: "Utilizator", en: "Username" },
   password: { ru: "Пароль", ro: "Parolă", en: "Password" },
   login: { ru: "Войти", ro: "Intră", en: "Login" },
+  logout: { ru: "Выйти", ro: "Ieși", en: "Logout" },
+  sessionExpired: { ru: "Сессия истекла. Войдите снова.", ro: "Sesiunea a expirat. Autentificați‑vă din nou.", en: "Session expired. Please sign in again." },
   refresh: { ru: "Обновить", ro: "Reîmprospătează", en: "Refresh" },
   resetFilters: { ru: "Сбросить фильтры", ro: "Resetează filtrele", en: "Reset filters" },
   filtersActive: { ru: "Фильтров активно", ro: "Filtre active", en: "Filters active" },
@@ -41,6 +43,15 @@ const dict: Record<string, Record<Lang, string>> = {
   payCashEnabled: { ru: "Наличные доступны", ro: "Numerar activ", en: "Cash enabled" },
   payTerminalEnabled: { ru: "Терминал доступен", ro: "Terminal activ", en: "Terminal enabled" },
   currency: { ru: "Валюта", ro: "Valută", en: "Currency" },
+  currencyManagedBySuperadmin: {
+    ru: "Список валют управляется в Super Admin.",
+    ro: "Lista valutelor este gestionată în Super Admin.",
+    en: "Currency list is managed in Super Admin.",
+  },
+  defaultLanguage: { ru: "Язык по умолчанию (гость)", ro: "Limba implicită (oaspete)", en: "Default language (guest)" },
+  langRu: { ru: "Русский", ro: "Rusă", en: "Russian" },
+  langRo: { ru: "Румынский", ro: "Română", en: "Romanian" },
+  langEn: { ru: "Английский", ro: "Engleză", en: "English" },
   otpTtlSeconds: { ru: "TTL OTP (сек)", ro: "TTL OTP (sec)", en: "OTP TTL (sec)" },
   otpMaxAttempts: { ru: "Лимит попыток OTP", ro: "Limită încercări OTP", en: "OTP max attempts" },
   otpResendCooldownSeconds: { ru: "Пауза OTP (сек)", ro: "Pauză OTP (sec)", en: "OTP resend cooldown (sec)" },
@@ -218,6 +229,18 @@ const dict: Record<string, Record<Lang, string>> = {
   downloadQr: { ru: "Скачать QR", ro: "Descarcă QR", en: "Download QR" },
   staffUsername: { ru: "Логин", ro: "Utilizator", en: "Username" },
   staffPassword: { ru: "Пароль", ro: "Parolă", en: "Password" },
+  staffProfile: { ru: "Профиль официанта", ro: "Profil chelner", en: "Waiter profile" },
+  editProfile: { ru: "Профиль", ro: "Profil", en: "Profile" },
+  firstName: { ru: "Имя", ro: "Prenume", en: "First name" },
+  lastName: { ru: "Фамилия", ro: "Nume", en: "Last name" },
+  age: { ru: "Возраст", ro: "Vârstă", en: "Age" },
+  gender: { ru: "Пол", ro: "Gen", en: "Gender" },
+  genderMale: { ru: "Мужской", ro: "Masculin", en: "Male" },
+  genderFemale: { ru: "Женский", ro: "Feminin", en: "Female" },
+  genderOther: { ru: "Другое", ro: "Altul", en: "Other" },
+  photoUrl: { ru: "Фото (URL)", ro: "Foto (URL)", en: "Photo URL" },
+  saveProfile: { ru: "Сохранить профиль", ro: "Salvează profilul", en: "Save profile" },
+  invalidAge: { ru: "Неверный возраст (0–120)", ro: "Vârstă invalidă (0–120)", en: "Invalid age (0–120)" },
   filterByUsername: { ru: "Фильтр по логину", ro: "Filtru după utilizator", en: "Filter by username" },
   allRoles: { ru: "Все роли", ro: "Toate rolurile", en: "All roles" },
   resetPassword: { ru: "Сбросить пароль", ro: "Resetează parola", en: "Reset password" },
@@ -365,6 +388,11 @@ type StaffUser = {
   username: string;
   role: string;
   isActive: boolean;
+  firstName?: string | null;
+  lastName?: string | null;
+  age?: number | null;
+  gender?: string | null;
+  photoUrl?: string | null;
 };
 
 type BranchSettings = {
@@ -383,6 +411,7 @@ type BranchSettings = {
   payCashEnabled: boolean;
   payTerminalEnabled: boolean;
   currencyCode?: string;
+  defaultLang?: string;
 };
 
 type CurrencyDto = {
@@ -495,6 +524,8 @@ export default function AdminPage() {
   const [password, setPassword] = useState("");
   const [authReady, setAuthReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sessionExpired, setSessionExpired] = useState(false);
+  const redirectingRef = useRef(false);
   const [lang, setLang] = useState<Lang>("ru");
 
   const [categories, setCategories] = useState<Category[]>([]);
@@ -556,6 +587,14 @@ export default function AdminPage() {
     baseY: number;
   } | null>(null);
   const [staff, setStaff] = useState<StaffUser[]>([]);
+  const [profileEditingId, setProfileEditingId] = useState<number | null>(null);
+  const [profileDraft, setProfileDraft] = useState<{
+    firstName: string;
+    lastName: string;
+    age: string;
+    gender: string;
+    photoUrl: string;
+  }>({ firstName: "", lastName: "", age: "", gender: "", photoUrl: "" });
   const [settings, setSettings] = useState<BranchSettings | null>(null);
   const [modGroups, setModGroups] = useState<ModifierGroup[]>([]);
   const [modOptions, setModOptions] = useState<Record<number, ModifierOption[]>>({});
@@ -654,7 +693,6 @@ export default function AdminPage() {
 
   useEffect(() => {
     const u = localStorage.getItem("adminUser") ?? "";
-    const p = localStorage.getItem("adminPass") ?? "";
     const exp = localStorage.getItem("partyExpiringMinutes");
     const l = (localStorage.getItem("adminLang") ?? "ru") as Lang;
     const menuSearchSaved = localStorage.getItem("admin_menu_search");
@@ -669,9 +707,8 @@ export default function AdminPage() {
     const staffRoleSaved = localStorage.getItem("admin_staff_role");
     const staffActiveSaved = localStorage.getItem("admin_staff_active");
     const auditLimitSaved = localStorage.getItem("admin_audit_limit");
-    if (u && p) {
+    if (u) {
       setUsername(u);
-      setPassword(p);
       setAuthReady(true);
     }
     if (l === "ru" || l === "ro" || l === "en") {
@@ -702,21 +739,25 @@ export default function AdminPage() {
     localStorage.setItem("adminLang", lang);
   }, [lang]);
 
-  const authHeader = useMemo(() => {
-    if (!authReady) return "";
-    return "Basic " + btoa(`${username}:${password}`);
-  }, [authReady, username, password]);
-
   async function api(path: string, init?: RequestInit) {
     const res = await fetch(`${API_BASE}${path}`, {
       ...init,
+      credentials: "include",
       headers: {
         "Content-Type": "application/json",
-        Authorization: authHeader,
         ...(init?.headers ?? {}),
       },
     });
     if (!res.ok) {
+      if (res.status === 401 || res.status === 403) {
+        localStorage.removeItem("adminUser");
+        setAuthReady(false);
+        setSessionExpired(true);
+        if (!redirectingRef.current && typeof window !== "undefined") {
+          redirectingRef.current = true;
+          window.location.href = "/admin";
+        }
+      }
       const body = await res.json().catch(() => ({}));
       throw new Error(body?.message ?? `Request failed (${res.status})`);
     }
@@ -1103,13 +1144,30 @@ export default function AdminPage() {
 
   async function login() {
     setError(null);
+    setSessionExpired(false);
     try {
-      await api("/api/admin/me");
+      await api("/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ username, password }),
+      });
       localStorage.setItem("adminUser", username);
-      localStorage.setItem("adminPass", password);
       setAuthReady(true);
+      loadAll();
     } catch (e: any) {
       setError(e?.message ?? "Auth error");
+    }
+  }
+
+  async function logout() {
+    try {
+      await api("/api/auth/logout", { method: "POST" });
+    } finally {
+      localStorage.removeItem("adminUser");
+      setUsername("");
+      setPassword("");
+      setAuthReady(false);
+      setError(null);
+      setSessionExpired(false);
     }
   }
 
@@ -1602,6 +1660,37 @@ export default function AdminPage() {
     loadAll();
   }
 
+  function editStaffProfile(su: StaffUser) {
+    setProfileEditingId(su.id);
+    setProfileDraft({
+      firstName: su.firstName ?? "",
+      lastName: su.lastName ?? "",
+      age: su.age != null ? String(su.age) : "",
+      gender: su.gender ?? "",
+      photoUrl: su.photoUrl ?? "",
+    });
+  }
+
+  async function saveStaffProfile(su: StaffUser) {
+    const ageVal = profileDraft.age.trim() ? Number(profileDraft.age.trim()) : null;
+    if (ageVal != null && (Number.isNaN(ageVal) || ageVal < 0 || ageVal > 120)) {
+      alert(t(lang, "invalidAge"));
+      return;
+    }
+    await api(`/api/admin/staff/${su.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        firstName: profileDraft.firstName,
+        lastName: profileDraft.lastName,
+        age: Number.isNaN(ageVal) ? null : ageVal,
+        gender: profileDraft.gender,
+        photoUrl: profileDraft.photoUrl,
+      }),
+    });
+    setProfileEditingId(null);
+    loadAll();
+  }
+
   async function saveSettings() {
     if (!settings) return;
     await api("/api/admin/branch-settings", {
@@ -1621,6 +1710,7 @@ export default function AdminPage() {
         payCashEnabled: settings.payCashEnabled,
         payTerminalEnabled: settings.payTerminalEnabled,
         currencyCode: settings.currencyCode,
+        defaultLang: settings.defaultLang,
       }),
     });
     loadAll();
@@ -1656,9 +1746,7 @@ export default function AdminPage() {
     if (statsHallId !== "") qs.set("hallId", String(statsHallId));
     if (statsHallPlanId !== "") qs.set("planId", String(statsHallPlanId));
     if (statsWaiterId !== "") qs.set("waiterId", String(statsWaiterId));
-    const res = await api(`/api/admin/stats/daily.csv?${qs.toString()}`, {
-      headers: { Authorization: authHeader },
-    });
+    const res = await api(`/api/admin/stats/daily.csv?${qs.toString()}`);
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -1763,9 +1851,7 @@ export default function AdminPage() {
 
   async function downloadAuditCsv() {
     const qs = buildAuditQuery();
-    const res = await api(`/api/admin/audit-logs.csv?${qs.toString()}`, {
-      headers: { Authorization: authHeader },
-    });
+    const res = await api(`/api/admin/audit-logs.csv?${qs.toString()}`);
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -1809,6 +1895,7 @@ export default function AdminPage() {
     return (
       <main style={{ padding: 24, maxWidth: 520, margin: "0 auto", fontFamily: "system-ui, -apple-system, Segoe UI, Roboto" }}>
         <h1>{t(lang, "loginTitle")}</h1>
+        {sessionExpired && <div style={{ color: "#b11e46" }}>{t(lang, "sessionExpired")}</div>}
         {error && <div style={{ color: "#b11e46" }}>{error}</div>}
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <div style={{ display: "flex", gap: 8 }}>
@@ -1833,6 +1920,7 @@ export default function AdminPage() {
           <button onClick={() => setLang("ro")}>RO</button>
           <button onClick={() => setLang("en")}>EN</button>
           <button onClick={loadAll}>{t(lang, "refresh")}</button>
+          <button onClick={logout}>{t(lang, "logout")}</button>
         </div>
       </div>
       <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 10 }}>
@@ -1877,6 +1965,20 @@ export default function AdminPage() {
                   </option>
                 ))}
                 {currencies.length === 0 && <option value="MDL">MDL</option>}
+              </select>
+              <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>
+                {t(lang, "currencyManagedBySuperadmin")}
+              </div>
+            </label>
+            <label>
+              {t(lang, "defaultLanguage")}
+              <select
+                value={settings.defaultLang ?? "ru"}
+                onChange={(e) => setSettings({ ...settings, defaultLang: e.target.value })}
+              >
+                <option value="ru">{t(lang, "langRu")}</option>
+                <option value="ro">{t(lang, "langRo")}</option>
+                <option value="en">{t(lang, "langEn")}</option>
               </select>
             </label>
             <label>{t(lang, "otpTtlSeconds")} <input value={settings.otpTtlSeconds} onChange={(e) => setSettings({ ...settings, otpTtlSeconds: Number(e.target.value) })} /></label>
@@ -3419,6 +3521,9 @@ export default function AdminPage() {
             .map((su) => (
             <div key={su.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "6px 0", borderBottom: "1px solid #eee" }}>
               <strong>{su.username}</strong>
+              {su.role === "WAITER" && su.firstName && (
+                <span style={{ color: "#6b7280" }}>{su.firstName}</span>
+              )}
               <select value={su.role} onChange={(e) => updateStaffRole(su, e.target.value)}>
                 <option value="WAITER">WAITER</option>
                 <option value="KITCHEN">KITCHEN</option>
@@ -3426,10 +3531,53 @@ export default function AdminPage() {
               </select>
               <span>{su.isActive ? t(lang, "active") : t(lang, "inactive")}</span>
               <button onClick={() => resetStaffPassword(su)}>{t(lang, "resetPassword")}</button>
+              <button onClick={() => editStaffProfile(su)}>{t(lang, "editProfile")}</button>
               <button onClick={() => toggleStaff(su)}>{su.isActive ? t(lang, "disable") : t(lang, "enable")}</button>
             </div>
           ))}
         </div>
+        {profileEditingId != null && (
+          <div style={{ marginTop: 10, border: "1px dashed #ddd", padding: 10 }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <input
+                placeholder={t(lang, "firstName")}
+                value={profileDraft.firstName}
+                onChange={(e) => setProfileDraft({ ...profileDraft, firstName: e.target.value })}
+              />
+              <input
+                placeholder={t(lang, "lastName")}
+                value={profileDraft.lastName}
+                onChange={(e) => setProfileDraft({ ...profileDraft, lastName: e.target.value })}
+              />
+              <input
+                placeholder={t(lang, "age")}
+                value={profileDraft.age}
+                onChange={(e) => setProfileDraft({ ...profileDraft, age: e.target.value })}
+                style={{ width: 90 }}
+              />
+              <select
+                value={profileDraft.gender}
+                onChange={(e) => setProfileDraft({ ...profileDraft, gender: e.target.value })}
+              >
+                <option value="">{t(lang, "gender")}</option>
+                <option value="male">{t(lang, "genderMale")}</option>
+                <option value="female">{t(lang, "genderFemale")}</option>
+                <option value="other">{t(lang, "genderOther")}</option>
+              </select>
+              <input
+                placeholder={t(lang, "photoUrl")}
+                value={profileDraft.photoUrl}
+                onChange={(e) => setProfileDraft({ ...profileDraft, photoUrl: e.target.value })}
+                style={{ minWidth: 240 }}
+              />
+              <button onClick={() => {
+                const su = staff.find((s) => s.id === profileEditingId);
+                if (su) saveStaffProfile(su);
+              }}>{t(lang, "saveProfile")}</button>
+              <button onClick={() => setProfileEditingId(null)}>{t(lang, "cancel")}</button>
+            </div>
+          </div>
+        )}
       </section>
 
       <section style={{ marginTop: 24 }}>

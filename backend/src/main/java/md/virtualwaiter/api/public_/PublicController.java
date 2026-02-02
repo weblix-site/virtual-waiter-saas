@@ -15,6 +15,7 @@ import md.virtualwaiter.repo.BillRequestItemRepo;
 import md.virtualwaiter.repo.ModifierGroupRepo;
 import md.virtualwaiter.repo.ModifierOptionRepo;
 import md.virtualwaiter.repo.MenuItemModifierGroupRepo;
+import md.virtualwaiter.repo.StaffUserRepo;
 import md.virtualwaiter.otp.OtpService;
 import md.virtualwaiter.service.BranchSettingsService;
 import md.virtualwaiter.service.PartyService;
@@ -52,6 +53,7 @@ public class PublicController {
   private final ModifierGroupRepo modifierGroupRepo;
   private final ModifierOptionRepo modifierOptionRepo;
   private final MenuItemModifierGroupRepo menuItemModifierGroupRepo;
+  private final StaffUserRepo staffUserRepo;
   private final QrSignatureService qrSig;
   private final OtpService otpService;
   private final BranchSettingsService settingsService;
@@ -88,6 +90,7 @@ public class PublicController {
     ModifierGroupRepo modifierGroupRepo,
     ModifierOptionRepo modifierOptionRepo,
     MenuItemModifierGroupRepo menuItemModifierGroupRepo,
+    StaffUserRepo staffUserRepo,
     QrSignatureService qrSig,
     OtpService otpService,
     BranchSettingsService settingsService,
@@ -123,6 +126,7 @@ public class PublicController {
     this.modifierGroupRepo = modifierGroupRepo;
     this.modifierOptionRepo = modifierOptionRepo;
     this.menuItemModifierGroupRepo = menuItemModifierGroupRepo;
+    this.staffUserRepo = staffUserRepo;
     this.qrSig = qrSig;
     this.otpService = otpService;
     this.settingsService = settingsService;
@@ -170,7 +174,19 @@ public class PublicController {
   }
 
   public record StartSessionRequest(@NotBlank String tablePublicId, @NotBlank String sig, @NotNull Long ts, @NotBlank String locale) {}
-  public record StartSessionResponse(long guestSessionId, long tableId, int tableNumber, long branchId, String locale, boolean otpRequired, boolean isVerified, String sessionSecret, String currencyCode) {}
+  public record StartSessionResponse(
+    long guestSessionId,
+    long tableId,
+    int tableNumber,
+    long branchId,
+    String locale,
+    boolean otpRequired,
+    boolean isVerified,
+    String sessionSecret,
+    String currencyCode,
+    String waiterName,
+    String waiterPhotoUrl
+  ) {}
 
   @PostMapping("/session/start")
   public StartSessionResponse startSession(@Valid @RequestBody StartSessionRequest req, jakarta.servlet.http.HttpServletRequest httpReq) {
@@ -186,16 +202,42 @@ public class PublicController {
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
 
     BranchSettingsService.Resolved settings = settingsService.resolveForBranch(table.branchId);
+    String locale = normalizeLocale(req.locale());
+    if ("auto".equalsIgnoreCase(req.locale())) {
+      locale = normalizeLocale(settings.defaultLang());
+    }
     GuestSession s = new GuestSession();
     s.tableId = table.id;
-    s.locale = normalizeLocale(req.locale());
+    s.locale = locale;
     s.expiresAt = Instant.now().plus(12, ChronoUnit.HOURS);
     s.sessionSecret = java.util.UUID.randomUUID().toString().replace("-", "");
     s.createdByIp = clientIp;
     s.createdByUa = getUserAgent(httpReq);
     s = sessionRepo.save(s);
 
-    return new StartSessionResponse(s.id, table.id, table.number, table.branchId, s.locale, settings.requireOtpForFirstOrder(), s.isVerified, s.sessionSecret, settings.currencyCode());
+    String waiterName = null;
+    String waiterPhoto = null;
+    if (table.assignedWaiterId != null) {
+      StaffUser waiter = staffUserRepo.findById(table.assignedWaiterId).orElse(null);
+      if (waiter != null) {
+        String first = waiter.firstName != null && !waiter.firstName.isBlank() ? waiter.firstName.trim() : null;
+        waiterName = first != null ? first : waiter.username;
+        waiterPhoto = waiter.photoUrl;
+      }
+    }
+    return new StartSessionResponse(
+      s.id,
+      table.id,
+      table.number,
+      table.branchId,
+      s.locale,
+      settings.requireOtpForFirstOrder(),
+      s.isVerified,
+      s.sessionSecret,
+      settings.currencyCode(),
+      waiterName,
+      waiterPhoto
+    );
   }
 
   // --- Menu ---

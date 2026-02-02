@@ -8,6 +8,7 @@ const dict: Record<string, Record<Lang, string>> = {
   error: { ru: "Ошибка", ro: "Eroare", en: "Error" },
   errorGeneric: { ru: "Что-то пошло не так", ro: "A apărut o eroare", en: "Something went wrong" },
   callWaiter: { ru: "Вызвать официанта", ro: "Cheamă chelnerul", en: "Call waiter" },
+  waiterLabel: { ru: "Официант", ro: "Chelner", en: "Waiter" },
   cancelWaiterCall: { ru: "Отменить вызов", ro: "Anulează chemarea", en: "Cancel call" },
   createPin: { ru: "Создать PIN", ro: "Creează PIN", en: "Create PIN" },
   joinPin: { ru: "Объединиться по PIN", ro: "Conectează-te la PIN", en: "Join by PIN" },

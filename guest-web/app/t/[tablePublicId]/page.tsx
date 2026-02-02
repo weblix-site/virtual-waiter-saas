@@ -3,6 +3,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { t, type Lang } from "@/app/i18n";
 
+async function readApiError(res: Response, fallback: string): Promise<string> {
+  try {
+    const data = await res.json();
+    if (data?.message) {
+      return data.code ? `${data.message} (code: ${data.code})` : String(data.message);
+    }
+  } catch {
+    // ignore parse errors
+  }
+  return fallback;
+}
+
 type MenuItem = {
   id: number;
   name: string;
@@ -43,6 +55,8 @@ type StartSessionResponse = {
   isVerified: boolean;
   sessionSecret: string;
   currencyCode?: string;
+  waiterName?: string | null;
+  waiterPhotoUrl?: string | null;
 };
 
 type BillOptionsItem = {
@@ -86,8 +100,10 @@ function money(priceCents: number, currency: string) {
 
 export default function TablePage({ params, searchParams }: any) {
   const tablePublicId: string = params.tablePublicId;
-  const rawLang = String(searchParams?.lang ?? "ru").toLowerCase();
-  const lang: Lang = rawLang === "ro" || rawLang === "en" ? rawLang : "ru";
+  const rawLang = String(searchParams?.lang ?? "").toLowerCase();
+  const hasUrlLang = rawLang === "ru" || rawLang === "ro" || rawLang === "en";
+  const requestLocale = hasUrlLang ? rawLang : "auto";
+  const [lang, setLang] = useState<Lang>(hasUrlLang ? (rawLang as Lang) : "ru");
   const sig: string = (searchParams?.sig ?? "");
   const ts: string = (searchParams?.ts ?? "");
   // If QR signature is missing (e.g., dev link), show a friendly error.
@@ -137,15 +153,32 @@ export default function TablePage({ params, searchParams }: any) {
         const ssRes = await fetch(`${API_BASE}/api/public/session/start`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tablePublicId, sig, ts: Number(ts), locale: lang }),
+          body: JSON.stringify({ tablePublicId, sig, ts: Number(ts), locale: requestLocale }),
         });
-        if (!ssRes.ok) throw new Error(`${t(lang, "sessionStartFailed")} (${ssRes.status})`);
+        if (!ssRes.ok) {
+          throw new Error(await readApiError(ssRes, `${t(lang, "sessionStartFailed")} (${ssRes.status})`));
+        }
         const ss: StartSessionResponse = await ssRes.json();
         if (cancelled) return;
         setSession(ss);
+        if (!hasUrlLang && (ss.locale === "ru" || ss.locale === "ro" || ss.locale === "en") && ss.locale !== lang) {
+          const nextLang = ss.locale;
+          setLang(nextLang);
+          try {
+            const params = new URLSearchParams(searchParams || {});
+            params.set("lang", nextLang);
+            const nextUrl = `/t/${tablePublicId}?${params.toString()}`;
+            if (typeof window !== "undefined") {
+              window.history.replaceState({}, "", nextUrl);
+            }
+          } catch (_) {}
+        }
 
-        const mRes = await fetch(`${API_BASE}/api/public/menu?tablePublicId=${encodeURIComponent(tablePublicId)}&sig=${encodeURIComponent(sig)}&ts=${encodeURIComponent(ts)}&locale=${lang}`);
-        if (!mRes.ok) throw new Error(`${t(lang, "menuLoadFailed")} (${mRes.status})`);
+        const menuLocale = (!hasUrlLang && (ss.locale === "ru" || ss.locale === "ro" || ss.locale === "en")) ? ss.locale : (hasUrlLang ? (rawLang as Lang) : "ru");
+        const mRes = await fetch(`${API_BASE}/api/public/menu?tablePublicId=${encodeURIComponent(tablePublicId)}&sig=${encodeURIComponent(sig)}&ts=${encodeURIComponent(ts)}&locale=${menuLocale}`);
+        if (!mRes.ok) {
+          throw new Error(await readApiError(mRes, `${t(lang, "menuLoadFailed")} (${mRes.status})`));
+        }
         const m: MenuResponse = await mRes.json();
         if (cancelled) return;
         setMenu(m);
@@ -185,7 +218,7 @@ export default function TablePage({ params, searchParams }: any) {
     return () => {
       cancelled = true;
     };
-  }, [tablePublicId, lang, sig]);
+  }, [tablePublicId, requestLocale, sig, ts]);
 
   const cartTotalCents = useMemo(() => cart.reduce((sum, l) => sum + l.item.priceCents * l.qty, 0), [cart]);
   const myChargesCents = useMemo(() => (billOptions?.myItems ?? []).reduce((sum, it) => sum + it.lineTotalCents, 0), [billOptions]);
@@ -324,7 +357,7 @@ export default function TablePage({ params, searchParams }: any) {
       const res = await fetch(`${API_BASE}/api/public/orders?guestSessionId=${session.guestSessionId}`, {
         headers: { ...sessionHeaders() },
       });
-      if (!res.ok) throw new Error(`Orders load failed (${res.status})`);
+      if (!res.ok) throw new Error(await readApiError(res, `Orders load failed (${res.status})`));
       const body = await res.json();
       setOrdersHistory(body);
     } catch (e: any) {
@@ -341,7 +374,7 @@ export default function TablePage({ params, searchParams }: any) {
       const res = await fetch(`${API_BASE}/api/public/orders/${orderId}?guestSessionId=${session.guestSessionId}`, {
         headers: { ...sessionHeaders() },
       });
-      if (!res.ok) throw new Error(`Order status failed (${res.status})`);
+      if (!res.ok) throw new Error(await readApiError(res, `Order status failed (${res.status})`));
       const body = await res.json();
       setOrderStatus(body.status);
     } catch (e: any) {
@@ -358,7 +391,7 @@ export default function TablePage({ params, searchParams }: any) {
       const res = await fetch(`${API_BASE}/api/public/bill-request/${billRequestId}?guestSessionId=${session.guestSessionId}`, {
         headers: { ...sessionHeaders() },
       });
-      if (!res.ok) throw new Error(`Bill status failed (${res.status})`);
+      if (!res.ok) throw new Error(await readApiError(res, `Bill status failed (${res.status})`));
       const body = await res.json();
       setBillStatus(body.status);
     } catch (e: any) {
@@ -447,7 +480,7 @@ export default function TablePage({ params, searchParams }: any) {
         if (res.status === 403 && session?.otpRequired && !session?.isVerified) {
           throw new Error(t(lang, "otpRequired"));
         }
-        throw new Error(`${t(lang, "orderFailed")} (${res.status})`);
+        throw new Error(await readApiError(res, `${t(lang, "orderFailed")} (${res.status})`));
       }
       const body = await res.json();
       setOrderId(body.orderId);
@@ -475,7 +508,7 @@ export default function TablePage({ params, searchParams }: any) {
         headers: { "Content-Type": "application/json", ...sessionHeaders() },
         body: JSON.stringify({ guestSessionId: session.guestSessionId, phoneE164: phone.trim(), locale: lang }),
       });
-      if (!res.ok) throw new Error(`${t(lang, "otpSendFailed")} (${res.status})`);
+      if (!res.ok) throw new Error(await readApiError(res, `${t(lang, "otpSendFailed")} (${res.status})`));
       const body = await res.json();
       setOtpChallengeId(body.challengeId);
       if (body.devCode) alert(t(lang, "devCodePrefix") + body.devCode);
@@ -503,7 +536,7 @@ export default function TablePage({ params, searchParams }: any) {
         headers: { "Content-Type": "application/json", ...sessionHeaders() },
         body: JSON.stringify({ guestSessionId: session.guestSessionId, challengeId: otpChallengeId, code: otpCode.trim() }),
       });
-      if (!res.ok) throw new Error(`${t(lang, "otpVerifyFailed")} (${res.status})`);
+      if (!res.ok) throw new Error(await readApiError(res, `${t(lang, "otpVerifyFailed")} (${res.status})`));
       setSession({ ...session, isVerified: true });
       alert(t(lang, "verified"));
     } catch (e: any) {
@@ -521,12 +554,12 @@ export default function TablePage({ params, searchParams }: any) {
         headers: { "Content-Type": "application/json", ...sessionHeaders() },
         body: JSON.stringify({ guestSessionId: session.guestSessionId }),
       });
-      if (!res.ok) throw new Error("Waiter call failed");
+      if (!res.ok) throw new Error(await readApiError(res, t(lang, "errorGeneric")));
       setWaiterCallActive(true);
       setWaiterCallStatus("NEW");
       alert(t(lang, "waiterCalled"));
-    } catch {
-      alert(t(lang, "errorGeneric"));
+    } catch (e: any) {
+      alert(e?.message ?? t(lang, "errorGeneric"));
     }
   }
 
@@ -538,12 +571,12 @@ export default function TablePage({ params, searchParams }: any) {
         headers: { "Content-Type": "application/json", ...sessionHeaders() },
         body: JSON.stringify({ guestSessionId: session.guestSessionId }),
       });
-      if (!res.ok) throw new Error("Cancel failed");
+      if (!res.ok) throw new Error(await readApiError(res, t(lang, "errorGeneric")));
       setWaiterCallActive(false);
       setWaiterCallStatus(null);
       alert(t(lang, "waiterCallCancelled"));
-    } catch {
-      alert(t(lang, "errorGeneric"));
+    } catch (e: any) {
+      alert(e?.message ?? t(lang, "errorGeneric"));
     }
   }
 
@@ -584,7 +617,7 @@ export default function TablePage({ params, searchParams }: any) {
         headers: { "Content-Type": "application/json", ...sessionHeaders() },
         body: JSON.stringify({ guestSessionId: session.guestSessionId }),
       });
-      if (!res.ok) throw new Error(`${t(lang, "pinCreateFailed")} (${res.status})`);
+      if (!res.ok) throw new Error(await readApiError(res, `${t(lang, "pinCreateFailed")} (${res.status})`));
       const body = await res.json();
       setParty({ partyId: body.partyId, pin: body.pin, expiresAt: body.expiresAt });
       alert(t(lang, "pinCreated") + body.pin);
@@ -603,7 +636,7 @@ export default function TablePage({ params, searchParams }: any) {
         headers: { "Content-Type": "application/json", ...sessionHeaders() },
         body: JSON.stringify({ guestSessionId: session.guestSessionId, pin }),
       });
-      if (!res.ok) throw new Error(`${t(lang, "pinJoinFailed")} (${res.status})`);
+      if (!res.ok) throw new Error(await readApiError(res, `${t(lang, "pinJoinFailed")} (${res.status})`));
       const body = await res.json();
       setParty({ partyId: body.partyId, pin: body.pin, expiresAt: body.expiresAt });
       alert(t(lang, "pinJoined") + body.pin);
@@ -620,7 +653,7 @@ export default function TablePage({ params, searchParams }: any) {
         headers: { "Content-Type": "application/json", ...sessionHeaders() },
         body: JSON.stringify({ guestSessionId: session.guestSessionId }),
       });
-      if (!res.ok) throw new Error(`${t(lang, "partyCloseFailed")} (${res.status})`);
+      if (!res.ok) throw new Error(await readApiError(res, `${t(lang, "partyCloseFailed")} (${res.status})`));
       setParty(null);
       alert(t(lang, "partyClosed"));
     } catch (e: any) {
@@ -650,8 +683,10 @@ export default function TablePage({ params, searchParams }: any) {
         headers: { "Content-Type": "application/json", ...sessionHeaders() },
         body: JSON.stringify(payload),
       });
+      if (!res.ok) {
+        throw new Error(await readApiError(res, `${t(lang, "billRequestFailed")} (${res.status})`));
+      }
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body?.message ?? `${t(lang, "billRequestFailed")} (${res.status})`);
       setBillRequestId(body.billRequestId);
       setBillStatus(body.status);
       alert(t(lang, "billRequested"));
@@ -672,8 +707,8 @@ export default function TablePage({ params, searchParams }: any) {
         headers: { "Content-Type": "application/json", ...sessionHeaders() },
         body: JSON.stringify({ guestSessionId: session.guestSessionId }),
       });
+      if (!res.ok) throw new Error(await readApiError(res, `Cancel failed (${res.status})`));
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body?.message ?? `Cancel failed (${res.status})`);
       setBillStatus(body.status);
       alert(body.status === "CANCELLED" ? t(lang, "billCancelled") : t(lang, "billRequested"));
     } catch (e: any) {
@@ -693,8 +728,8 @@ export default function TablePage({ params, searchParams }: any) {
         headers: { "Content-Type": "application/json", ...sessionHeaders() },
         body: JSON.stringify({ guestSessionId: session.guestSessionId }),
       });
+      if (!res.ok) throw new Error(await readApiError(res, `Close failed (${res.status})`));
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body?.message ?? `Close failed (${res.status})`);
       setBillStatus(body.status);
       alert(t(lang, "billClosed"));
     } catch (e: any) {
@@ -784,6 +819,20 @@ export default function TablePage({ params, searchParams }: any) {
         <div>
           <h1 style={{ margin: 0 }}>{t(lang, "table")} #{session?.tableNumber}</h1>
           <div style={{ color: "#666" }}>{t(lang, "session")}: {session?.guestSessionId}</div>
+          {session?.waiterName && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
+              {session.waiterPhotoUrl && (
+                <img
+                  src={session.waiterPhotoUrl}
+                  alt={session.waiterName}
+                  style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover" }}
+                />
+              )}
+              <span style={{ color: "#444", fontSize: 14 }}>
+                {t(lang, "waiterLabel")}: {session.waiterName}
+              </span>
+            </div>
+          )}
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <a href={`/t/${tablePublicId}?lang=ru&sig=${encodeURIComponent(sig)}&ts=${encodeURIComponent(ts)}`}>RU</a>

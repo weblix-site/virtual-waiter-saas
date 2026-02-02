@@ -67,6 +67,41 @@ nano .env
 
 В `APP_QR_HMAC_SECRET` установите **сильный ключ**.
 
+> Важно для домена:
+> - `APP_PUBLIC_BASE_URL=https://YOUR_DOMAIN`
+> - `NEXT_PUBLIC_API_BASE=https://YOUR_DOMAIN/api`
+
+### Минимальный список переменных (для новичков)
+Скопируйте и заполните по образцу:
+```
+# База данных
+POSTGRES_DB=vw
+POSTGRES_USER=vw
+POSTGRES_PASSWORD=vw
+POSTGRES_PORT=5432
+
+# URL базы для backend (если всё в Docker)
+SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/vw
+SPRING_DATASOURCE_USERNAME=vw
+SPRING_DATASOURCE_PASSWORD=vw
+
+# Порты
+BACKEND_PORT=8080
+WEB_PORT=3000
+
+# Адреса приложения
+APP_PUBLIC_BASE_URL=https://YOUR_DOMAIN
+NEXT_PUBLIC_API_BASE=https://YOUR_DOMAIN/api
+
+# Безопасность (обязательно!)
+APP_QR_HMAC_SECRET=СЛОЖНЫЙ_СЕКРЕТ_32_СИМВОЛА_ИЛИ_БОЛЕЕ
+APP_AUTH_COOKIE_SECRET=ДРУГОЙ_СЛОЖНЫЙ_СЕКРЕТ_32_СИМВОЛА_ИЛИ_БОЛЕЕ
+APP_AUTH_COOKIE_SECURE=true
+
+# Push (если не используете FCM — оставьте пустым)
+FCM_SERVER_KEY=
+```
+
 ---
 
 ## 4) Запуск контейнеров
@@ -136,7 +171,9 @@ certbot --nginx -d YOUR_DOMAIN
 
 - `https://YOUR_DOMAIN` — Guest web
 - `https://YOUR_DOMAIN/admin` — Admin web
+- `https://YOUR_DOMAIN/superadmin` — Super Admin web
 - `https://YOUR_DOMAIN/api/admin/me` — API
+- В staff‑app есть вкладка **Профиль** (просмотр имени/фото/данных).
 
 ---
 
@@ -146,10 +183,130 @@ certbot --nginx -d YOUR_DOMAIN
 # Логи
  docker compose -f infra/docker-compose.full.yml logs -f
 
+# Бэкап базы (PostgreSQL)
+ docker exec -t <POSTGRES_CONTAINER> pg_dump -U ${POSTGRES_USER} ${POSTGRES_DB} > backup.sql
+
+# Восстановление базы
+ cat backup.sql | docker exec -i <POSTGRES_CONTAINER> psql -U ${POSTGRES_USER} ${POSTGRES_DB}
+
 # Обновить код
  git pull
  docker compose -f infra/docker-compose.full.yml --env-file .env up -d --build
 
 # Остановить
  docker compose -f infra/docker-compose.full.yml down
+```
+
+---
+
+## 9) Staff‑app (Flutter) — деплой/доставка
+
+### Вариант A — Web (самый простой)
+1) На локальной машине:
+```
+cd staff-app
+flutter build web --dart-define=API_BASE=https://YOUR_DOMAIN
+```
+2) Результат: `staff-app/build/web`
+3) Загрузите содержимое на сервер (например, в `/var/www/staff-app/`)
+
+### Вариант B — Android APK
+1) На локальной машине:
+```
+cd staff-app
+flutter build apk --dart-define=API_BASE=https://YOUR_DOMAIN
+```
+2) APK будет в `staff-app/build/app/outputs/flutter-apk/app-release.apk`
+3) Раздайте APK персоналу
+
+---
+
+## 10) Рекомендации по бэкапам
+- Делайте ежедневный cron‑бэкап `pg_dump`.\n- Храните минимум 7‑14 дней.\n- Проверяйте восстановление раз в неделю.
+
+### Пример cron + ротация
+1) Создайте папку:
+```
+mkdir -p /opt/backup/virtual-waiter
+```
+
+2) Создайте скрипт `/usr/local/bin/vw-backup.sh`:
+```
+#!/usr/bin/env bash
+set -euo pipefail
+
+BACKUP_DIR="/opt/backup/virtual-waiter"
+TS="$(date +%Y-%m-%d_%H-%M)"
+
+mkdir -p "$BACKUP_DIR"
+
+# Имя контейнера postgres можно посмотреть: docker compose -f infra/docker-compose.full.yml ps
+POSTGRES_CONTAINER="virtual-waiter-postgres-1"
+
+docker exec -t "$POSTGRES_CONTAINER" pg_dump -U "${POSTGRES_USER}" "${POSTGRES_DB}" > "${BACKUP_DIR}/vw_${TS}.sql"
+
+# Ротация: хранить последние 14 файлов
+ls -1t "${BACKUP_DIR}"/vw_*.sql | tail -n +15 | xargs -r rm -f
+```
+
+3) Сделайте исполняемым:
+```
+chmod +x /usr/local/bin/vw-backup.sh
+```
+
+4) Добавьте cron (ежедневно в 02:00):
+```
+crontab -e
+```
+И вставьте:
+```
+0 2 * * * POSTGRES_USER=vw POSTGRES_DB=vw /usr/local/bin/vw-backup.sh >> /var/log/vw-backup.log 2>&1
+```
+
+### Проверка бэкапа
+- Убедитесь, что в `/opt/backup/virtual-waiter/` появились новые файлы.
+- Раз в неделю пробуйте восстановление на тестовом сервере.
+
+---
+
+## 10.1) Ротация логов контейнеров
+Чтобы логи не заполнили диск, в `infra/docker-compose.full.yml` включена ротация:
+```
+logging:
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "5"
+```
+Это значит, что на каждый контейнер хранится максимум ~50MB логов.
+
+---
+
+## 11) Проверка, что .env применяется
+
+После запуска контейнеров:
+```
+docker compose -f infra/docker-compose.full.yml --env-file .env exec backend printenv | grep APP_
+```
+
+Если видите ваши значения (особенно `APP_QR_HMAC_SECRET`), значит `.env` подхватился.
+
+---
+
+## 12) Rate limit через Redis (опционально)
+
+По умолчанию лимиты работают **в памяти** (подходит для одного сервера).  
+Если вы планируете несколько инстансов — включите Redis.
+
+### 12.1 В `.env`
+```
+RATE_LIMIT_REDIS_ENABLED=true
+RATE_LIMIT_REDIS_HOST=redis
+RATE_LIMIT_REDIS_PORT=6379
+RATE_LIMIT_REDIS_PASSWORD=
+```
+
+### 12.2 Запуск с Redis
+```
+docker compose -f infra/docker-compose.full.yml --env-file .env --profile redis up -d --build
 ```

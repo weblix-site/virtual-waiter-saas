@@ -11,9 +11,16 @@ const dict: Record<string, Record<Lang, string>> = {
   username: { ru: "Логин", ro: "Utilizator", en: "Username" },
   password: { ru: "Пароль", ro: "Parolă", en: "Password" },
   login: { ru: "Войти", ro: "Intră", en: "Login" },
+  logout: { ru: "Выйти", ro: "Ieși", en: "Logout" },
+  sessionExpired: { ru: "Сессия истекла. Войдите снова.", ro: "Sesiunea a expirat. Autentificați‑vă din nou.", en: "Session expired. Please sign in again." },
   refresh: { ru: "Обновить", ro: "Reîmprospătează", en: "Refresh" },
   tenants: { ru: "Заведения (тенанты)", ro: "Tenanți", en: "Tenants" },
   branches: { ru: "Филиалы", ro: "Filiale", en: "Branches" },
+  branchSettings: { ru: "Настройки филиала", ro: "Setări filială", en: "Branch settings" },
+  defaultLanguage: { ru: "Язык по умолчанию (гость)", ro: "Limba implicită (oaspete)", en: "Default language (guest)" },
+  langRu: { ru: "Русский", ro: "Rusă", en: "Russian" },
+  langRo: { ru: "Румынский", ro: "Română", en: "Romanian" },
+  langEn: { ru: "Английский", ro: "Engleză", en: "English" },
   staffGlobal: { ru: "Персонал (глобально)", ro: "Personal (global)", en: "Staff (global)" },
   active: { ru: "Активен", ro: "Activ", en: "Active" },
   inactive: { ru: "Неактивен", ro: "Inactiv", en: "Inactive" },
@@ -29,6 +36,15 @@ const dict: Record<string, Record<Lang, string>> = {
   delete: { ru: "Удалить", ro: "Șterge", en: "Delete" },
   tenant: { ru: "Тенант", ro: "Tenant", en: "Tenant" },
   loadStaff: { ru: "Загрузить персонал", ro: "Încarcă personal", en: "Load staff" },
+  firstName: { ru: "Имя", ro: "Prenume", en: "First name" },
+  lastName: { ru: "Фамилия", ro: "Nume", en: "Last name" },
+  age: { ru: "Возраст", ro: "Vârstă", en: "Age" },
+  gender: { ru: "Пол", ro: "Gen", en: "Gender" },
+  genderMale: { ru: "Мужской", ro: "Masculin", en: "Male" },
+  genderFemale: { ru: "Женский", ro: "Feminin", en: "Female" },
+  genderOther: { ru: "Другое", ro: "Altul", en: "Other" },
+  photoUrl: { ru: "Фото (URL)", ro: "Foto (URL)", en: "Photo URL" },
+  invalidAge: { ru: "Неверный возраст (0–120)", ro: "Vârstă invalidă (0–120)", en: "Invalid age (0–120)" },
   createStaff: { ru: "Создать сотрудника", ro: "Creează personal", en: "Create staff" },
   role: { ru: "Роль", ro: "Rol", en: "Role" },
   currencies: { ru: "Валюты", ro: "Valute", en: "Currencies" },
@@ -127,7 +143,19 @@ const t = (lang: Lang, key: string) => dict[key]?.[lang] ?? key;
 
 type Tenant = { id: number; name: string; isActive: boolean };
 type Branch = { id: number; tenantId: number; name: string; isActive: boolean };
-type StaffUser = { id: number; branchId: number | null; username: string; role: string; isActive: boolean };
+type BranchSettings = { branchId: number; defaultLang?: string };
+type StaffUser = {
+  id: number;
+  branchId: number | null;
+  username: string;
+  role: string;
+  isActive: boolean;
+  firstName?: string | null;
+  lastName?: string | null;
+  age?: number | null;
+  gender?: string | null;
+  photoUrl?: string | null;
+};
 
 type StatsSummary = {
   from: string;
@@ -202,6 +230,8 @@ export default function SuperAdminPage() {
   const [password, setPassword] = useState("");
   const [authReady, setAuthReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sessionExpired, setSessionExpired] = useState(false);
+  const redirectingRef = useRef(false);
   const [lang, setLang] = useState<Lang>("ru");
 
   const [tenants, setTenants] = useState<Tenant[]>([]);
@@ -209,6 +239,7 @@ export default function SuperAdminPage() {
   const [staff, setStaff] = useState<StaffUser[]>([]);
   const [tenantId, setTenantId] = useState<number | "">("");
   const [branchId, setBranchId] = useState<number | "">("");
+  const [branchSettings, setBranchSettings] = useState<BranchSettings | null>(null);
   const [tenantStatusFilter, setTenantStatusFilter] = useState<"" | "ACTIVE" | "INACTIVE">("");
   const [branchStatusFilter, setBranchStatusFilter] = useState<"" | "ACTIVE" | "INACTIVE">("");
   const [statsFrom, setStatsFrom] = useState("");
@@ -270,6 +301,11 @@ export default function SuperAdminPage() {
   const [editingStaffId, setEditingStaffId] = useState<number | null>(null);
   const [editStaffRole, setEditStaffRole] = useState("ADMIN");
   const [editStaffActive, setEditStaffActive] = useState(true);
+  const [editStaffFirstName, setEditStaffFirstName] = useState("");
+  const [editStaffLastName, setEditStaffLastName] = useState("");
+  const [editStaffAge, setEditStaffAge] = useState("");
+  const [editStaffGender, setEditStaffGender] = useState("");
+  const [editStaffPhotoUrl, setEditStaffPhotoUrl] = useState("");
   const [currencies, setCurrencies] = useState<CurrencyDto[]>([]);
   const [newCurrencyCode, setNewCurrencyCode] = useState("");
   const [newCurrencyName, setNewCurrencyName] = useState("");
@@ -277,11 +313,9 @@ export default function SuperAdminPage() {
 
   useEffect(() => {
     const u = localStorage.getItem("superUser") ?? "";
-    const p = localStorage.getItem("superPass") ?? "";
     const l = (localStorage.getItem("superLang") ?? "ru") as Lang;
-    if (u && p) {
+    if (u) {
       setUsername(u);
-      setPassword(p);
       setAuthReady(true);
     }
     if (l === "ru" || l === "ro" || l === "en") {
@@ -293,21 +327,25 @@ export default function SuperAdminPage() {
     localStorage.setItem("superLang", lang);
   }, [lang]);
 
-  const authHeader = useMemo(() => {
-    if (!authReady) return "";
-    return "Basic " + btoa(`${username}:${password}`);
-  }, [authReady, username, password]);
-
   async function api(path: string, init?: RequestInit) {
     const res = await fetch(`${API_BASE}${path}`, {
       ...init,
+      credentials: "include",
       headers: {
         "Content-Type": "application/json",
-        Authorization: authHeader,
         ...(init?.headers ?? {}),
       },
     });
     if (!res.ok) {
+      if (res.status === 401 || res.status === 403) {
+        localStorage.removeItem("superUser");
+        setAuthReady(false);
+        setSessionExpired(true);
+        if (!redirectingRef.current && typeof window !== "undefined") {
+          redirectingRef.current = true;
+          window.location.href = "/superadmin";
+        }
+      }
       const body = await res.json().catch(() => ({}));
       throw new Error(body?.message ?? `${t(lang, "requestFailed")} (${res.status})`);
     }
@@ -491,13 +529,31 @@ export default function SuperAdminPage() {
 
   async function login() {
     setError(null);
+    setSessionExpired(false);
     try {
-      await api("/api/super/tenants");
+      await api("/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ username, password }),
+      });
       localStorage.setItem("superUser", username);
-      localStorage.setItem("superPass", password);
       setAuthReady(true);
+      loadTenants();
+      loadCurrencies();
     } catch (e: any) {
       setError(e?.message ?? "Auth error");
+    }
+  }
+
+  async function logout() {
+    try {
+      await api("/api/auth/logout", { method: "POST" });
+    } finally {
+      localStorage.removeItem("superUser");
+      setUsername("");
+      setPassword("");
+      setAuthReady(false);
+      setError(null);
+      setSessionExpired(false);
     }
   }
 
@@ -545,6 +601,31 @@ export default function SuperAdminPage() {
     }
     const res = await api(`/api/admin/tables?branchId=${branchId}`);
     setTables(await res.json());
+  }
+
+  async function loadBranchSettings() {
+    if (!branchId) {
+      setBranchSettings(null);
+      return;
+    }
+    try {
+      const res = await api(`/api/admin/branch-settings?branchId=${branchId}`);
+      const body = await res.json();
+      setBranchSettings(body);
+    } catch (_) {
+      setBranchSettings(null);
+    }
+  }
+
+  async function saveBranchSettings() {
+    if (!branchId || !branchSettings) return;
+    await api(`/api/admin/branch-settings?branchId=${branchId}`, {
+      method: "PUT",
+      body: JSON.stringify({
+        defaultLang: branchSettings.defaultLang ?? "ru",
+      }),
+    });
+    loadBranchSettings();
   }
 
   async function saveTableLayout() {
@@ -719,7 +800,12 @@ export default function SuperAdminPage() {
   }
 
   useEffect(() => {
-    if (branchId) loadTables();
+    if (branchId) {
+      loadTables();
+      loadBranchSettings();
+    } else {
+      setBranchSettings(null);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [branchId]);
 
@@ -808,7 +894,7 @@ export default function SuperAdminPage() {
     qs.set("tenantId", String(tenantId));
     if (statsFrom) qs.set("from", statsFrom);
     if (statsTo) qs.set("to", statsTo);
-    const res = await api(`/api/super/stats/summary.csv?${qs.toString()}`, { headers: { Authorization: authHeader } });
+    const res = await api(`/api/super/stats/summary.csv?${qs.toString()}`);
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -826,7 +912,7 @@ export default function SuperAdminPage() {
     qs.set("tenantId", String(tenantId));
     if (statsFrom) qs.set("from", statsFrom);
     if (statsTo) qs.set("to", statsTo);
-    const res = await api(`/api/super/stats/branches.csv?${qs.toString()}`, { headers: { Authorization: authHeader } });
+    const res = await api(`/api/super/stats/branches.csv?${qs.toString()}`);
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -891,9 +977,22 @@ export default function SuperAdminPage() {
   }
 
   async function updateStaff(id: number) {
+    const ageVal = editStaffAge.trim() ? Number(editStaffAge.trim()) : null;
+    if (ageVal != null && (Number.isNaN(ageVal) || ageVal < 0 || ageVal > 120)) {
+      setError(t(lang, "invalidAge"));
+      return;
+    }
     await api(`/api/super/staff/${id}`, {
       method: "PATCH",
-      body: JSON.stringify({ role: editStaffRole, isActive: editStaffActive }),
+      body: JSON.stringify({
+        role: editStaffRole,
+        isActive: editStaffActive,
+        firstName: editStaffFirstName,
+        lastName: editStaffLastName,
+        age: ageVal,
+        gender: editStaffGender,
+        photoUrl: editStaffPhotoUrl,
+      }),
     });
     setEditingStaffId(null);
     loadStaff();
@@ -952,8 +1051,10 @@ export default function SuperAdminPage() {
           <button onClick={() => setLang("ro")}>RO</button>
           <button onClick={() => setLang("en")}>EN</button>
           <button onClick={() => { loadTenants(); loadCurrencies(); }}>{t(lang, "refresh")}</button>
+          <button onClick={logout}>{t(lang, "logout")}</button>
         </div>
       </div>
+      {sessionExpired && <div style={{ color: "#b11e46", marginTop: 8 }}>{t(lang, "sessionExpired")}</div>}
       {error && <div style={{ color: "#b11e46", marginTop: 8 }}>{error}</div>}
 
       <section style={{ marginTop: 24 }}>
@@ -1038,6 +1139,35 @@ export default function SuperAdminPage() {
       </section>
 
       <section style={{ marginTop: 24 }}>
+        <h2>{t(lang, "branchSettings")}</h2>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <select value={branchId} onChange={(e) => setBranchId(e.target.value ? Number(e.target.value) : "")}>
+            <option value="">{t(lang, "selectBranch")}</option>
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>{b.name}</option>
+            ))}
+          </select>
+          <button onClick={loadBranchSettings} disabled={!branchId}>{t(lang, "load")}</button>
+        </div>
+        {branchSettings && (
+          <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <label>
+              {t(lang, "defaultLanguage")}
+              <select
+                value={branchSettings.defaultLang ?? "ru"}
+                onChange={(e) => setBranchSettings({ ...branchSettings, defaultLang: e.target.value })}
+              >
+                <option value="ru">{t(lang, "langRu")}</option>
+                <option value="ro">{t(lang, "langRo")}</option>
+                <option value="en">{t(lang, "langEn")}</option>
+              </select>
+            </label>
+            <button onClick={saveBranchSettings}>{t(lang, "save")}</button>
+          </div>
+        )}
+      </section>
+
+      <section style={{ marginTop: 24 }}>
         <h2>{t(lang, "staffGlobal")}</h2>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <select value={branchId} onChange={(e) => setBranchId(e.target.value ? Number(e.target.value) : "")}>
@@ -1064,7 +1194,16 @@ export default function SuperAdminPage() {
               <strong>{s.username}</strong>
               <span>{s.role}</span>
               <span>{s.isActive ? t(lang, "active") : t(lang, "inactive")}</span>
-              <button onClick={() => { setEditingStaffId(s.id); setEditStaffRole(s.role); setEditStaffActive(s.isActive); }}>{t(lang, "edit")}</button>
+              <button onClick={() => {
+                setEditingStaffId(s.id);
+                setEditStaffRole(s.role);
+                setEditStaffActive(s.isActive);
+                setEditStaffFirstName(s.firstName ?? "");
+                setEditStaffLastName(s.lastName ?? "");
+                setEditStaffAge(s.age != null ? String(s.age) : "");
+                setEditStaffGender(s.gender ?? "");
+                setEditStaffPhotoUrl(s.photoUrl ?? "");
+              }}>{t(lang, "edit")}</button>
               <button onClick={() => resetStaffPassword(s.id)}>{t(lang, "resetPassword")}</button>
               <button onClick={() => deleteStaff(s.id)}>{t(lang, "delete")}</button>
             </div>
@@ -1080,6 +1219,16 @@ export default function SuperAdminPage() {
                 <option value="SUPER_ADMIN">SUPER_ADMIN</option>
               </select>
               <label><input type="checkbox" checked={editStaffActive} onChange={(e) => setEditStaffActive(e.target.checked)} /> {t(lang, "active")}</label>
+              <input placeholder={t(lang, "firstName")} value={editStaffFirstName} onChange={(e) => setEditStaffFirstName(e.target.value)} />
+              <input placeholder={t(lang, "lastName")} value={editStaffLastName} onChange={(e) => setEditStaffLastName(e.target.value)} />
+              <input placeholder={t(lang, "age")} value={editStaffAge} onChange={(e) => setEditStaffAge(e.target.value)} style={{ width: 90 }} />
+              <select value={editStaffGender} onChange={(e) => setEditStaffGender(e.target.value)}>
+                <option value="">{t(lang, "gender")}</option>
+                <option value="male">{t(lang, "genderMale")}</option>
+                <option value="female">{t(lang, "genderFemale")}</option>
+                <option value="other">{t(lang, "genderOther")}</option>
+              </select>
+              <input placeholder={t(lang, "photoUrl")} value={editStaffPhotoUrl} onChange={(e) => setEditStaffPhotoUrl(e.target.value)} style={{ minWidth: 220 }} />
               <button onClick={() => updateStaff(editingStaffId)}>{t(lang, "save")}</button>
               <button onClick={() => setEditingStaffId(null)}>{t(lang, "cancel")}</button>
             </div>

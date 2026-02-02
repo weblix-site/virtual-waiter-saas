@@ -14,6 +14,8 @@ public final class Messages {
     put("Insufficient role", "error.insufficient_role");
     put("User has no branch", "error.user_no_branch");
     put("Admin key required", "error.admin_key_required");
+    put("Admin role required", "error.admin_role_required");
+    put("Super admin role required", "error.super_admin_role_required");
 
     // Tenants / branches / staff
     put("Tenant not found", "error.tenant_not_found");
@@ -21,6 +23,7 @@ public final class Messages {
     put("Branch not found", "error.branch_not_found");
     put("Unsupported role", "error.unsupported_role");
     put("Staff user not found", "error.staff_user_not_found");
+    put("Currency not found", "error.currency_not_found");
 
     // QR / sessions / table / menu
     put("Invalid QR signature", "error.invalid_qr_signature");
@@ -33,6 +36,7 @@ public final class Messages {
     put("Session secret not set", "error.session_secret_not_set");
     put("Invalid session secret", "error.invalid_session_secret");
     put("No active call", "error.no_active_call");
+    put("guestSessionId required", "error.guest_session_id_required");
 
     // Rate limits
     put("Too many session starts from IP", "error.too_many_session_starts");
@@ -71,6 +75,7 @@ public final class Messages {
     put("Bill request not found", "error.billrequest_not_found");
     put("Bill request does not belong to session", "error.billrequest_not_belong_session");
     put("Bill request is not active", "error.billrequest_not_active");
+    put("Bill request is not confirmed", "error.billrequest_not_confirmed");
     put("Unsupported paymentMethod", "error.unsupported_payment_method");
     put("Cash payment is disabled", "error.cash_disabled");
     put("Terminal payment is disabled", "error.terminal_disabled");
@@ -85,9 +90,22 @@ public final class Messages {
     // Admin layout / data
     put("layoutX + layoutW must be <= 100", "error.layout_x_w_exceed");
     put("layoutY + layoutH must be <= 100", "error.layout_y_h_exceed");
+    put("layoutX out of range", "error.layout_x_out_of_range");
+    put("layoutY out of range", "error.layout_y_out_of_range");
+    put("layoutW out of range", "error.layout_w_out_of_range");
+    put("layoutH out of range", "error.layout_h_out_of_range");
+    put("hallId does not match planId", "error.hall_id_plan_mismatch");
+    put("branchId is required", "error.branch_id_required");
     put("zonesJson must be array", "error.zones_json_array");
+    put("zonesJson too large", "error.zones_json_too_large");
+    put("zonesJson too many zones", "error.zones_json_too_many");
+    put("zonesJson invalid zone", "error.zones_json_invalid_zone");
+    put("zonesJson zone id too long", "error.zones_json_zone_id_too_long");
+    put("zonesJson zone name too long", "error.zones_json_zone_name_too_long");
     put("zonesJson width must be > 0", "error.zones_json_width");
     put("zonesJson height must be > 0", "error.zones_json_height");
+    put("zonesJson color invalid", "error.zones_json_color_invalid");
+    put("zonesJson invalid", "error.zones_json_invalid");
     put("Unknown currency", "error.unknown_currency");
     put("Currency is inactive", "error.currency_inactive");
     put("tables required", "error.tables_required");
@@ -95,6 +113,11 @@ public final class Messages {
     put("Waiter not found", "error.waiter_not_found");
     put("Hall not found", "error.hall_not_found");
     put("Hall does not belong to branch", "error.hall_wrong_branch");
+    put("Hall has tables assigned", "error.hall_has_tables");
+    put("Body required", "error.body_required");
+    put("Template not found", "error.template_not_found");
+    put("Version not found", "error.version_not_found");
+    put("Version does not belong to plan", "error.version_not_belong_plan");
     put("Modifier group not found", "error.modifier_group_not_found");
     put("Modifier option not found", "error.modifier_option_not_found");
 

@@ -24,12 +24,15 @@ public class LocalizedExceptionHandler {
     String reason = ex.getReason();
     Locale locale = LocaleContextHolder.getLocale();
     String message = reason;
+    String code = null;
     Messages.Resolved resolved = Messages.resolve(reason);
     if (resolved != null) {
       message = messageSource.getMessage(resolved.key(), resolved.args(), reason, locale);
+      code = resolved.key();
     }
     Map<String, Object> body = new HashMap<>();
     body.put("message", message == null ? "" : message);
+    if (code != null) body.put("code", code);
     body.put("status", ex.getStatusCode().value());
     return ResponseEntity.status(ex.getStatusCode()).body(body);
   }

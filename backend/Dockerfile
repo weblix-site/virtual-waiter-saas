@@ -6,6 +6,7 @@ RUN gradle clean bootJar --no-daemon
 
 FROM eclipse-temurin:17-jre
 WORKDIR /app
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 COPY --from=build /home/gradle/project/build/libs/*.jar /app/app.jar
 ENV JAVA_OPTS=""
 EXPOSE 8080

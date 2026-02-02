@@ -166,8 +166,29 @@ public class SuperAdminController {
   }
 
   // --- Staff users (global create) ---
-  public record StaffUserDto(long id, Long branchId, String username, String role, boolean isActive) {}
-  public record CreateStaffUserRequest(@NotNull Long branchId, @NotBlank String username, @NotBlank String password, @NotBlank String role) {}
+  public record StaffUserDto(
+    long id,
+    Long branchId,
+    String username,
+    String role,
+    boolean isActive,
+    String firstName,
+    String lastName,
+    Integer age,
+    String gender,
+    String photoUrl
+  ) {}
+  public record CreateStaffUserRequest(
+    @NotNull Long branchId,
+    @NotBlank String username,
+    @NotBlank String password,
+    @NotBlank String role,
+    String firstName,
+    String lastName,
+    Integer age,
+    String gender,
+    String photoUrl
+  ) {}
 
   @PostMapping("/staff")
   public StaffUserDto createStaff(@Valid @RequestBody CreateStaffUserRequest req, Authentication auth) {
@@ -182,11 +203,28 @@ public class SuperAdminController {
     su.passwordHash = passwordEncoder.encode(req.password);
     su.role = role;
     su.isActive = true;
+    su.firstName = trimOrNull(req.firstName);
+    su.lastName = trimOrNull(req.lastName);
+    su.age = sanitizeAge(req.age);
+    su.gender = sanitizeGender(req.gender);
+    su.photoUrl = trimOrNull(req.photoUrl);
     su = staffUserRepo.save(su);
-    return new StaffUserDto(su.id, su.branchId, su.username, su.role, su.isActive);
+    return new StaffUserDto(
+      su.id, su.branchId, su.username, su.role, su.isActive,
+      su.firstName, su.lastName, su.age, su.gender, su.photoUrl
+    );
   }
 
-  public record UpdateStaffUserRequest(String password, String role, Boolean isActive) {}
+  public record UpdateStaffUserRequest(
+    String password,
+    String role,
+    Boolean isActive,
+    String firstName,
+    String lastName,
+    Integer age,
+    String gender,
+    String photoUrl
+  ) {}
 
   @PatchMapping("/staff/{id}")
   public StaffUserDto updateStaff(@PathVariable long id, @RequestBody UpdateStaffUserRequest req, Authentication auth) {
@@ -204,8 +242,16 @@ public class SuperAdminController {
       su.role = role;
     }
     if (req.isActive != null) su.isActive = req.isActive;
+    if (req.firstName != null) su.firstName = trimOrNull(req.firstName);
+    if (req.lastName != null) su.lastName = trimOrNull(req.lastName);
+    if (req.age != null) su.age = sanitizeAge(req.age);
+    if (req.gender != null) su.gender = sanitizeGender(req.gender);
+    if (req.photoUrl != null) su.photoUrl = trimOrNull(req.photoUrl);
     su = staffUserRepo.save(su);
-    return new StaffUserDto(su.id, su.branchId, su.username, su.role, su.isActive);
+    return new StaffUserDto(
+      su.id, su.branchId, su.username, su.role, su.isActive,
+      su.firstName, su.lastName, su.age, su.gender, su.photoUrl
+    );
   }
 
   @DeleteMapping("/staff/{id}")
@@ -349,5 +395,23 @@ public class SuperAdminController {
       return isStart ? d.atStartOfDay().toInstant(ZoneOffset.UTC)
         : d.plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC).minusSeconds(1);
     }
+  }
+
+  private static String trimOrNull(String v) {
+    if (v == null) return null;
+    String t = v.trim();
+    return t.isEmpty() ? null : t;
+  }
+
+  private static Integer sanitizeAge(Integer v) {
+    if (v == null) return null;
+    if (v < 0 || v > 120) return null;
+    return v;
+  }
+
+  private static String sanitizeGender(String v) {
+    if (v == null) return null;
+    String t = v.trim().toLowerCase(Locale.ROOT);
+    return switch (t) { case "male", "female", "other" -> t; default -> null; };
   }
 }

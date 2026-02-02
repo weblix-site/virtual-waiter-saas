@@ -165,6 +165,7 @@ String _tr(BuildContext context, String key) {
   const dict = {
     'staffLogin': {'ru': 'Вход персонала', 'ro': 'Autentificare personal', 'en': 'Staff Login'},
     'username': {'ru': 'Логин', 'ro': 'Utilizator', 'en': 'Username'},
+    'role': {'ru': 'Роль', 'ro': 'Rol', 'en': 'Role'},
     'password': {'ru': 'Пароль', 'ro': 'Parolă', 'en': 'Password'},
     'login': {'ru': 'Войти', 'ro': 'Autentificare', 'en': 'Login'},
     'loading': {'ru': 'Загрузка...', 'ro': 'Se încarcă...', 'en': 'Loading...'},
@@ -175,8 +176,22 @@ String _tr(BuildContext context, String key) {
     'bills': {'ru': 'Счета', 'ro': 'Note', 'en': 'Bills'},
     'kitchen': {'ru': 'Кухня', 'ro': 'Bucătărie', 'en': 'Kitchen'},
     'hall': {'ru': 'Зал', 'ro': 'Sală', 'en': 'Hall'},
+    'lastHall': {'ru': 'Последний зал', 'ro': 'Ultima sală', 'en': 'Last hall'},
+    'lastHallLabel': {'ru': 'Последний зал: ', 'ro': 'Ultima sală: ', 'en': 'Last hall: '},
+    'resetHall': {'ru': 'Сбросить зал', 'ro': 'Resetează sala', 'en': 'Reset hall'},
     'history': {'ru': 'История', 'ro': 'Istoric', 'en': 'History'},
     'events': {'ru': 'События', 'ro': 'Evenimente', 'en': 'Events'},
+    'profile': {'ru': 'Профиль', 'ro': 'Profil', 'en': 'Profile'},
+    'myProfile': {'ru': 'Мой профиль', 'ro': 'Profilul meu', 'en': 'My profile'},
+    'firstName': {'ru': 'Имя', 'ro': 'Prenume', 'en': 'First name'},
+    'lastName': {'ru': 'Фамилия', 'ro': 'Nume', 'en': 'Last name'},
+    'age': {'ru': 'Возраст', 'ro': 'Vârstă', 'en': 'Age'},
+    'gender': {'ru': 'Пол', 'ro': 'Gen', 'en': 'Gender'},
+    'genderMale': {'ru': 'Мужской', 'ro': 'Masculin', 'en': 'Male'},
+    'genderFemale': {'ru': 'Женский', 'ro': 'Feminin', 'en': 'Female'},
+    'genderOther': {'ru': 'Другое', 'ro': 'Altul', 'en': 'Other'},
+    'photoUrl': {'ru': 'Фото', 'ro': 'Foto', 'en': 'Photo'},
+    'notSet': {'ru': 'не задано', 'ro': 'nesetat', 'en': 'not set'},
     'refresh': {'ru': 'Обновить', 'ro': 'Reîmprospătează', 'en': 'Refresh'},
     'sortNewest': {'ru': 'Сорт: новые сверху', 'ro': 'Sortare: cele mai noi', 'en': 'Sort: newest first'},
     'sortSla': {'ru': 'Сорт: SLA (старые сверху)', 'ro': 'Sortare: SLA (cele mai vechi)', 'en': 'Sort: SLA (oldest first)'},
@@ -410,6 +425,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Timer? _timer;
   List<Map<String, dynamic>> _halls = const [];
   int? _hallId;
+  static const String _lastHallPrefKey = 'staff_last_hall_id';
   DateTime _sinceOrders = DateTime.now();
   DateTime _sinceCalls = DateTime.now();
   DateTime _sinceBills = DateTime.now();
@@ -422,6 +438,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final AudioPlayer _player = AudioPlayer();
   DateTime? _lastKitchenBeepAt;
   DateTime? _lastSnackAt;
+  int? _lastHallPrefId;
 
   String get _auth => base64Encode(utf8.encode('${widget.username}:${widget.password}'));
 
@@ -599,12 +616,22 @@ class _HomeScreenState extends State<HomeScreen> {
       );
       if (res.statusCode != 200) return;
       final body = (jsonDecode(res.body) as List<dynamic>).cast<Map<String, dynamic>>();
-      setState(() {
-        _halls = body;
-        if (_hallId == null && body.isNotEmpty) {
-          _hallId = (body.first['id'] as num).toInt();
+      int? nextHallId = _hallId;
+      if (body.isNotEmpty) {
+        if (nextHallId == null) {
+          nextHallId = (body.first['id'] as num).toInt();
+        } else {
+          final exists = body.any((h) => (h['id'] as num?)?.toInt() == nextHallId);
+          if (!exists) nextHallId = (body.first['id'] as num).toInt();
         }
-      });
+      }
+      if (mounted) {
+        setState(() {
+          _halls = body;
+          _hallId = nextHallId;
+        });
+      }
+      await _saveLastHallPref(nextHallId);
     } catch (_) {}
   }
 
@@ -642,6 +669,16 @@ class _HomeScreenState extends State<HomeScreen> {
     return List.generate(32, (_) => chars[rnd.nextInt(chars.length)]).join();
   }
 
+  String? _hallNameById(int? id) {
+    if (id == null) return null;
+    try {
+      final hall = _halls.firstWhere((h) => (h['id'] as num?)?.toInt() == id);
+      return hall['name']?.toString();
+    } catch (_) {
+      return null;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -649,7 +686,32 @@ class _HomeScreenState extends State<HomeScreen> {
     _timer = Timer.periodic(const Duration(seconds: 15), (_) => _poll());
     _poll();
     _registerDevice();
-    _loadHalls();
+    _loadLastHallPref().then((_) => _loadHalls());
+  }
+
+  Future<void> _loadLastHallPref() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final v = prefs.getInt(_lastHallPrefKey);
+      if (v != null && mounted) {
+        setState(() {
+          _hallId = v;
+          _lastHallPrefId = v;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _saveLastHallPref(int? hallId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (hallId == null) {
+        await prefs.remove(_lastHallPrefKey);
+      } else {
+        await prefs.setInt(_lastHallPrefKey, hallId);
+      }
+      if (mounted) setState(() => _lastHallPrefId = hallId);
+    } catch (_) {}
   }
 
   void _listenToFcm() {
@@ -694,6 +756,7 @@ class _HomeScreenState extends State<HomeScreen> {
       FloorPlanTab(username: widget.username, password: widget.password),
       HistoryTab(username: widget.username, password: widget.password),
       NotificationsTab(events: _events),
+      ProfileTab(username: widget.username, password: widget.password),
     ];
     return Scaffold(
       body: Column(
@@ -715,10 +778,36 @@ class _HomeScreenState extends State<HomeScreen> {
                                 child: Text(h['name']?.toString() ?? _tr(context, 'hallFallback')),
                               ))
                           .toList(),
-                      onChanged: (v) => setState(() => _hallId = v),
+                      onChanged: (v) {
+                        setState(() => _hallId = v);
+                        _saveLastHallPref(v);
+                      },
                     ),
                   ),
                   const SizedBox(width: 6),
+                  if (_lastHallPrefId != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(color: Colors.blue, width: 1),
+                      ),
+                      child: Text(
+                        '${_tr(context, 'lastHallLabel')}${_hallNameById(_lastHallPrefId) ?? "${_tr(context, 'hallFallback')} #${_lastHallPrefId}"}',
+                        style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.w600, fontSize: 12),
+                      ),
+                    ),
+                  if (_lastHallPrefId != null) const SizedBox(width: 6),
+                  if (_lastHallPrefId != null)
+                    TextButton(
+                      onPressed: () async {
+                        await _saveLastHallPref(null);
+                        if (!mounted) return;
+                        setState(() => _hallId = _halls.isNotEmpty ? (_halls.first['id'] as num).toInt() : null);
+                      },
+                      child: Text(_tr(context, 'resetHall')),
+                    ),
                   IconButton(
                     tooltip: _tr(context, 'slaSettings'),
                     onPressed: _showSlaDialog,
@@ -765,6 +854,7 @@ class _HomeScreenState extends State<HomeScreen> {
           NavigationDestination(icon: const Icon(Icons.map), label: _tr(context, 'hall')),
           NavigationDestination(icon: const Icon(Icons.history), label: _tr(context, 'history')),
           NavigationDestination(icon: const Icon(Icons.notifications), label: _tr(context, 'events')),
+          NavigationDestination(icon: const Icon(Icons.person), label: _tr(context, 'profile')),
         ],
       ),
     );
@@ -793,6 +883,114 @@ class NotificationsTab extends StatelessWidget {
                 );
               },
             ),
+    );
+  }
+}
+
+class ProfileTab extends StatefulWidget {
+  final String username;
+  final String password;
+
+  const ProfileTab({super.key, required this.username, required this.password});
+
+  @override
+  State<ProfileTab> createState() => _ProfileTabState();
+}
+
+class _ProfileTabState extends State<ProfileTab> {
+  bool _loading = true;
+  String? _error;
+  Map<String, dynamic>? _profile;
+
+  String get _auth => base64Encode(utf8.encode('${widget.username}:${widget.password}'));
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final res = await http.get(
+        Uri.parse('$apiBase/api/staff/me'),
+        headers: {'Authorization': 'Basic $_auth'},
+      );
+      if (res.statusCode != 200) throw Exception('${_tr(context, 'loadFailed')} (${res.statusCode})');
+      setState(() => _profile = jsonDecode(res.body) as Map<String, dynamic>);
+    } catch (e) {
+      setState(() => _error = e.toString());
+    } finally {
+      setState(() => _loading = false);
+    }
+  }
+
+  String _genderLabel(BuildContext context, String? g) {
+    switch ((g ?? '').toLowerCase()) {
+      case 'male':
+        return _tr(context, 'genderMale');
+      case 'female':
+        return _tr(context, 'genderFemale');
+      case 'other':
+        return _tr(context, 'genderOther');
+      default:
+        return _tr(context, 'notSet');
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(_tr(context, 'profile'))),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(child: Text(_error!))
+              : _profile == null
+                  ? Center(child: Text(_tr(context, 'loadFailed')))
+                  : ListView(
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        Text(_tr(context, 'myProfile'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 12),
+                        if ((_profile?['photoUrl'] ?? '').toString().isNotEmpty)
+                          Center(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(48),
+                              child: Image.network(
+                                _profile?['photoUrl']?.toString() ?? '',
+                                width: 96,
+                                height: 96,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          ),
+                        const SizedBox(height: 12),
+                        _profileRow(context, _tr(context, 'username'), _profile?['username']?.toString()),
+                        _profileRow(context, _tr(context, 'role'), _profile?['role']?.toString()),
+                        _profileRow(context, _tr(context, 'firstName'), _profile?['firstName']?.toString()),
+                        _profileRow(context, _tr(context, 'lastName'), _profile?['lastName']?.toString()),
+                        _profileRow(context, _tr(context, 'age'), _profile?['age']?.toString()),
+                        _profileRow(context, _tr(context, 'gender'), _genderLabel(context, _profile?['gender']?.toString())),
+                      ],
+                    ),
+    );
+  }
+
+  Widget _profileRow(BuildContext context, String label, String? value) {
+    final v = (value == null || value.isEmpty) ? _tr(context, 'notSet') : value;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          SizedBox(width: 120, child: Text(label, style: const TextStyle(color: Colors.black54))),
+          Expanded(child: Text(v)),
+        ],
+      ),
     );
   }
 }
@@ -1959,6 +2157,8 @@ class _FloorPlanTabState extends State<FloorPlanTab> {
   bool _blinkOn = true;
   final Map<String, Map<String, dynamic>> _layoutCache = {};
   bool _syncingActivePlan = false;
+  static const String _lastHallPrefKey = 'staff_last_hall_id';
+  int? _lastHallPrefId;
 
   String get _auth => base64Encode(utf8.encode('${widget.username}:${widget.password}'));
 
@@ -1977,11 +2177,17 @@ class _FloorPlanTabState extends State<FloorPlanTab> {
         );
         if (hallsRes.statusCode == 200) {
           hallsBody = (jsonDecode(hallsRes.body) as List<dynamic>).cast<Map<String, dynamic>>();
-          if (hallId == null && hallsBody.isNotEmpty) {
-            hallId = (hallsBody.first['id'] as num).toInt();
-          }
         }
       }
+      if (hallsBody.isNotEmpty) {
+        if (hallId == null) {
+          hallId = (hallsBody.first['id'] as num).toInt();
+        } else {
+          final exists = hallsBody.any((h) => (h['id'] as num?)?.toInt() == hallId);
+          if (!exists) hallId = (hallsBody.first['id'] as num).toInt();
+        }
+      }
+      await _saveLastHallPref(hallId);
 
       List<Map<String, dynamic>> plansBody = _plans;
       int? planId = _planId;
@@ -2186,12 +2392,49 @@ class _FloorPlanTabState extends State<FloorPlanTab> {
   void initState() {
     super.initState();
     _loadLegendPref();
-    _loadPlanPrefs();
-    _loadAll(forceLayout: true, forceHalls: true);
+    _loadHallPref().then((_) {
+      _loadPlanPrefs();
+      _loadAll(forceLayout: true, forceHalls: true);
+    });
     _pollTimer = Timer.periodic(const Duration(seconds: 15), (_) => _loadDynamic());
     _blinkTimer = Timer.periodic(const Duration(milliseconds: 600), (_) {
       if (mounted) setState(() => _blinkOn = !_blinkOn);
     });
+  }
+
+  Future<void> _loadHallPref() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final v = prefs.getInt(_lastHallPrefKey);
+      if (v != null && mounted) {
+        setState(() {
+          _hallId = v;
+          _lastHallPrefId = v;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _saveLastHallPref(int? hallId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (hallId == null) {
+        await prefs.remove(_lastHallPrefKey);
+      } else {
+        await prefs.setInt(_lastHallPrefKey, hallId);
+      }
+      if (mounted) setState(() => _lastHallPrefId = hallId);
+    } catch (_) {}
+  }
+
+  String? _hallNameById(int? id) {
+    if (id == null) return null;
+    try {
+      final hall = _halls.firstWhere((h) => (h['id'] as num?)?.toInt() == id);
+      return hall['name']?.toString();
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> _loadLegendPref() async {
@@ -2464,10 +2707,41 @@ class _FloorPlanTabState extends State<FloorPlanTab> {
                     _hallId = v;
                     _planId = null;
                   });
+                  _saveLastHallPref(v);
                   _loadPlanPrefs();
                   _loadAll(forceLayout: true, forceHalls: true);
                 },
               ),
+            ),
+          if (_lastHallPrefId != null)
+            Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: Colors.blue, width: 1),
+                ),
+                child: Text(
+                  '${_tr(context, 'lastHallLabel')}${_hallNameById(_lastHallPrefId) ?? "${_tr(context, 'hallFallback')} #${_lastHallPrefId}"}',
+                  style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.w600, fontSize: 12),
+                ),
+              ),
+            ),
+          if (_lastHallPrefId != null)
+            TextButton(
+              onPressed: () async {
+                await _saveLastHallPref(null);
+                if (!mounted) return;
+                setState(() {
+                  _hallId = _halls.isNotEmpty ? (_halls.first['id'] as num).toInt() : null;
+                  _planId = null;
+                });
+                _loadPlanPrefs();
+                _loadAll(forceLayout: true, forceHalls: true);
+              },
+              child: Text(_tr(context, 'resetHall')),
             ),
           IconButton(onPressed: () => _loadAll(forceLayout: true, forceHalls: true), icon: const Icon(Icons.refresh)),
         ],

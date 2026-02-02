@@ -43,7 +43,8 @@ public class BranchSettingsService {
     List<Integer> tipsPercentages,
     boolean payCashEnabled,
     boolean payTerminalEnabled,
-    String currencyCode
+    String currencyCode,
+    String defaultLang
   ) {}
 
   public Resolved resolveForBranch(long branchId) {
@@ -62,7 +63,8 @@ public class BranchSettingsService {
       listOr(s == null ? null : s.tipsPercentages, tipsDefaults.percentages),
       boolOr(s == null ? null : s.payCashEnabled, true),
       boolOr(s == null ? null : s.payTerminalEnabled, true),
-      strOr(s == null ? null : s.currencyCode, "MDL")
+      strOr(s == null ? null : s.currencyCode, "MDL"),
+      strOr(s == null ? null : s.defaultLang, "ru")
     );
   }
 

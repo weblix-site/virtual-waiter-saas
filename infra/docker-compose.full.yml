@@ -1,6 +1,11 @@
 services:
   postgres:
     image: postgres:16
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -9,21 +14,43 @@ services:
       - "${POSTGRES_PORT}:5432"
     volumes:
       - vw_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   backend:
     build:
       context: ..
       dockerfile: backend/Dockerfile
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       APP_PUBLIC_BASE_URL: ${APP_PUBLIC_BASE_URL}
       APP_QR_HMAC_SECRET: ${APP_QR_HMAC_SECRET}
+      APP_RATELIMIT_REDIS_ENABLED: ${RATE_LIMIT_REDIS_ENABLED}
+      APP_RATELIMIT_REDIS_HOST: ${RATE_LIMIT_REDIS_HOST}
+      APP_RATELIMIT_REDIS_PORT: ${RATE_LIMIT_REDIS_PORT}
+      APP_RATELIMIT_REDIS_PASSWORD: ${RATE_LIMIT_REDIS_PASSWORD}
     ports:
       - "${BACKEND_PORT}:8080"
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:8080/ >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
   guest-web:
     build:
@@ -31,12 +58,34 @@ services:
       dockerfile: guest-web/Dockerfile
       args:
         NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
     environment:
       NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE}
     ports:
       - "${WEB_PORT}:3000"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+  redis:
+    image: redis:7
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+    ports:
+      - "6379:6379"
+    profiles: ["redis"]
 
 volumes:
   vw_pgdata:

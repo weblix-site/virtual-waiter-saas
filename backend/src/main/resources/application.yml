@@ -4,9 +4,9 @@ spring:
   messages:
     basename: i18n/messages
   datasource:
-    url: jdbc:postgresql://localhost:5432/vw
-    username: vw
-    password: vw
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/vw}
+    username: ${SPRING_DATASOURCE_USERNAME:vw}
+    password: ${SPRING_DATASOURCE_PASSWORD:vw}
   jpa:
     hibernate:
       ddl-auto: validate
@@ -16,12 +16,19 @@ spring:
 app:
   bill:
     expireMinutes: 120
+    allowPayOtherGuestsItems: false
+    allowPayWholeTable: false
   qr:
-    hmacSecret: "CHANGE_ME_DEV_SECRET"
+    hmacSecret: ${APP_QR_HMAC_SECRET:}
     signatureTtlSeconds: 86400
     allowedClockSkewSeconds: 120
     allowLegacySig: false
-  publicBaseUrl: "http://localhost:3000"
+  publicBaseUrl: ${APP_PUBLIC_BASE_URL:http://localhost:3000}
+  auth:
+    cookieSecret: ${APP_AUTH_COOKIE_SECRET:}
+    cookieName: ${APP_AUTH_COOKIE_NAME:vw_auth}
+    cookieMaxAgeSeconds: ${APP_AUTH_COOKIE_MAX_AGE_SECONDS:604800}
+    cookieSecure: ${APP_AUTH_COOKIE_SECURE:true}
   otp:
     requireForFirstOrder: false
     ttlSeconds: 180
@@ -30,6 +37,11 @@ app:
     length: 4
     devEchoCode: true
   rateLimit:
+    redis:
+      enabled: ${APP_RATELIMIT_REDIS_ENABLED:false}
+      host: ${APP_RATELIMIT_REDIS_HOST:}
+      port: ${APP_RATELIMIT_REDIS_PORT:6379}
+      password: ${APP_RATELIMIT_REDIS_PASSWORD:}
     otp:
       maxRequests: 5
       windowSeconds: 300
@@ -55,12 +67,9 @@ app:
   tips:
     enabled: false
     percentages: [5,10,15,20]
-  bill:
-    allowPayOtherGuestsItems: false
-    allowPayWholeTable: false
 
 push:
   provider: LOG
-  fcmServerKey: ""
+  fcmServerKey: ${FCM_SERVER_KEY:}
   fcmApiUrl: "https://fcm.googleapis.com/fcm/send"
   dryRun: false

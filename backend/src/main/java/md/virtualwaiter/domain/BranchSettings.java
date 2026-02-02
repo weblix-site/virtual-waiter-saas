@@ -51,4 +51,7 @@ public class BranchSettings {
 
   @Column(name = "currency_code")
   public String currencyCode;
+
+  @Column(name = "default_lang")
+  public String defaultLang;
 }

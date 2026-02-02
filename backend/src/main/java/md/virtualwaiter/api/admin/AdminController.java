@@ -744,7 +744,8 @@ public class AdminController {
     List<Integer> tipsPercentages,
     boolean payCashEnabled,
     boolean payTerminalEnabled,
-    String currencyCode
+    String currencyCode,
+    String defaultLang
   ) {}
 
   @GetMapping("/branch-settings")
@@ -767,7 +768,8 @@ public class AdminController {
       s.tipsPercentages(),
       s.payCashEnabled(),
       s.payTerminalEnabled(),
-      s.currencyCode()
+      s.currencyCode(),
+      s.defaultLang()
     );
   }
 
@@ -785,7 +787,8 @@ public class AdminController {
     List<Integer> tipsPercentages,
     Boolean payCashEnabled,
     Boolean payTerminalEnabled,
-    String currencyCode
+    String currencyCode,
+    String defaultLang
   ) {}
 
   @PutMapping("/branch-settings")
@@ -827,6 +830,10 @@ public class AdminController {
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Currency is inactive");
       }
       s.currencyCode = code;
+    }
+    if (req.defaultLang != null && !req.defaultLang.isBlank()) {
+      String lang = normalizeLocale(req.defaultLang);
+      s.defaultLang = lang;
     }
 
     settingsRepo.save(s);
@@ -1456,9 +1463,38 @@ public class AdminController {
   }
 
   // --- Staff users ---
-  public record StaffUserDto(long id, Long branchId, String username, String role, boolean isActive) {}
-  public record CreateStaffUserRequest(@NotBlank String username, @NotBlank String password, @NotBlank String role) {}
-  public record UpdateStaffUserRequest(String password, String role, Boolean isActive) {}
+  public record StaffUserDto(
+    long id,
+    Long branchId,
+    String username,
+    String role,
+    boolean isActive,
+    String firstName,
+    String lastName,
+    Integer age,
+    String gender,
+    String photoUrl
+  ) {}
+  public record CreateStaffUserRequest(
+    @NotBlank String username,
+    @NotBlank String password,
+    @NotBlank String role,
+    String firstName,
+    String lastName,
+    Integer age,
+    String gender,
+    String photoUrl
+  ) {}
+  public record UpdateStaffUserRequest(
+    String password,
+    String role,
+    Boolean isActive,
+    String firstName,
+    String lastName,
+    Integer age,
+    String gender,
+    String photoUrl
+  ) {}
 
   @GetMapping("/staff")
   public List<StaffUserDto> listStaff(@RequestParam(value = "branchId", required = false) Long branchId, Authentication auth) {
@@ -1467,7 +1503,10 @@ public class AdminController {
     List<StaffUser> users = staffUserRepo.findByBranchId(bid);
     List<StaffUserDto> out = new ArrayList<>();
     for (StaffUser su : users) {
-      out.add(new StaffUserDto(su.id, su.branchId, su.username, su.role, su.isActive));
+      out.add(new StaffUserDto(
+        su.id, su.branchId, su.username, su.role, su.isActive,
+        su.firstName, su.lastName, su.age, su.gender, su.photoUrl
+      ));
     }
     return out;
   }
@@ -1490,9 +1529,17 @@ public class AdminController {
     su.passwordHash = passwordEncoder.encode(req.password);
     su.role = role;
     su.isActive = true;
+    su.firstName = trimOrNull(req.firstName);
+    su.lastName = trimOrNull(req.lastName);
+    su.age = sanitizeAge(req.age);
+    su.gender = sanitizeGender(req.gender);
+    su.photoUrl = trimOrNull(req.photoUrl);
     su = staffUserRepo.save(su);
     auditService.log(u, "CREATE", "StaffUser", su.id, null);
-    return new StaffUserDto(su.id, su.branchId, su.username, su.role, su.isActive);
+    return new StaffUserDto(
+      su.id, su.branchId, su.username, su.role, su.isActive,
+      su.firstName, su.lastName, su.age, su.gender, su.photoUrl
+    );
   }
 
   @PatchMapping("/staff/{id}")
@@ -1512,9 +1559,17 @@ public class AdminController {
       su.role = role;
     }
     if (req.isActive != null) su.isActive = req.isActive;
+    if (req.firstName != null) su.firstName = trimOrNull(req.firstName);
+    if (req.lastName != null) su.lastName = trimOrNull(req.lastName);
+    if (req.age != null) su.age = sanitizeAge(req.age);
+    if (req.gender != null) su.gender = sanitizeGender(req.gender);
+    if (req.photoUrl != null) su.photoUrl = trimOrNull(req.photoUrl);
     su = staffUserRepo.save(su);
     auditService.log(u, "UPDATE", "StaffUser", su.id, null);
-    return new StaffUserDto(su.id, su.branchId, su.username, su.role, su.isActive);
+    return new StaffUserDto(
+      su.id, su.branchId, su.username, su.role, su.isActive,
+      su.firstName, su.lastName, su.age, su.gender, su.photoUrl
+    );
   }
 
   @DeleteMapping("/staff/{id}")
@@ -2119,5 +2174,31 @@ public class AdminController {
       return "\"" + s + "\"";
     }
     return s;
+  }
+
+  private static String normalizeLocale(String raw) {
+    if (raw == null) return "ru";
+    String v = raw.trim().toLowerCase(Locale.ROOT);
+    if (v.startsWith("ro")) return "ro";
+    if (v.startsWith("en")) return "en";
+    return "ru";
+  }
+
+  private static String trimOrNull(String v) {
+    if (v == null) return null;
+    String t = v.trim();
+    return t.isEmpty() ? null : t;
+  }
+
+  private static Integer sanitizeAge(Integer v) {
+    if (v == null) return null;
+    if (v < 0 || v > 120) return null;
+    return v;
+  }
+
+  private static String sanitizeGender(String v) {
+    if (v == null) return null;
+    String t = v.trim().toLowerCase(Locale.ROOT);
+    return switch (t) { case "male", "female", "other" -> t; default -> null; };
   }
 }

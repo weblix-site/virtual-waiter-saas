@@ -6,6 +6,3 @@ services:
       POSTGRES_USER: vw
       POSTGRES_PASSWORD: vw
     ports: ["5432:5432"]
-  redis:
-    image: redis:7
-    ports: ["6379:6379"]

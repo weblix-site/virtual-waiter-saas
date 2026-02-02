@@ -1,119 +1,119 @@
-# Virtual Waiter (SaaS) — MVP Starter
+# Virtual Waiter (SaaS) — платформа «Виртуальный официант»
 
-This repo is a **starting implementation** of the Technical Spec (ТЗ) for the Virtual Waiter platform.
+Репозиторий содержит MVP SaaS‑платформы для ресторанов/кафе: гость открывает меню по QR, оформляет заказ, вызывает официанта, запрашивает счёт и оставляет чаевые. Платформа мульти‑тенантная, с планами залов и защитой QR‑ссылок.
 
-## What is implemented (Sprint 1 baseline)
-- **Backend (Java 17 / Spring Boot / PostgreSQL / Flyway)**
-  - Guest session start (`/api/public/session/start`)
-  - Menu by table (`/api/public/menu`)
-  - Create order (`/api/public/orders`)
-  - Call waiter (`/api/public/waiter-call`)
-  - Staff endpoints (Basic Auth + DB-backed users)
-    - `GET /api/staff/me`
-    - `GET /api/staff/orders/active`
-    - `POST /api/staff/orders/{id}/status`
-    - `GET /api/staff/waiter-calls/active`
+## Стек
+- Backend: Java 17, Spring Boot, PostgreSQL, Flyway
+- Guest Web: Next.js (app router)
+- Staff App: Flutter
+- Infra: Docker Compose
 
-- **Guest Web (Next.js)**
-  - Table route `/t/{tablePublicId}`: menu, cart, place order, call waiter
+## Основной функционал
+- Мульти‑тенантность: заведения/филиалы
+- Гостевой поток: меню, корзина, заказ, вызов официанта, счёт, чаевые
+- OTP по SMS (feature flag)
+- Party PIN (объединение гостей)
+- Оффлайн‑оплата: наличные/терминал
+- План зала (Halls/Plans), шаблоны, импорт/экспорт JSON, версии
+- Статистика и аудит (админ/супер‑админ)
+- Валюты: управляются супер‑админом, выбираются для филиалов
+- Ограничения по IP (rate limits)
+- Локализация UI и ошибок (RU/RO/EN)
 
-- **Staff App (Flutter)**
-  - Basic login (Basic Auth), list active orders, order details, update status
-  - Hall view (floor plan) with table highlights for new orders
+## Быстрый старт (локально)
 
-## Quick start (local)
-
-### 1) Start DB
+### 1) База данных
 ```bash
 cd infra
 docker compose up -d
 ```
 
-### 2) Run backend
+### 2) Backend
 ```bash
 cd backend
 gradle bootRun
 ```
+Backend: `http://localhost:8080`
 
-> Note: this repo does not include the Gradle Wrapper yet. If you prefer it, generate it later with `gradle wrapper`.
-
-Backend runs on `http://localhost:8080`.
-
-Demo data is seeded by Flyway:
-- tenant: Demo Cafe
-- branch: Main (id=1)
-- table: #1, public_id = `TBL_DEMO_0001`
-- staff users (Basic Auth):
-  - waiter: `waiter1` / `demo123`
-  - kitchen: `kitchen1` / `demo123`
-
-Swagger UI: `http://localhost:8080/swagger-ui/index.html`
-
-### 3) Run guest web
+### 3) Guest Web
 ```bash
 cd guest-web
 npm install
 NEXT_PUBLIC_API_BASE=http://localhost:8080 npm run dev
 ```
-Open: `http://localhost:3000/t/TBL_DEMO_0001?lang=ru`
+Guest web: `http://localhost:3000/t/TBL_DEMO_0001?lang=ru`
 
-### 4) Run staff app
+### 4) Staff App (Flutter)
 ```bash
 cd staff-app
 flutter pub get
 flutter run --dart-define=API_BASE=http://localhost:8080
 ```
 
-## Next steps (per ТЗ)
-- OTP (sms.md) as a feature-flag (before first order)
-- Party PIN (4 digits) + “join table by PIN”
-- Bill requests: pay own / selected items / whole table (flags)
-- Tips (percentages configurable in admin)
-- Currency: default MDL, set per-branch in admin (super admin manages allowed currencies)
+## Демо‑данные
+Flyway создаёт демо‑данные:
+- tenant: Demo Cafe
+- branch: Main (id=1)
+- table: #1, public_id = `TBL_DEMO_0001`
+- staff (Basic Auth):
+  - waiter: `waiter1` / `demo123`
+  - kitchen: `kitchen1` / `demo123`
 
+## Админка и супер‑админка
+- Admin Web: `http://localhost:3000/admin`
+- Super Admin Web: `http://localhost:3000/superadmin`
 
+## Профили официантов
+- Профиль официанта (имя/фамилия/возраст/пол/фото) заполняется **только** админом или супер‑админом.
+- Гость видит только **имя официанта** и **фото** (если есть).
+- Staff‑app показывает **профиль** в отдельной вкладке.
 
-## QR signature (HMAC)
-Public guest endpoints now require a **QR signature** (`sig`) to prevent tampering with `tablePublicId`.
+## Валюты (end‑to‑end управление)
+- Глобальные валюты создаёт и включает/выключает **Super Admin**.
+- Admin выбирает валюту заведения из активного списка (по умолчанию `MDL`).
+- Backend: `GET /api/admin/currencies` отдаёт только активные валюты для admin; `includeInactive=true` — только для superadmin.
 
-- Signature algorithm: `sig = base64url(HMAC-SHA256(secret, tablePublicId))` (no padding)
-- Configure secret in `backend/src/main/resources/application.yml` under `app.qr.hmacSecret`.
-- Configure public base URL (used for generating signed URLs) under `app.publicBaseUrl`.
+## i18n API (админ/суперадмин и backend‑ошибки)
+- Админка: `guest-web/app/admin`, суперадминка: `guest-web/app/superadmin`.
+- Ошибки backend локализованы через `backend/src/main/resources/i18n/messages_{ru,ro,en}.properties`.
+- Выбор языка для backend:
+  - Заголовок: `X-Lang: ru|ro|en`
+  - Или query‑параметр: `?lang=ru|ro|en`
+  - Если не задано — `Accept-Language`.
+- Для клиента важно передавать язык на все запросы (админ/суперадмин UI уже делает это автоматически).
 
-### Get a signed URL for a table (dev helper)
-Call (Basic Auth as staff):
-- `GET /api/staff/tables/{tablePublicId}/signed-url`
+## QR‑защита
+- Формат ссылки: `.../t/{tablePublicId}?sig=...&ts=...`
+- HMAC‑подпись включена
+- Настройка: `APP_QR_HMAC_SECRET`
 
-Example:
+## Локализация ошибок (Backend)
+Поддерживается:
+- `Accept-Language: ru|ro|en`
+- `X-Lang: ru|ro|en`
+- `?lang=ru|ro|en`
+
+## Rate limits (по IP)
+Смотри `backend/src/main/resources/application.yml`:
+- OTP, Order, Party, WaiterCall, SessionStart, Menu
+
+## Docker Compose (полный стек)
 ```bash
-curl -u waiter1:demo123 "http://localhost:8080/api/staff/tables/TBL_DEMO_0001/signed-url"
+cp .env.example .env
+# отредактировать .env
+
+docker compose -f infra/docker-compose.full.yml --env-file .env up -d --build
 ```
 
-Then open the returned `url` in the browser.
+## Документация и тесты
+- `RUN_WINDOWS.md` — запуск на Windows
+- `RUN_HOSTING.md` — запуск на VPS
+- `TESTS.md` — тест‑сценарии
+- `scripts/` — smoke‑скрипты и проверка миграций
 
-## Floor plan (Halls & Plans)
-Admins can create **halls** and multiple **plans** per hall, then set an active plan.
-
-Key endpoints (admin):
-- `GET /api/admin/halls`
-- `POST /api/admin/halls`
-- `GET /api/admin/halls/{id}`
-- `PATCH /api/admin/halls/{id}` (set `activePlanId`)
-- `GET /api/admin/halls/{hallId}/plans`
-- `POST /api/admin/halls/{hallId}/plans`
-- `PATCH /api/admin/hall-plans/{id}`
-- `POST /api/admin/hall-plans/{id}/duplicate`
-
-Staff:
-- `GET /api/staff/halls`
-- `GET /api/staff/branch-layout?hallId=...`
-
-## Rate limits (per IP)
-Defaults in `backend/src/main/resources/application.yml`:
-- `app.rateLimit.otp.maxRequests`: 5 / `app.rateLimit.otp.windowSeconds`: 300
-- `app.rateLimit.otpVerify.maxRequests`: 8 / `app.rateLimit.otpVerify.windowSeconds`: 300
-- `app.rateLimit.order.maxRequests`: 10 / `app.rateLimit.order.windowSeconds`: 60
-- `app.rateLimit.party.maxRequests`: 10 / `app.rateLimit.party.windowSeconds`: 60
-- `app.rateLimit.waiterCall.maxRequests`: 10 / `app.rateLimit.waiterCall.windowSeconds`: 60
-- `app.rateLimit.sessionStart.maxRequests`: 30 / `app.rateLimit.sessionStart.windowSeconds`: 60
-- `app.rateLimit.menu.maxRequests`: 60 / `app.rateLimit.menu.windowSeconds`: 60
+## Структура репозитория
+- `backend/` — API и миграции
+- `guest-web/` — интерфейс гостя/админа/супер‑админа
+- `staff-app/` — Flutter приложение
+- `infra/` — docker‑compose
+- `scripts/` — проверки и smoke‑тесты

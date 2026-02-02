@@ -11,6 +11,8 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import md.virtualwaiter.security.AuthCookieFilter;
 
 @Configuration
 public class SecurityConfig {
@@ -39,13 +41,14 @@ public class SecurityConfig {
   }
 
   @Bean
-  SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+  SecurityFilterChain filterChain(HttpSecurity http, AuthCookieFilter authCookieFilter) throws Exception {
     http.csrf(csrf -> csrf.disable())
       .authorizeHttpRequests(auth -> auth
-        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/api/public/**").permitAll()
+        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/api/public/**", "/api/auth/**").permitAll()
         .anyRequest().authenticated()
       )
-      .httpBasic(Customizer.withDefaults());
+      .httpBasic(Customizer.withDefaults())
+      .addFilterBefore(authCookieFilter, UsernamePasswordAuthenticationFilter.class);
     return http.build();
   }
 }
