@@ -69,6 +69,7 @@ flutter run --dart-define=API_BASE=http://localhost:8080
 - Party PIN (4 digits) + “join table by PIN”
 - Bill requests: pay own / selected items / whole table (flags)
 - Tips (percentages configurable in admin)
+- Currency: default MDL, set per-branch in admin (super admin manages allowed currencies)
 
 
 

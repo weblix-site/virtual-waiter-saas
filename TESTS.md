@@ -307,6 +307,32 @@ Expected:
 - 409 when hall has tables
 - Deletion succeeds when no tables remain; related plans/templates removed
 
+### D4.3 Hall plan versions
+Steps:
+1. Create plan, edit zones/background, save layout.
+2. Open plan history and verify version entries for CREATE/UPDATE.
+3. Restore an older version.
+Expected:
+- Version list shows latest entries
+- Restore changes plan to selected version
+
+### D4.4 Bulk table operations
+Steps:
+1. Use "Auto layout" for hall; verify tables arranged to grid.
+2. Use "Snap layout"; verify coordinates rounded to grid.
+3. Use "Reset layout"; verify defaults applied (size/shape/rotation/zone).
+Expected:
+- Confirm dialog appears before each action
+- Mass actions update tables for current hall only
+
+### D4.5 Plan import without tables
+Steps:
+1. Import JSON with "Apply tables" unchecked.
+2. Verify background/zones updated.
+3. Verify table positions unchanged.
+Expected:
+- Import works without affecting table layouts
+
 ### D5. Staff CRUD
 Steps:
 1. Create waiter
@@ -317,8 +343,11 @@ Expected:
 ### D6. Branch settings
 Steps:
 1. Toggle OTP/Party/Tips/Payment methods.
+2. Change currency (MDL → another active currency).
+3. Verify all existing menu items were updated to the new currency.
 Expected:
 - Guest web responds accordingly
+- Currency for new menu items defaults to selected currency
 
 ### D7. Parties list
 Steps:
@@ -362,6 +391,14 @@ Steps:
 Expected:
 - Admin role obeys branch access
 
+### E3. Currencies
+Steps:
+1. Add new currency (e.g., EUR) in Super Admin.
+2. Disable currency and verify it disappears from Admin currency dropdown.
+Expected:
+- Super admin can add/disable currencies
+- Admin sees only active currencies
+
 ### E2. Global stats + CSV
 Steps:
 1. Load global stats
@@ -397,6 +434,51 @@ Steps:
 1. Enable OTP; try to order without verify.
 Expected:
 - 403 until verified
+
+---
+
+## G) Минимальные интеграционные тесты
+
+### G1. Smoke script (OTP/Order/BillRequest/Party/Hall‑plans)
+Steps:
+1. Ensure backend is running and admin credentials work.
+2. Export a real table publicId into env: `TABLE_PUBLIC_ID=...`.
+3. Run `scripts/smoke.sh` or `scripts/smoke.ps1`.
+Expected:
+- Session created, order and bill request created
+- Party created
+- Hall plan versions endpoint accessible
+
+### G2. Plan export/import tests
+Steps:
+1. Open Admin → Floor Plan for a hall with tables.
+2. Export JSON and save the file.
+3. Change table positions + background/zones, save layout.
+4. Import the saved JSON with:
+   a) Apply layouts = ON, Apply tables = ON
+   b) Apply layouts = ON, Apply tables = OFF
+5. Repeat import using the Admin API:
+   - `GET /api/admin/hall-plans/{id}/export`
+   - `POST /api/admin/halls/{hallId}/plans/import`
+Expected:
+- Exported JSON includes name/background/zones/tables
+- (a) restores table positions + plan visuals
+- (b) restores only background/zones; table positions unchanged
+
+### G3. Migration + seed check script
+Steps:
+1. Start with Docker installed.
+2. Run `scripts/check_migrations.sh` or `scripts/check_migrations.ps1`.
+Expected:
+- Flyway applied all migrations
+- Demo users (admin1, waiter1, kitchen1, superadmin) exist
+
+### G4. Guest waiter-call cancel
+Steps:
+1. In guest web, press "Call waiter".
+2. Press "Cancel call".
+Expected:
+- Call is closed, staff no longer sees it in active calls
 
 ---
 

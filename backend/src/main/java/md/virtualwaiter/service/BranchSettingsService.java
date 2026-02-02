@@ -42,7 +42,8 @@ public class BranchSettingsService {
     boolean tipsEnabled,
     List<Integer> tipsPercentages,
     boolean payCashEnabled,
-    boolean payTerminalEnabled
+    boolean payTerminalEnabled,
+    String currencyCode
   ) {}
 
   public Resolved resolveForBranch(long branchId) {
@@ -60,7 +61,8 @@ public class BranchSettingsService {
       boolOr(s == null ? null : s.tipsEnabled, tipsDefaults.enabled),
       listOr(s == null ? null : s.tipsPercentages, tipsDefaults.percentages),
       boolOr(s == null ? null : s.payCashEnabled, true),
-      boolOr(s == null ? null : s.payTerminalEnabled, true)
+      boolOr(s == null ? null : s.payTerminalEnabled, true),
+      strOr(s == null ? null : s.currencyCode, "MDL")
     );
   }
 
@@ -86,5 +88,10 @@ public class BranchSettingsService {
       }
     }
     return out.isEmpty() ? def : out;
+  }
+
+  private static String strOr(String v, String def) {
+    if (v == null || v.isBlank()) return def;
+    return v.trim();
   }
 }

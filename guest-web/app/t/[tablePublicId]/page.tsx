@@ -42,6 +42,7 @@ type StartSessionResponse = {
   otpRequired: boolean;
   isVerified: boolean;
   sessionSecret: string;
+  currencyCode?: string;
 };
 
 type BillOptionsItem = {
@@ -124,6 +125,8 @@ export default function TablePage({ params, searchParams }: any) {
   const [ordersHistory, setOrdersHistory] = useState<any[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersExpanded, setOrdersExpanded] = useState(true);
+  const [waiterCallActive, setWaiterCallActive] = useState(false);
+  const [waiterCallStatus, setWaiterCallStatus] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -148,6 +151,18 @@ export default function TablePage({ params, searchParams }: any) {
         setMenu(m);
 
         await refreshBillOptions();
+
+        const wcRes = await fetch(`${API_BASE}/api/public/waiter-call/latest?guestSessionId=${ss.guestSessionId}`, {
+          headers: { ...sessionHeaders() },
+        });
+        if (wcRes.ok && !cancelled) {
+          const wc = await wcRes.json();
+          setWaiterCallActive(true);
+          setWaiterCallStatus(wc.status ?? "NEW");
+        } else if (!cancelled) {
+          setWaiterCallActive(false);
+          setWaiterCallStatus(null);
+        }
 
         const lastBillRes = await fetch(`${API_BASE}/api/public/bill-request/latest?guestSessionId=${ss.guestSessionId}`, {
           headers: { ...sessionHeaders() },
@@ -177,6 +192,7 @@ export default function TablePage({ params, searchParams }: any) {
   const tableChargesCents = useMemo(() => (billOptions?.tableItems ?? []).reduce((sum, it) => sum + it.lineTotalCents, 0), [billOptions]);
   const myChargesCount = useMemo(() => (billOptions?.myItems ?? []).reduce((sum, it) => sum + it.qty, 0), [billOptions]);
   const tableChargesCount = useMemo(() => (billOptions?.tableItems ?? []).reduce((sum, it) => sum + it.qty, 0), [billOptions]);
+  const currencyCode = session?.currencyCode ?? "MDL";
 
   const billItemsForMode = useMemo(() => {
     if (!billOptions) return [] as BillOptionsItem[];
@@ -500,16 +516,66 @@ export default function TablePage({ params, searchParams }: any) {
   async function callWaiter() {
     if (!session) return;
     try {
-      await fetch(`${API_BASE}/api/public/waiter-call`, {
+      const res = await fetch(`${API_BASE}/api/public/waiter-call`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...sessionHeaders() },
         body: JSON.stringify({ guestSessionId: session.guestSessionId }),
       });
+      if (!res.ok) throw new Error("Waiter call failed");
+      setWaiterCallActive(true);
+      setWaiterCallStatus("NEW");
       alert(t(lang, "waiterCalled"));
     } catch {
       alert(t(lang, "errorGeneric"));
     }
   }
+
+  async function cancelWaiterCall() {
+    if (!session) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/public/waiter-call/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...sessionHeaders() },
+        body: JSON.stringify({ guestSessionId: session.guestSessionId }),
+      });
+      if (!res.ok) throw new Error("Cancel failed");
+      setWaiterCallActive(false);
+      setWaiterCallStatus(null);
+      alert(t(lang, "waiterCallCancelled"));
+    } catch {
+      alert(t(lang, "errorGeneric"));
+    }
+  }
+
+  useEffect(() => {
+    if (!session) return;
+    let stopped = false;
+    const tick = async () => {
+      if (stopped) return;
+      try {
+        const wcRes = await fetch(`${API_BASE}/api/public/waiter-call/latest?guestSessionId=${session.guestSessionId}`, {
+          headers: { ...sessionHeaders() },
+        });
+        if (stopped) return;
+        if (wcRes.ok) {
+          const wc = await wcRes.json();
+          setWaiterCallActive(true);
+          setWaiterCallStatus(wc.status ?? "NEW");
+        } else {
+          setWaiterCallActive(false);
+          setWaiterCallStatus(null);
+        }
+      } catch (_) {
+        // ignore polling errors
+      }
+    };
+    const id = window.setInterval(tick, 8000);
+    tick();
+    return () => {
+      stopped = true;
+      window.clearInterval(id);
+    };
+  }, [session]);
   async function createPin() {
     if (!session) return;
     try {
@@ -726,10 +792,23 @@ export default function TablePage({ params, searchParams }: any) {
         </div>
       </div>
 
-      <div style={{ marginTop: 12, display: "flex", gap: 12, flexWrap: "wrap" }}>
-        <button onClick={callWaiter} style={{ padding: "10px 14px" }}>
-          {t(lang, "callWaiter")}
-        </button>
+      <div style={{ marginTop: 12, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+        {!waiterCallActive ? (
+          <button onClick={callWaiter} style={{ padding: "10px 14px" }}>
+            {t(lang, "callWaiter")}
+          </button>
+        ) : (
+          <button onClick={cancelWaiterCall} style={{ padding: "10px 14px" }}>
+            {t(lang, "cancelWaiterCall")}
+          </button>
+        )}
+        {waiterCallActive && (
+          <span style={{ fontSize: 12, color: "#666" }}>
+            {waiterCallStatus === "ACKNOWLEDGED"
+              ? t(lang, "waiterCallAcknowledged")
+              : t(lang, "waiterCallPending")}
+          </span>
+        )}
 
         {billOptions?.enablePartyPin && (
           <>
@@ -991,7 +1070,7 @@ export default function TablePage({ params, searchParams }: any) {
           <hr style={{ border: 0, borderTop: "1px solid #eee", margin: "10px 0" }} />
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <strong>{t(lang, "total")}</strong>
-            <strong>{money(cartTotalCents, "MDL")}</strong>
+            <strong>{money(cartTotalCents, currencyCode)}</strong>
           </div>
           {cartHasMissingModifiers && (
             <div style={{ color: "#b11e46", marginTop: 8 }}>{t(lang, "modifiersRequired")}</div>
@@ -1038,7 +1117,7 @@ export default function TablePage({ params, searchParams }: any) {
               <div style={{ marginTop: 6 }}>
                 {(o.items ?? []).map((it: any) => (
                   <div key={it.id} style={{ fontSize: 13 }}>
-                    {it.name} × {it.qty} — {money(it.unitPriceCents, "MDL")}
+                    {it.name} × {it.qty} — {money(it.unitPriceCents, currencyCode)}
                   </div>
                 ))}
               </div>
@@ -1065,14 +1144,14 @@ export default function TablePage({ params, searchParams }: any) {
               <div style={{ color: "#666", fontSize: 12, marginTop: 4 }}>
                 {myChargesCount} {t(lang, "itemsCount")}
               </div>
-              <div style={{ marginTop: 6, fontSize: 16 }}>{money(myChargesCents, "MDL")}</div>
+              <div style={{ marginTop: 6, fontSize: 16 }}>{money(myChargesCents, currencyCode)}</div>
             </div>
             <div style={{ border: "1px solid #f0f0f0", borderRadius: 8, padding: 10 }}>
               <div style={{ fontWeight: 600 }}>{t(lang, "tableItemsLabel")}</div>
               <div style={{ color: "#666", fontSize: 12, marginTop: 4 }}>
                 {tableChargesCount} {t(lang, "itemsCount")}
               </div>
-              <div style={{ marginTop: 6, fontSize: 16 }}>{money(tableChargesCents, "MDL")}</div>
+              <div style={{ marginTop: 6, fontSize: 16 }}>{money(tableChargesCents, currencyCode)}</div>
             </div>
           </div>
         </div>
@@ -1115,12 +1194,12 @@ export default function TablePage({ params, searchParams }: any) {
                         )}
                         <strong>{it.name}</strong>
                       </div>
-                      <div style={{ color: "#666", fontSize: 12 }}>{it.qty} × {money(it.unitPriceCents, "MDL")}</div>
+                      <div style={{ color: "#666", fontSize: 12 }}>{it.qty} × {money(it.unitPriceCents, currencyCode)}</div>
                       {billOptions.allowPayOtherGuestsItems && it.guestSessionId !== session?.guestSessionId && (
                         <div style={{ color: "#999", fontSize: 12 }}>{t(lang, "otherGuest")}</div>
                       )}
                     </div>
-                    <div><strong>{money(it.lineTotalCents, "MDL")}</strong></div>
+                    <div><strong>{money(it.lineTotalCents, currencyCode)}</strong></div>
                   </div>
                 ))}
               </div>

@@ -19,6 +19,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -38,6 +39,7 @@ public class AdminController {
   private final BranchRepo branchRepo;
   private final BranchHallRepo hallRepo;
   private final HallPlanRepo hallPlanRepo;
+  private final HallPlanVersionRepo hallPlanVersionRepo;
   private final BranchSettingsRepo settingsRepo;
   private final BranchSettingsService settingsService;
   private final QrSignatureService qrSig;
@@ -52,6 +54,7 @@ public class AdminController {
   private final AuditLogRepo auditLogRepo;
   private final TablePartyRepo partyRepo;
   private final GuestSessionRepo guestSessionRepo;
+  private final CurrencyRepo currencyRepo;
 
   public AdminController(
     StaffUserRepo staffUserRepo,
@@ -61,6 +64,7 @@ public class AdminController {
     BranchRepo branchRepo,
     BranchHallRepo hallRepo,
     HallPlanRepo hallPlanRepo,
+    HallPlanVersionRepo hallPlanVersionRepo,
     BranchSettingsRepo settingsRepo,
     BranchSettingsService settingsService,
     QrSignatureService qrSig,
@@ -74,7 +78,8 @@ public class AdminController {
     AuditService auditService,
     AuditLogRepo auditLogRepo,
     TablePartyRepo partyRepo,
-    GuestSessionRepo guestSessionRepo
+    GuestSessionRepo guestSessionRepo,
+    CurrencyRepo currencyRepo
   ) {
     this.staffUserRepo = staffUserRepo;
     this.categoryRepo = categoryRepo;
@@ -83,6 +88,7 @@ public class AdminController {
     this.branchRepo = branchRepo;
     this.hallRepo = hallRepo;
     this.hallPlanRepo = hallPlanRepo;
+    this.hallPlanVersionRepo = hallPlanVersionRepo;
     this.settingsRepo = settingsRepo;
     this.settingsService = settingsService;
     this.qrSig = qrSig;
@@ -97,6 +103,7 @@ public class AdminController {
     this.auditLogRepo = auditLogRepo;
     this.partyRepo = partyRepo;
     this.guestSessionRepo = guestSessionRepo;
+    this.currencyRepo = currencyRepo;
   }
 
   private StaffUser current(Authentication auth) {
@@ -118,6 +125,12 @@ public class AdminController {
 
   private boolean isSuperAdmin(StaffUser u) {
     return "SUPER_ADMIN".equalsIgnoreCase(u.role);
+  }
+
+  private void requireSuperAdmin(StaffUser u) {
+    if (!isSuperAdmin(u)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Super admin role required");
+    }
   }
 
   private void requireBranchAccess(StaffUser u, Long resourceBranchId) {
@@ -358,7 +371,8 @@ public class AdminController {
   public record DuplicateHallPlanRequest(String name) {}
   public record PlanExportTable(String publicId, int number, Double layoutX, Double layoutY, Double layoutW, Double layoutH, String layoutShape, Integer layoutRotation, String layoutZone) {}
   public record PlanExportResponse(String name, long hallId, String backgroundUrl, String zonesJson, List<PlanExportTable> tables) {}
-  public record PlanImportRequest(String name, String backgroundUrl, String zonesJson, List<PlanExportTable> tables, Boolean applyLayouts) {}
+  public record PlanImportRequest(String name, String backgroundUrl, String zonesJson, List<PlanExportTable> tables, Boolean applyLayouts, Boolean applyTables) {}
+  public record HallPlanVersionDto(long id, long planId, String name, boolean isActive, int sortOrder, String backgroundUrl, String zonesJson, String createdAt, Long createdByStaffId, String action) {}
   public record HallPlanTemplateDto(long id, long hallId, String name, String payloadJson, String createdAt, String updatedAt) {}
   public record CreateHallPlanTemplateRequest(@NotBlank String name, @NotBlank String payloadJson) {}
 
@@ -387,6 +401,7 @@ public class AdminController {
     p.name = req.name.trim();
     p.sortOrder = req.sortOrder == null ? 0 : req.sortOrder;
     p = hallPlanRepo.save(p);
+    savePlanVersion(p, u, "CREATE");
     if (h.activePlanId == null) {
       h.activePlanId = p.id;
       hallRepo.save(h);
@@ -410,6 +425,7 @@ public class AdminController {
     if (req.zonesJson != null) validateZonesJson(req.zonesJson);
     if (req.zonesJson != null) p.layoutZonesJson = req.zonesJson;
     p = hallPlanRepo.save(p);
+    savePlanVersion(p, u, "UPDATE");
     auditService.log(u, "UPDATE", "HallPlan", p.id, null);
     return new HallPlanDto(p.id, p.hallId, p.name, p.isActive, p.sortOrder, p.layoutBgUrl, p.layoutZonesJson);
   }
@@ -458,9 +474,11 @@ public class AdminController {
     p.layoutZonesJson = req.zonesJson;
     p.sortOrder = 0;
     p = hallPlanRepo.save(p);
+    savePlanVersion(p, u, "IMPORT");
 
     boolean applyLayouts = req.applyLayouts == null || req.applyLayouts;
-    if (applyLayouts && req.tables != null && !req.tables.isEmpty()) {
+    boolean applyTables = req.applyTables == null || req.applyTables;
+    if (applyLayouts && applyTables && req.tables != null && !req.tables.isEmpty()) {
       List<CafeTable> tables = tableRepo.findByBranchId(h.branchId).stream()
         .filter(t -> Objects.equals(t.hallId, h.id))
         .toList();
@@ -579,8 +597,78 @@ public class AdminController {
     copy.layoutBgUrl = src.layoutBgUrl;
     copy.layoutZonesJson = src.layoutZonesJson;
     copy = hallPlanRepo.save(copy);
+    savePlanVersion(copy, u, "DUPLICATE");
     auditService.log(u, "CREATE", "HallPlan", copy.id, "duplicateFrom:" + src.id);
     return new HallPlanDto(copy.id, copy.hallId, copy.name, copy.isActive, copy.sortOrder, copy.layoutBgUrl, copy.layoutZonesJson);
+  }
+
+  @GetMapping("/hall-plans/{id}/versions")
+  public List<HallPlanVersionDto> listHallPlanVersions(@PathVariable long id, Authentication auth) {
+    StaffUser u = requireAdmin(auth);
+    HallPlan p = hallPlanRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Plan not found"));
+    BranchHall h = hallRepo.findById(p.hallId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hall not found"));
+    requireBranchAccess(u, h.branchId);
+    List<HallPlanVersion> versions = hallPlanVersionRepo.findByPlanIdOrderByCreatedAtDesc(id);
+    List<HallPlanVersionDto> out = new ArrayList<>();
+    for (HallPlanVersion v : versions) {
+      out.add(new HallPlanVersionDto(
+        v.id,
+        v.planId,
+        v.name,
+        v.isActive,
+        v.sortOrder,
+        v.layoutBgUrl,
+        v.layoutZonesJson,
+        v.createdAt == null ? null : v.createdAt.toString(),
+        v.createdByStaffId,
+        v.action
+      ));
+    }
+    return out;
+  }
+
+  @PostMapping("/hall-plans/{id}/versions/{versionId}/restore")
+  public HallPlanDto restoreHallPlanVersion(@PathVariable long id, @PathVariable long versionId, Authentication auth) {
+    StaffUser u = requireAdmin(auth);
+    HallPlan p = hallPlanRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Plan not found"));
+    BranchHall h = hallRepo.findById(p.hallId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hall not found"));
+    requireBranchAccess(u, h.branchId);
+    HallPlanVersion v = hallPlanVersionRepo.findById(versionId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Version not found"));
+    if (!Objects.equals(v.planId, p.id)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Version does not belong to plan");
+    }
+    p.name = v.name;
+    p.sortOrder = v.sortOrder;
+    p.isActive = v.isActive;
+    p.layoutBgUrl = v.layoutBgUrl;
+    p.layoutZonesJson = v.layoutZonesJson;
+    p = hallPlanRepo.save(p);
+    savePlanVersion(p, u, "RESTORE");
+    auditService.log(u, "RESTORE", "HallPlan", p.id, "version:" + v.id);
+    return new HallPlanDto(p.id, p.hallId, p.name, p.isActive, p.sortOrder, p.layoutBgUrl, p.layoutZonesJson);
+  }
+
+  private void savePlanVersion(HallPlan p, StaffUser u, String action) {
+    if (p == null) return;
+    BranchHall h = hallRepo.findById(p.hallId).orElse(null);
+    if (h == null) return;
+    HallPlanVersion v = new HallPlanVersion();
+    v.planId = p.id;
+    v.hallId = p.hallId;
+    v.branchId = h.branchId;
+    v.name = p.name;
+    v.sortOrder = p.sortOrder;
+    v.isActive = p.isActive;
+    v.layoutBgUrl = p.layoutBgUrl;
+    v.layoutZonesJson = p.layoutZonesJson;
+    v.createdByStaffId = u == null ? null : u.id;
+    v.action = action;
+    hallPlanVersionRepo.save(v);
   }
 
   public record AdminPartyDto(
@@ -655,7 +743,8 @@ public class AdminController {
     boolean tipsEnabled,
     List<Integer> tipsPercentages,
     boolean payCashEnabled,
-    boolean payTerminalEnabled
+    boolean payTerminalEnabled,
+    String currencyCode
   ) {}
 
   @GetMapping("/branch-settings")
@@ -677,7 +766,8 @@ public class AdminController {
       s.tipsEnabled(),
       s.tipsPercentages(),
       s.payCashEnabled(),
-      s.payTerminalEnabled()
+      s.payTerminalEnabled(),
+      s.currencyCode()
     );
   }
 
@@ -694,10 +784,12 @@ public class AdminController {
     Boolean tipsEnabled,
     List<Integer> tipsPercentages,
     Boolean payCashEnabled,
-    Boolean payTerminalEnabled
+    Boolean payTerminalEnabled,
+    String currencyCode
   ) {}
 
   @PutMapping("/branch-settings")
+  @Transactional
   public BranchSettingsResponse updateBranchSettings(
     @RequestParam(value = "branchId", required = false) Long branchId,
     @Valid @RequestBody UpdateBranchSettingsRequest req,
@@ -705,6 +797,7 @@ public class AdminController {
   ) {
     StaffUser u = requireAdmin(auth);
     long bid = resolveBranchId(u, branchId);
+    String prevCurrency = settingsService.resolveForBranch(bid).currencyCode();
     BranchSettings s = settingsRepo.findById(bid).orElseGet(() -> {
       BranchSettings ns = new BranchSettings();
       ns.branchId = bid;
@@ -726,8 +819,27 @@ public class AdminController {
     }
     if (req.payCashEnabled != null) s.payCashEnabled = req.payCashEnabled;
     if (req.payTerminalEnabled != null) s.payTerminalEnabled = req.payTerminalEnabled;
+    if (req.currencyCode != null && !req.currencyCode.isBlank()) {
+      String code = req.currencyCode.trim().toUpperCase(Locale.ROOT);
+      Currency cur = currencyRepo.findById(code)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown currency"));
+      if (!cur.isActive) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Currency is inactive");
+      }
+      s.currencyCode = code;
+    }
 
     settingsRepo.save(s);
+    if (req.currencyCode != null && !req.currencyCode.isBlank()) {
+      String nextCurrency = s.currencyCode == null ? "MDL" : s.currencyCode;
+      if (!Objects.equals(prevCurrency, nextCurrency)) {
+        List<MenuCategory> cats = categoryRepo.findByBranchIdOrderBySortOrderAscIdAsc(bid);
+        if (!cats.isEmpty()) {
+          List<Long> catIds = cats.stream().map(c -> c.id).toList();
+          itemRepo.updateCurrencyByCategoryIds(nextCurrency, catIds);
+        }
+      }
+    }
     BranchSettingsService.Resolved r = settingsService.resolveForBranch(bid);
     return new BranchSettingsResponse(
       bid,
@@ -743,8 +855,58 @@ public class AdminController {
       r.tipsEnabled(),
       r.tipsPercentages(),
       r.payCashEnabled(),
-      r.payTerminalEnabled()
+      r.payTerminalEnabled(),
+      r.currencyCode()
     );
+  }
+
+  // --- Currencies (super admin) ---
+  public record CurrencyDto(String code, String name, String symbol, boolean isActive) {}
+  public record CreateCurrencyRequest(@NotBlank String code, @NotBlank String name, String symbol, Boolean isActive) {}
+  public record UpdateCurrencyRequest(String name, String symbol, Boolean isActive) {}
+
+  @GetMapping("/currencies")
+  public List<CurrencyDto> listCurrencies(
+    @RequestParam(value = "includeInactive", required = false) Boolean includeInactive,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    boolean include = includeInactive != null && includeInactive && isSuperAdmin(u);
+    List<Currency> list = include ? currencyRepo.findAllByOrderByCodeAsc() : currencyRepo.findByIsActiveTrueOrderByCodeAsc();
+    List<CurrencyDto> out = new ArrayList<>();
+    for (Currency c : list) {
+      out.add(new CurrencyDto(c.code, c.name, c.symbol, c.isActive));
+    }
+    return out;
+  }
+
+  @PostMapping("/currencies")
+  public CurrencyDto createCurrency(@Valid @RequestBody CreateCurrencyRequest req, Authentication auth) {
+    StaffUser u = requireAdmin(auth);
+    requireSuperAdmin(u);
+    Currency c = new Currency();
+    c.code = req.code.trim().toUpperCase(Locale.ROOT);
+    c.name = req.name.trim();
+    c.symbol = req.symbol;
+    c.isActive = req.isActive == null || req.isActive;
+    c = currencyRepo.save(c);
+    auditService.log(u, "CREATE", "Currency", null, c.code);
+    return new CurrencyDto(c.code, c.name, c.symbol, c.isActive);
+  }
+
+  @PatchMapping("/currencies/{code}")
+  public CurrencyDto updateCurrency(@PathVariable String code, @RequestBody UpdateCurrencyRequest req, Authentication auth) {
+    StaffUser u = requireAdmin(auth);
+    requireSuperAdmin(u);
+    String k = code.trim().toUpperCase(Locale.ROOT);
+    Currency c = currencyRepo.findById(k)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Currency not found"));
+    if (req.name != null && !req.name.isBlank()) c.name = req.name.trim();
+    if (req.symbol != null) c.symbol = req.symbol;
+    if (req.isActive != null) c.isActive = req.isActive;
+    c = currencyRepo.save(c);
+    auditService.log(u, "UPDATE", "Currency", null, c.code);
+    return new CurrencyDto(c.code, c.name, c.symbol, c.isActive);
   }
 
   // --- Menu categories ---
@@ -922,7 +1084,17 @@ public class AdminController {
     it.fatG = req.fatG;
     it.carbsG = req.carbsG;
     it.priceCents = req.priceCents;
-    if (req.currency != null && !req.currency.isBlank()) it.currency = req.currency.trim();
+    if (req.currency != null && !req.currency.isBlank()) {
+      String code = req.currency.trim().toUpperCase(Locale.ROOT);
+      Currency cur = currencyRepo.findById(code)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown currency"));
+      if (!cur.isActive) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Currency is inactive");
+      }
+      it.currency = code;
+    } else {
+      it.currency = settingsService.resolveForBranch(bid).currencyCode();
+    }
     it.isActive = req.isActive == null || req.isActive;
     it.isStopList = req.isStopList != null && req.isStopList;
     it = itemRepo.save(it);
@@ -988,7 +1160,15 @@ public class AdminController {
     if (req.fatG != null) it.fatG = req.fatG;
     if (req.carbsG != null) it.carbsG = req.carbsG;
     if (req.priceCents != null) it.priceCents = req.priceCents;
-    if (req.currency != null && !req.currency.isBlank()) it.currency = req.currency.trim();
+    if (req.currency != null && !req.currency.isBlank()) {
+      String code = req.currency.trim().toUpperCase(Locale.ROOT);
+      Currency cur = currencyRepo.findById(code)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown currency"));
+      if (!cur.isActive) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Currency is inactive");
+      }
+      it.currency = code;
+    }
     if (req.isActive != null) it.isActive = req.isActive;
     if (req.isStopList != null) it.isStopList = req.isStopList;
 

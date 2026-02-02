@@ -170,7 +170,7 @@ public class PublicController {
   }
 
   public record StartSessionRequest(@NotBlank String tablePublicId, @NotBlank String sig, @NotNull Long ts, @NotBlank String locale) {}
-  public record StartSessionResponse(long guestSessionId, long tableId, int tableNumber, long branchId, String locale, boolean otpRequired, boolean isVerified, String sessionSecret) {}
+  public record StartSessionResponse(long guestSessionId, long tableId, int tableNumber, long branchId, String locale, boolean otpRequired, boolean isVerified, String sessionSecret, String currencyCode) {}
 
   @PostMapping("/session/start")
   public StartSessionResponse startSession(@Valid @RequestBody StartSessionRequest req, jakarta.servlet.http.HttpServletRequest httpReq) {
@@ -195,7 +195,7 @@ public class PublicController {
     s.createdByUa = getUserAgent(httpReq);
     s = sessionRepo.save(s);
 
-    return new StartSessionResponse(s.id, table.id, table.number, table.branchId, s.locale, settings.requireOtpForFirstOrder(), s.isVerified, s.sessionSecret);
+    return new StartSessionResponse(s.id, table.id, table.number, table.branchId, s.locale, settings.requireOtpForFirstOrder(), s.isVerified, s.sessionSecret, settings.currencyCode());
   }
 
   // --- Menu ---
@@ -716,6 +716,8 @@ public class PublicController {
   // --- Waiter call ---
   public record WaiterCallRequest(@NotNull Long guestSessionId) {}
   public record WaiterCallResponse(long waiterCallId, String status) {}
+  public record CancelWaiterCallResponse(long waiterCallId, String status) {}
+  public record WaiterCallStatusResponse(long waiterCallId, String status) {}
 
   @PostMapping("/waiter-call")
   public WaiterCallResponse callWaiter(@Valid @RequestBody WaiterCallRequest req, jakarta.servlet.http.HttpServletRequest httpReq) {
@@ -746,6 +748,51 @@ public class PublicController {
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
     notificationEventService.emit(table.branchId, "WAITER_CALL", wc.id);
     return new WaiterCallResponse(wc.id, wc.status);
+  }
+
+  @PostMapping("/waiter-call/cancel")
+  public CancelWaiterCallResponse cancelWaiterCall(@Valid @RequestBody WaiterCallRequest req, jakarta.servlet.http.HttpServletRequest httpReq) {
+    GuestSession s = sessionRepo.findById(req.guestSessionId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
+    requireSessionSecret(s, httpReq);
+    if (s.expiresAt.isBefore(Instant.now())) {
+      throw new ResponseStatusException(HttpStatus.GONE, "Session expired");
+    }
+    List<WaiterCall> calls = waiterCallRepo.findTop100ByTableIdInAndStatusNotOrderByCreatedAtDesc(
+      List.of(s.tableId), "CLOSED"
+    );
+    WaiterCall latest = null;
+    for (WaiterCall c : calls) {
+      if (Objects.equals(c.guestSessionId, s.id) && !"CLOSED".equals(c.status)) {
+        latest = c;
+        break;
+      }
+    }
+    if (latest == null) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No active call");
+    }
+    latest.status = "CLOSED";
+    waiterCallRepo.save(latest);
+    return new CancelWaiterCallResponse(latest.id, latest.status);
+  }
+
+  @GetMapping("/waiter-call/latest")
+  public WaiterCallStatusResponse latestWaiterCall(
+    @RequestParam("guestSessionId") long guestSessionId,
+    jakarta.servlet.http.HttpServletRequest httpReq
+  ) {
+    GuestSession s = sessionRepo.findById(guestSessionId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
+    requireSessionSecret(s, httpReq);
+    List<WaiterCall> calls = waiterCallRepo.findTop100ByTableIdInAndStatusNotOrderByCreatedAtDesc(
+      List.of(s.tableId), "CLOSED"
+    );
+    for (WaiterCall c : calls) {
+      if (Objects.equals(c.guestSessionId, s.id) && !"CLOSED".equals(c.status)) {
+        return new WaiterCallStatusResponse(c.id, c.status);
+      }
+    }
+    throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No active call");
   }
 
   private static String normalizeLocale(String s) {

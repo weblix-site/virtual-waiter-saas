@@ -48,4 +48,7 @@ public class BranchSettings {
 
   @Column(name = "pay_terminal_enabled")
   public Boolean payTerminalEnabled;
+
+  @Column(name = "currency_code")
+  public String currencyCode;
 }

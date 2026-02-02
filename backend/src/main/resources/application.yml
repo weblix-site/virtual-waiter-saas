@@ -1,6 +1,8 @@
 server:
   port: 8080
 spring:
+  messages:
+    basename: i18n/messages
   datasource:
     url: jdbc:postgresql://localhost:5432/vw
     username: vw

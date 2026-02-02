@@ -4,6 +4,290 @@ import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8080";
 
+type Lang = "ru" | "ro" | "en";
+const dict: Record<string, Record<Lang, string>> = {
+  admin: { ru: "Админ", ro: "Admin", en: "Admin" },
+  loginTitle: { ru: "Вход", ro: "Autentificare", en: "Login" },
+  username: { ru: "Логин", ro: "Utilizator", en: "Username" },
+  password: { ru: "Пароль", ro: "Parolă", en: "Password" },
+  login: { ru: "Войти", ro: "Intră", en: "Login" },
+  refresh: { ru: "Обновить", ro: "Reîmprospătează", en: "Refresh" },
+  resetFilters: { ru: "Сбросить фильтры", ro: "Resetează filtrele", en: "Reset filters" },
+  filtersActive: { ru: "Фильтров активно", ro: "Filtre active", en: "Filters active" },
+  settings: { ru: "Настройки", ro: "Setări", en: "Settings" },
+  saveSettings: { ru: "Сохранить настройки", ro: "Salvează setările", en: "Save settings" },
+  menu: { ru: "Меню", ro: "Meniu", en: "Menu" },
+  categories: { ru: "Категории", ro: "Categorii", en: "Categories" },
+  items: { ru: "Блюда", ro: "Produse", en: "Items" },
+  staff: { ru: "Персонал", ro: "Personal", en: "Staff" },
+  tables: { ru: "Столы", ro: "Mese", en: "Tables" },
+  floorPlan: { ru: "План зала", ro: "Plan sală", en: "Floor Plan" },
+  stats: { ru: "Статистика", ro: "Statistici", en: "Stats" },
+  audit: { ru: "Аудит", ro: "Audit", en: "Audit" },
+  add: { ru: "Добавить", ro: "Adaugă", en: "Add" },
+  edit: { ru: "Редактировать", ro: "Editează", en: "Edit" },
+  delete: { ru: "Удалить", ro: "Șterge", en: "Delete" },
+  enable: { ru: "Включить", ro: "Activează", en: "Enable" },
+  disable: { ru: "Выключить", ro: "Dezactivează", en: "Disable" },
+  save: { ru: "Сохранить", ro: "Salvează", en: "Save" },
+  cancel: { ru: "Отмена", ro: "Anulează", en: "Cancel" },
+  statusActive: { ru: "Активный", ro: "Activ", en: "Active" },
+  statusClosed: { ru: "Закрыт", ro: "Închis", en: "Closed" },
+  requireOtpForFirstOrder: { ru: "OTP перед первым заказом", ro: "OTP înainte de prima comandă", en: "OTP before first order" },
+  enablePartyPin: { ru: "Party PIN", ro: "PIN Party", en: "Party PIN" },
+  allowPayOtherGuestsItems: { ru: "Оплата чужих позиций", ro: "Plată pentru alții", en: "Pay other guests items" },
+  allowPayWholeTable: { ru: "Оплатить весь стол", ro: "Plătește toată masa", en: "Pay whole table" },
+  tipsEnabled: { ru: "Чаевые включены", ro: "Bacșiș activ", en: "Tips enabled" },
+  payCashEnabled: { ru: "Наличные доступны", ro: "Numerar activ", en: "Cash enabled" },
+  payTerminalEnabled: { ru: "Терминал доступен", ro: "Terminal activ", en: "Terminal enabled" },
+  currency: { ru: "Валюта", ro: "Valută", en: "Currency" },
+  otpTtlSeconds: { ru: "TTL OTP (сек)", ro: "TTL OTP (sec)", en: "OTP TTL (sec)" },
+  otpMaxAttempts: { ru: "Лимит попыток OTP", ro: "Limită încercări OTP", en: "OTP max attempts" },
+  otpResendCooldownSeconds: { ru: "Пауза OTP (сек)", ro: "Pauză OTP (sec)", en: "OTP resend cooldown (sec)" },
+  otpLength: { ru: "Длина OTP", ro: "Lungime OTP", en: "OTP length" },
+  otpDevEchoCode: { ru: "Показывать OTP в dev", ro: "Arată OTP în dev", en: "Show OTP in dev" },
+  tipsPercentages: { ru: "Проценты чаевых (csv)", ro: "Procente bacșiș (csv)", en: "Tips percentages (csv)" },
+  parties: { ru: "Группы (Party)", ro: "Party", en: "Parties" },
+  status: { ru: "Статус", ro: "Status", en: "Status" },
+  table: { ru: "Стол", ro: "Masă", en: "Table" },
+  pin: { ru: "PIN", ro: "PIN", en: "PIN" },
+  expiringMin: { ru: "Скоро истекает (мин)", ro: "Expiră curând (min)", en: "Expiring (min)" },
+  expiring: { ru: "Скоро истекает", ro: "Expiră curând", en: "Expiring" },
+  refreshParties: { ru: "Обновить", ro: "Reîmprospătează", en: "Refresh" },
+  noParties: { ru: "Групп нет", ro: "Nu sunt party", en: "No parties" },
+  participants: { ru: "Участники", ro: "Participanți", en: "Participants" },
+  created: { ru: "Создано", ro: "Creat", en: "Created" },
+  expires: { ru: "Истекает", ro: "Expiră", en: "Expires" },
+  waiter: { ru: "Официант", ro: "Chelner", en: "Waiter" },
+  all: { ru: "Все", ro: "Toate", en: "All" },
+  topLimit: { ru: "Лимит топ", ro: "Limită top", en: "Top limit" },
+  load: { ru: "Загрузить", ro: "Încarcă", en: "Load" },
+  downloadCsv: { ru: "Скачать CSV", ro: "Descarcă CSV", en: "Download CSV" },
+  period: { ru: "Период", ro: "Perioadă", en: "Period" },
+  ordersCount: { ru: "Заказы", ro: "Comenzi", en: "Orders" },
+  callsCount: { ru: "Вызовы", ro: "Apeluri", en: "Calls" },
+  paidBills: { ru: "Оплаченные счета", ro: "Note plătite", en: "Paid bills" },
+  gross: { ru: "Выручка", ro: "Brut", en: "Gross" },
+  tips: { ru: "Чаевые", ro: "Bacșiș", en: "Tips" },
+  activeTables: { ru: "Активные столы", ro: "Mese active", en: "Active tables" },
+  day: { ru: "День", ro: "Zi", en: "Day" },
+  qty: { ru: "Кол-во", ro: "Cant.", en: "Qty" },
+  topItems: { ru: "Топ блюда", ro: "Top produse", en: "Top items" },
+  topCategories: { ru: "Топ категории", ro: "Top categorii", en: "Top categories" },
+  noData: { ru: "Нет данных", ro: "Fără date", en: "No data" },
+  action: { ru: "Действие", ro: "Acțiune", en: "Action" },
+  entity: { ru: "Сущность", ro: "Entitate", en: "Entity" },
+  actor: { ru: "Пользователь", ro: "Utilizator", en: "Actor" },
+  from: { ru: "С", ro: "De la", en: "From" },
+  to: { ru: "По", ro: "Până la", en: "To" },
+  beforeId: { ru: "До ID", ro: "Până la ID", en: "Before ID" },
+  afterId: { ru: "После ID", ro: "După ID", en: "After ID" },
+  limit: { ru: "Лимит", ro: "Limită", en: "Limit" },
+  loading: { ru: "Загрузка...", ro: "Se încarcă...", en: "Loading..." },
+  latest: { ru: "Последние", ro: "Ultimele", en: "Latest" },
+  prevPage: { ru: "Назад", ro: "Înapoi", en: "Prev page" },
+  nextPage: { ru: "Вперёд", ro: "Înainte", en: "Next page" },
+  clear: { ru: "Очистить", ro: "Curăță", en: "Clear" },
+  when: { ru: "Когда", ro: "Când", en: "When" },
+  menuCategoryNameRu: { ru: "Название (RU)", ro: "Denumire (RU)", en: "Name (RU)" },
+  menuCategoryNameRo: { ru: "Название (RO)", ro: "Denumire (RO)", en: "Name (RO)" },
+  menuCategoryNameEn: { ru: "Название (EN)", ro: "Denumire (EN)", en: "Name (EN)" },
+  sort: { ru: "Сортировка", ro: "Sortare", en: "Sort" },
+  search: { ru: "Поиск", ro: "Căutare", en: "Search" },
+  allCategories: { ru: "Все категории", ro: "Toate categoriile", en: "All categories" },
+  allStatuses: { ru: "Все статусы", ro: "Toate statusurile", en: "All statuses" },
+  stopListAny: { ru: "Стоп‑лист: любой", ro: "Stop‑listă: oricare", en: "Stop list: any" },
+  stopList: { ru: "Стоп‑лист", ro: "Stop‑listă", en: "Stop list" },
+  notInStopList: { ru: "Не в стоп‑листе", ro: "Nu în stop‑listă", en: "Not in stop list" },
+  descRu: { ru: "Описание (RU)", ro: "Descriere (RU)", en: "Desc (RU)" },
+  descRo: { ru: "Описание (RO)", ro: "Descriere (RO)", en: "Desc (RO)" },
+  descEn: { ru: "Описание (EN)", ro: "Descriere (EN)", en: "Desc (EN)" },
+  ingredientsRu: { ru: "Состав (RU)", ro: "Ingrediente (RU)", en: "Ingredients (RU)" },
+  ingredientsRo: { ru: "Состав (RO)", ro: "Ingrediente (RO)", en: "Ingredients (RO)" },
+  ingredientsEn: { ru: "Состав (EN)", ro: "Ingrediente (EN)", en: "Ingredients (EN)" },
+  allergens: { ru: "Аллергены", ro: "Alergeni", en: "Allergens" },
+  weight: { ru: "Вес", ro: "Greutate", en: "Weight" },
+  tagsCsv: { ru: "Теги (csv)", ro: "Etichete (csv)", en: "Tags (csv)" },
+  photosCsv: { ru: "Фото (csv)", ro: "Poze (csv)", en: "Photo URLs (csv)" },
+  kcal: { ru: "Ккал", ro: "Kcal", en: "Kcal" },
+  proteinG: { ru: "Белки (г)", ro: "Proteine (g)", en: "Protein (g)" },
+  fatG: { ru: "Жиры (г)", ro: "Grăsimi (g)", en: "Fat (g)" },
+  carbsG: { ru: "Углеводы (г)", ro: "Carbohidrați (g)", en: "Carbs (g)" },
+  priceCents: { ru: "Цена (центы)", ro: "Preț (cenți)", en: "Price (cents)" },
+  active: { ru: "Активно", ro: "Activ", en: "Active" },
+  inactive: { ru: "Неактивно", ro: "Inactiv", en: "Inactive" },
+  editMode: { ru: "Режим редактирования", ro: "Mod editare", en: "Edit mode" },
+  snapToGrid: { ru: "Привязка к сетке", ro: "Aliniază la grilă", en: "Snap to grid" },
+  preview: { ru: "Предпросмотр", ro: "Previzualizare", en: "Preview" },
+  panMode: { ru: "Перемещение", ro: "Pan", en: "Pan mode" },
+  fitToScreen: { ru: "Вписать в экран", ro: "Potrivește ecranul", en: "Fit to screen" },
+  resetZoom: { ru: "Сбросить масштаб", ro: "Reset zoom", en: "Reset zoom" },
+  resetPan: { ru: "Сбросить панораму", ro: "Reset pan", en: "Reset pan" },
+  zoom: { ru: "Масштаб", ro: "Zoom", en: "Zoom" },
+  showingLatest: { ru: "Показаны последние 20", ro: "Afișate ultimele 20", en: "Showing latest 20" },
+  newHallName: { ru: "Новый зал", ro: "Sală nouă", en: "New hall name" },
+  newPlanName: { ru: "Новый план", ro: "Plan nou", en: "New plan name" },
+  planSort: { ru: "Сортировка плана", ro: "Sortare plan", en: "Plan sort" },
+  addHall: { ru: "Добавить зал", ro: "Adaugă sală", en: "Add hall" },
+  addPlan: { ru: "Добавить план", ro: "Adaugă plan", en: "Add plan" },
+  quickSwitch: { ru: "Быстрое переключение", ro: "Comutare rapidă", en: "Quick switch" },
+  templates: { ru: "Шаблоны", ro: "Șabloane", en: "Templates" },
+  saveCurrent: { ru: "Сохранить текущий", ro: "Salvează curent", en: "Save current" },
+  noTemplates: { ru: "Шаблонов нет", ro: "Nu sunt șabloane", en: "No templates" },
+  legend: { ru: "Легенда", ro: "Legendă", en: "Legend" },
+  noWaiters: { ru: "Нет официантов", ro: "Nu sunt chelneri", en: "No waiters" },
+  backgroundUrl: { ru: "Фон (URL)", ro: "Fundal (URL)", en: "Background URL" },
+  hallSettings: { ru: "Настройки зала", ro: "Setări sală", en: "Hall settings" },
+  activate: { ru: "Активировать", ro: "Activează", en: "Activate" },
+  deactivate: { ru: "Деактивировать", ro: "Dezactivează", en: "Deactivate" },
+  fromDate: { ru: "С", ro: "De la", en: "From" },
+  toDate: { ru: "По", ro: "Până la", en: "To" },
+  hall: { ru: "Зал", ro: "Sală", en: "Hall" },
+  plan: { ru: "План", ro: "Plan", en: "Plan" },
+  planAvailableAfterHall: { ru: "План доступен после выбора зала", ro: "Planul e disponibil după alegerea sălii", en: "Plan available after selecting hall" },
+  participantsLabel: { ru: "Участники (ID сессий)", ro: "Participanți (ID sesiuni)", en: "Participants (Session IDs)" },
+  noParticipants: { ru: "Нет участников", ro: "Fără participanți", en: "No participants" },
+  copyIds: { ru: "Копировать ID", ro: "Copiază ID", en: "Copy IDs" },
+  auditId: { ru: "ID", ro: "ID", en: "ID" },
+  auditActor: { ru: "Пользователь", ro: "Utilizator", en: "Actor" },
+  auditAction: { ru: "Действие", ro: "Acțiune", en: "Action" },
+  auditEntity: { ru: "Сущность", ro: "Entitate", en: "Entity" },
+  auditActionPlaceholder: { ru: "CREATE/UPDATE/DELETE", ro: "CREATE/UPDATE/DELETE", en: "CREATE/UPDATE/DELETE" },
+  auditEntityPlaceholder: { ru: "MenuItem/StaffUser", ro: "MenuItem/StaffUser", en: "MenuItem/StaffUser" },
+  planSelectHall: { ru: "Выберите зал", ro: "Selectează sala", en: "Select hall" },
+  planDefault: { ru: "План по умолчанию", ro: "Plan implicit", en: "Default plan" },
+  setActivePlan: { ru: "Сделать активным", ro: "Setează activ", en: "Set active" },
+  duplicatePlan: { ru: "Дублировать план", ro: "Duplică planul", en: "Duplicate plan" },
+  deletePlan: { ru: "Удалить план", ro: "Șterge planul", en: "Delete plan" },
+  autoLayout: { ru: "Авто‑раскладка", ro: "Auto aranjare", en: "Auto layout" },
+  resetLayout: { ru: "Сброс раскладки", ro: "Resetare aranjare", en: "Reset layout" },
+  snapLayout: { ru: "Привязать к сетке", ro: "Aliniază la grilă", en: "Snap layout" },
+  saveLayout: { ru: "Сохранить раскладку", ro: "Salvează aranjarea", en: "Save layout" },
+  exportJson: { ru: "Экспорт JSON", ro: "Export JSON", en: "Export JSON" },
+  showHistory: { ru: "Показать историю", ro: "Arată istoricul", en: "Show history" },
+  hideHistory: { ru: "Скрыть историю", ro: "Ascunde istoricul", en: "Hide history" },
+  importJson: { ru: "Импорт JSON", ro: "Import JSON", en: "Import JSON" },
+  applyLayouts: { ru: "Применить layout (с перезаписью)", ro: "Aplică layout (suprascrie)", en: "Apply layouts (overwrite)" },
+  applyTables: { ru: "Применить столы (позиции)", ro: "Aplică mesele (poziții)", en: "Apply tables (positions)" },
+  importHint: { ru: "Снимите “Применить столы”, чтобы импортировать только фон/зоны.", ro: "Debifați “Aplică mesele” pentru doar fundal/zone.", en: "Uncheck “Apply tables” to import background/zones only." },
+  dragHint: { ru: "Перетаскивайте столы на плане. Клик по столу — редактирование.", ro: "Trage mesele pe plan. Click pe masă pentru editare.", en: "Drag tables on the map. Click a table to edit." },
+  planHistory: { ru: "История плана", ro: "Istoric plan", en: "Plan history" },
+  versionsCount: { ru: "версий", ro: "versiuni", en: "versions" },
+  noVersions: { ru: "Пока нет версий.", ro: "Încă nu sunt versiuni.", en: "No versions yet." },
+  restore: { ru: "Восстановить", ro: "Restabilește", en: "Restore" },
+  restoreConfirm: { ru: "Восстановить эту версию? Текущий план будет перезаписан.", ro: "Restaurezi această versiune? Planul curent va fi suprascris.", en: "Restore this version? Current plan will be overwritten." },
+  planHistoryLoading: { ru: "Загрузка...", ro: "Se încarcă...", en: "Loading..." },
+  dayPlan: { ru: "День", ro: "Zi", en: "Day" },
+  eveningPlan: { ru: "Вечер", ro: "Seară", en: "Evening" },
+  banquetPlan: { ru: "Банкет", ro: "Banchet", en: "Banquet" },
+  assignWaiterDrag: { ru: "Назначить официанта (перетащите на стол)", ro: "Atribuie chelner (trage pe masă)", en: "Assign waiter (drag onto table)" },
+  noWaitersYet: { ru: "Официантов пока нет.", ro: "Încă nu sunt chelneri.", en: "No waiters yet." },
+  tableSelected: { ru: "Стол №", ro: "Masă №", en: "Table #" },
+  widthPercent: { ru: "Ширина (%)", ro: "Lățime (%)", en: "Width (%)" },
+  heightPercent: { ru: "Высота (%)", ro: "Înălțime (%)", en: "Height (%)" },
+  rotationDeg: { ru: "Поворот (°)", ro: "Rotire (°)", en: "Rotation (deg)" },
+  zone: { ru: "Зона", ro: "Zonă", en: "Zone" },
+  zonePlaceholder: { ru: "например, Терраса, Зал A", ro: "ex. Terasă, Sala A", en: "e.g. Terrace, Hall A" },
+  resetShape: { ru: "Сброс формы", ro: "Reset formă", en: "Reset shape" },
+  deleteHallConfirm: { ru: "Удалить зал? Это удалит все планы/шаблоны зала.", ro: "Ștergi sala? Asta va elimina toate planurile/șabloanele.", en: "Delete hall? This removes all plans/templates for the hall." },
+  deleteHallBlocked: { ru: "Нельзя удалить зал: есть привязанные столы. Сначала перенесите столы в другой зал.", ro: "Nu se poate șterge sala: există mese alocate. Mutați mesele în altă sală.", en: "Cannot delete hall: tables are assigned. Move tables first." },
+  deleteHallFailed: { ru: "Ошибка удаления зала", ro: "Eroare la ștergere sală", en: "Failed to delete hall" },
+  zones: { ru: "Зоны", ro: "Zone", en: "Zones" },
+  zoneName: { ru: "Название зоны", ro: "Nume zonă", en: "Zone name" },
+  addZone: { ru: "Добавить зону", ro: "Adaugă zonă", en: "Add zone" },
+  qrNote: { ru: "QR содержит timestamp. Перегенерируйте перед печатью, если ссылка старая.", ro: "QR include timestamp. Regenerează înainte de tipărire dacă e vechi.", en: "QR links include a timestamp. Re-generate before printing if old." },
+  tableNumber: { ru: "Стол №", ro: "Masă #", en: "Table #" },
+  publicIdOptional: { ru: "Public ID (необязательно)", ro: "Public ID (opțional)", en: "Public ID (optional)" },
+  assignWaiter: { ru: "Назначить официанта", ro: "Atribuie chelner", en: "Assign waiter" },
+  addTable: { ru: "Добавить", ro: "Adaugă", en: "Add" },
+  refreshAllQr: { ru: "Обновить все QR", ro: "Reînnoiește toate QR", en: "Refresh all QR" },
+  filterTablePlaceholder: { ru: "Фильтр по № стола или publicId", ro: "Filtru după nr. masă sau publicId", en: "Filter by table # or publicId" },
+  allWaiters: { ru: "Все официанты", ro: "Toți chelnerii", en: "All waiters" },
+  allHalls: { ru: "Все залы", ro: "Toate sălile", en: "All halls" },
+  allAssignments: { ru: "Все назначения", ro: "Toate asignările", en: "All assignments" },
+  assigned: { ru: "Назначено", ro: "Atribuit", en: "Assigned" },
+  unassigned: { ru: "Не назначено", ro: "Neatribuit", en: "Unassigned" },
+  bulkHall: { ru: "Массово зал", ro: "Sală în masă", en: "Bulk hall" },
+  assignFilteredToHall: { ru: "Назначить отфильтрованные в зал", ro: "Atribuie filtratele în sală", en: "Assign filtered to hall" },
+  noHall: { ru: "Без зала", ro: "Fără sală", en: "No hall" },
+  noWaiter: { ru: "Без официанта", ro: "Fără chelner", en: "No waiter" },
+  clearWaiter: { ru: "Очистить официанта", ro: "Elimină chelner", en: "Clear waiter" },
+  qrUrl: { ru: "QR URL", ro: "QR URL", en: "QR URL" },
+  showQr: { ru: "Показать QR", ro: "Arată QR", en: "Show QR" },
+  refreshQr: { ru: "Обновить QR", ro: "Reînnoiește QR", en: "Refresh QR" },
+  downloadQr: { ru: "Скачать QR", ro: "Descarcă QR", en: "Download QR" },
+  staffUsername: { ru: "Логин", ro: "Utilizator", en: "Username" },
+  staffPassword: { ru: "Пароль", ro: "Parolă", en: "Password" },
+  filterByUsername: { ru: "Фильтр по логину", ro: "Filtru după utilizator", en: "Filter by username" },
+  allRoles: { ru: "Все роли", ro: "Toate rolurile", en: "All roles" },
+  resetPassword: { ru: "Сбросить пароль", ro: "Resetează parola", en: "Reset password" },
+  modifiers: { ru: "Модификаторы", ro: "Modificatori", en: "Modifiers" },
+  groupNameRu: { ru: "Название группы (RU)", ro: "Nume grup (RU)", en: "Group name (RU)" },
+  addGroup: { ru: "Добавить группу", ro: "Adaugă grup", en: "Add group" },
+  loadOptions: { ru: "Загрузить опции", ro: "Încarcă opțiuni", en: "Load options" },
+  optionRu: { ru: "Опция (RU)", ro: "Opțiune (RU)", en: "Option (RU)" },
+  priceCentsShort: { ru: "Цена (центы)", ro: "Preț (cenți)", en: "Price (cents)" },
+  addOption: { ru: "Добавить опцию", ro: "Adaugă opțiune", en: "Add option" },
+  itemModifierGroups: { ru: "Блюдо → группы модификаторов", ro: "Produs → grupuri modificatori", en: "Item → Modifier Groups" },
+  groupLabel: { ru: "Группа №", ro: "Grup #", en: "Group #" },
+  required: { ru: "обязательно", ro: "obligatoriu", en: "required" },
+  min: { ru: "мин", ro: "min", en: "min" },
+  max: { ru: "макс", ro: "max", en: "max" },
+  addGroupOption: { ru: "Добавить группу", ro: "Adaugă grup", en: "Add group" },
+  waiterLabel: { ru: "Официант", ro: "Chelner", en: "Waiter" },
+  unassigned: { ru: "Не назначено", ro: "Neatribuit", en: "Unassigned" },
+  tableSettings: { ru: "Настройки стола", ro: "Setări masă", en: "Table settings" },
+  switchToEdit: { ru: "Переключитесь в режим редактирования для drag & drop.", ro: "Treceți în modul editare pentru drag & drop.", en: "Switch to Edit mode to enable drag & drop." },
+  shape: { ru: "Форма", ro: "Formă", en: "Shape" },
+  shapeRound: { ru: "Круглая", ro: "Rotundă", en: "Round" },
+  shapeRect: { ru: "Прямоугольная", ro: "Dreptunghiulară", en: "Rectangle" },
+  confirmApplyLayouts: {
+    ru: "Применение раскладки перезапишет текущие позиции/размеры столов для этого зала. Продолжить?",
+    ro: "Aplicarea layout‑ului va suprascrie pozițiile/dimensiunile meselor pentru această sală. Continui?",
+    en: "Apply layouts will overwrite current table positions/sizes for this hall. Continue?",
+  },
+  confirmApplyTemplate: {
+    ru: "Применение шаблона перезапишет текущие позиции/размеры столов для этого зала. Продолжить?",
+    ro: "Aplicarea șablonului va suprascrie pozițiile/dimensiunile meselor pentru această sală. Continui?",
+    en: "Apply template will overwrite current table positions/sizes for this hall. Continue?",
+  },
+  confirmAutoLayoutAll: {
+    ru: "Авто‑раскладка переразместит столы для ВСЕХ залов. Продолжить?",
+    ro: "Auto‑aranjarea va repoziționa mesele pentru TOATE sălile. Continui?",
+    en: "Auto layout will reposition tables for ALL halls. Continue?",
+  },
+  confirmAutoLayoutHall: {
+    ru: "Авто‑раскладка переразместит столы для выбранного зала. Продолжить?",
+    ro: "Auto‑aranjarea va repoziționa mesele pentru sala selectată. Continui?",
+    en: "Auto layout will reposition tables for the selected hall. Continue?",
+  },
+  confirmResetLayoutAll: {
+    ru: "Сброс раскладки перезапишет позиции столов для ВСЕХ залов. Продолжить?",
+    ro: "Resetarea aranjării va suprascrie pozițiile meselor pentru TOATE sălile. Continui?",
+    en: "Reset layout will overwrite table positions for ALL halls. Continue?",
+  },
+  confirmResetLayoutHall: {
+    ru: "Сброс раскладки перезапишет позиции столов для выбранного зала. Продолжить?",
+    ro: "Resetarea aranjării va suprascrie pozițiile meselor pentru sala selectată. Continui?",
+    en: "Reset layout will overwrite table positions for the selected hall. Continue?",
+  },
+  confirmSnapLayoutAll: {
+    ru: "Привязка к сетке изменит позиции столов для ВСЕХ залов. Продолжить?",
+    ro: "Alinierea la grilă va ajusta pozițiile meselor pentru TOATE sălile. Continui?",
+    en: "Snap layout will adjust table positions for ALL halls. Continue?",
+  },
+  confirmSnapLayoutHall: {
+    ru: "Привязка к сетке изменит позиции столов для выбранного зала. Продолжить?",
+    ro: "Alinierea la grilă va ajusta pozițiile meselor pentru sala selectată. Continui?",
+    en: "Snap layout will adjust table positions for the selected hall. Continue?",
+  },
+  templateNamePrompt: { ru: "Название шаблона", ro: "Nume șablon", en: "Template name" },
+  templateDefaultName: { ru: "Шаблон", ro: "Șablon", en: "Template" },
+  importedPlanPrefix: { ru: "Импорт", ro: "Import", en: "Imported" },
+};
+
+const t = (lang: Lang, key: string) => dict[key]?.[lang] ?? key;
+
 type Category = {
   id: number;
   nameRu: string;
@@ -98,6 +382,14 @@ type BranchSettings = {
   tipsPercentages: number[];
   payCashEnabled: boolean;
   payTerminalEnabled: boolean;
+  currencyCode?: string;
+};
+
+type CurrencyDto = {
+  code: string;
+  name: string;
+  symbol?: string | null;
+  isActive: boolean;
 };
 
 type StatsSummary = {
@@ -203,6 +495,7 @@ export default function AdminPage() {
   const [password, setPassword] = useState("");
   const [authReady, setAuthReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lang, setLang] = useState<Lang>("ru");
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<MenuItem[]>([]);
@@ -228,7 +521,12 @@ export default function AdminPage() {
   const [dragWaiterId, setDragWaiterId] = useState<number | null>(null);
   const [dragOverTableId, setDragOverTableId] = useState<number | null>(null);
   const [planTemplates, setPlanTemplates] = useState<HallPlanTemplateDto[]>([]);
+  const [planVersions, setPlanVersions] = useState<HallPlanVersionDto[]>([]);
+  const [planVersionsOpen, setPlanVersionsOpen] = useState(false);
+  const [planVersionsLoading, setPlanVersionsLoading] = useState(false);
   const [applyLayoutsOnImport, setApplyLayoutsOnImport] = useState(true);
+  const [applyTablesOnImport, setApplyTablesOnImport] = useState(true);
+  const [currencies, setCurrencies] = useState<CurrencyDto[]>([]);
   const zoneDragRef = useRef<{
     id: string;
     startX: number;
@@ -358,6 +656,7 @@ export default function AdminPage() {
     const u = localStorage.getItem("adminUser") ?? "";
     const p = localStorage.getItem("adminPass") ?? "";
     const exp = localStorage.getItem("partyExpiringMinutes");
+    const l = (localStorage.getItem("adminLang") ?? "ru") as Lang;
     const menuSearchSaved = localStorage.getItem("admin_menu_search");
     const menuCatSaved = localStorage.getItem("admin_menu_cat");
     const menuActiveSaved = localStorage.getItem("admin_menu_active");
@@ -374,6 +673,9 @@ export default function AdminPage() {
       setUsername(u);
       setPassword(p);
       setAuthReady(true);
+    }
+    if (l === "ru" || l === "ro" || l === "en") {
+      setLang(l);
     }
     if (exp) {
       const n = Number(exp);
@@ -395,6 +697,10 @@ export default function AdminPage() {
       if (!Number.isNaN(n) && n > 0) setAuditLimit(n);
     }
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem("adminLang", lang);
+  }, [lang]);
 
   const authHeader = useMemo(() => {
     if (!authReady) return "";
@@ -441,6 +747,8 @@ export default function AdminPage() {
       layoutZone: "",
     };
   };
+
+  const snapValue = (v: number, step = 2) => Math.round(v / step) * step;
 
   const getTableLayout = (t: TableDto, idx: number) => {
     const d = layoutDefaults(idx);
@@ -609,7 +917,7 @@ export default function AdminPage() {
     if (!authReady) return;
     setError(null);
     try {
-      const [catsRes, itemsRes, tablesRes, staffRes, settingsRes, modGroupsRes, partiesRes, hallsRes] = await Promise.all([
+      const [catsRes, itemsRes, tablesRes, staffRes, settingsRes, modGroupsRes, partiesRes, hallsRes, currenciesRes] = await Promise.all([
         api("/api/admin/menu/categories"),
         api("/api/admin/menu/items"),
         api("/api/admin/tables"),
@@ -618,18 +926,24 @@ export default function AdminPage() {
         api("/api/admin/modifier-groups"),
         api(`/api/admin/parties?status=${encodeURIComponent(partyStatusFilter)}`),
         api("/api/admin/halls"),
+        api("/api/admin/currencies"),
       ]);
       setCategories(await catsRes.json());
       setItems(await itemsRes.json());
       setTables(await tablesRes.json());
       setStaff(await staffRes.json());
-      setSettings(await settingsRes.json());
+      const settingsBody = await settingsRes.json();
+      setSettings(settingsBody);
       setModGroups(await modGroupsRes.json());
       setParties(await partiesRes.json());
       const hallsBody = await hallsRes.json();
       setHalls(hallsBody);
+      setCurrencies(await currenciesRes.json());
       if (!hallId && hallsBody.length > 0) {
         setHallId(hallsBody[0].id);
+      }
+      if (settingsBody?.currencyCode && newItemCurrency === "MDL") {
+        setNewItemCurrency(settingsBody.currencyCode);
       }
     } catch (e: any) {
       setError(e?.message ?? "Load error");
@@ -695,6 +1009,19 @@ export default function AdminPage() {
       setPlanZones([]);
     }
   }, [hallPlanId, hallPlans]);
+
+  useEffect(() => {
+    if (!authReady || !hallPlanId) {
+      setPlanVersions([]);
+      return;
+    }
+    setPlanVersionsLoading(true);
+    api(`/api/admin/hall-plans/${hallPlanId}/versions`)
+      .then((r) => r.json())
+      .then((body) => setPlanVersions(Array.isArray(body) ? body : []))
+      .catch(() => setPlanVersions([]))
+      .finally(() => setPlanVersionsLoading(false));
+  }, [authReady, hallPlanId]);
 
   useEffect(() => {
     if (!authReady || statsHallId === "") {
@@ -852,7 +1179,7 @@ export default function AdminPage() {
     setNewItemFat(0);
     setNewItemCarbs(0);
     setNewItemPrice(0);
-    setNewItemCurrency("MDL");
+    setNewItemCurrency(settings?.currencyCode ?? "MDL");
     setNewItemActive(true);
     setNewItemStopList(false);
     loadAll();
@@ -948,23 +1275,22 @@ export default function AdminPage() {
     URL.revokeObjectURL(url);
   }
 
-  async function importPlanJson(file: File, applyLayouts = true) {
+  async function importPlanJson(file: File, applyLayouts = true, applyTables = true) {
     if (!hallId) return;
     if (applyLayouts) {
-      const ok = window.confirm(
-        "Apply layouts will overwrite current table positions/sizes for this hall. Continue?"
-      );
+      const ok = window.confirm(t(lang, "confirmApplyLayouts"));
       if (!ok) return;
     }
     const text = await file.text();
     const parsed = JSON.parse(text);
-    const name = parsed.name || `Imported ${new Date().toISOString()}`;
+    const name = parsed.name || `${t(lang, "importedPlanPrefix")} ${new Date().toISOString()}`;
     const payload = {
       name,
       backgroundUrl: parsed.backgroundUrl ?? "",
       zonesJson: parsed.zonesJson ?? "",
       tables: parsed.tables ?? [],
       applyLayouts,
+      applyTables,
     };
     const res = await api(`/api/admin/halls/${hallId}/plans/import`, {
       method: "POST",
@@ -977,7 +1303,7 @@ export default function AdminPage() {
 
   function saveTemplate() {
     if (!hallPlanId) return;
-    const name = prompt("Template name", hallPlans.find((p) => p.id === hallPlanId)?.name ?? "Template");
+    const name = prompt(t(lang, "templateNamePrompt"), hallPlans.find((p) => p.id === hallPlanId)?.name ?? t(lang, "templateDefaultName"));
     if (!name) return;
     const payload = {
       name,
@@ -1013,9 +1339,7 @@ export default function AdminPage() {
 
   async function applyTemplate(t: HallPlanTemplateDto) {
     if (!hallId) return;
-    const ok = window.confirm(
-      "Apply template will overwrite current table positions/sizes for this hall. Continue?"
-    );
+    const ok = window.confirm(t(lang, "confirmApplyTemplate"));
     if (!ok) return;
     let payload: any = null;
     try {
@@ -1039,6 +1363,10 @@ export default function AdminPage() {
   }
 
   function autoLayoutTables() {
+    const ok = window.confirm(
+      hallId === "" ? t(lang, "confirmAutoLayoutAll") : t(lang, "confirmAutoLayoutHall")
+    );
+    if (!ok) return;
     setTables((prev) =>
       prev.map((t, idx) => {
         const d = layoutDefaults(idx);
@@ -1052,6 +1380,52 @@ export default function AdminPage() {
           layoutRotation: d.layoutRotation,
           layoutZone: d.layoutZone,
           hallId: hallId === "" ? t.hallId : hallId,
+        };
+      })
+    );
+  }
+
+  function resetLayouts() {
+    const ok = window.confirm(
+      hallId === "" ? t(lang, "confirmResetLayoutAll") : t(lang, "confirmResetLayoutHall")
+    );
+    if (!ok) return;
+    setTables((prev) =>
+      prev.map((t, idx) => {
+        if (hallId !== "" && t.hallId !== hallId) return t;
+        const d = layoutDefaults(idx);
+        return {
+          ...t,
+          layoutX: d.layoutX,
+          layoutY: d.layoutY,
+          layoutW: d.layoutW,
+          layoutH: d.layoutH,
+          layoutShape: d.layoutShape,
+          layoutRotation: d.layoutRotation,
+          layoutZone: d.layoutZone,
+        };
+      })
+    );
+  }
+
+  function snapLayouts() {
+    const ok = window.confirm(
+      hallId === "" ? t(lang, "confirmSnapLayoutAll") : t(lang, "confirmSnapLayoutHall")
+    );
+    if (!ok) return;
+    setTables((prev) =>
+      prev.map((t, idx) => {
+        if (hallId !== "" && t.hallId !== hallId) return t;
+        const l = getTableLayout(t, idx);
+        return {
+          ...t,
+          layoutX: snapValue(l.layoutX),
+          layoutY: snapValue(l.layoutY),
+          layoutW: snapValue(l.layoutW),
+          layoutH: snapValue(l.layoutH),
+          layoutShape: l.layoutShape,
+          layoutRotation: l.layoutRotation,
+          layoutZone: l.layoutZone,
         };
       })
     );
@@ -1246,6 +1620,7 @@ export default function AdminPage() {
         tipsPercentages: settings.tipsPercentages,
         payCashEnabled: settings.payCashEnabled,
         payTerminalEnabled: settings.payTerminalEnabled,
+        currencyCode: settings.currencyCode,
       }),
     });
     loadAll();
@@ -1433,12 +1808,17 @@ export default function AdminPage() {
   if (!authReady) {
     return (
       <main style={{ padding: 24, maxWidth: 520, margin: "0 auto", fontFamily: "system-ui, -apple-system, Segoe UI, Roboto" }}>
-        <h1>Admin Login</h1>
+        <h1>{t(lang, "loginTitle")}</h1>
         {error && <div style={{ color: "#b11e46" }}>{error}</div>}
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Username" />
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" />
-          <button onClick={login} style={{ padding: "10px 14px" }}>Login</button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => setLang("ru")}>RU</button>
+            <button onClick={() => setLang("ro")}>RO</button>
+            <button onClick={() => setLang("en")}>EN</button>
+          </div>
+          <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder={t(lang, "username")} />
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={t(lang, "password")} />
+          <button onClick={login} style={{ padding: "10px 14px" }}>{t(lang, "login")}</button>
         </div>
       </main>
     );
@@ -1447,11 +1827,16 @@ export default function AdminPage() {
   return (
     <main style={{ padding: 16, maxWidth: 1100, margin: "0 auto", fontFamily: "system-ui, -apple-system, Segoe UI, Roboto" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h1 style={{ margin: 0 }}>Admin</h1>
-        <button onClick={loadAll}>Refresh</button>
+        <h1 style={{ margin: 0 }}>{t(lang, "admin")}</h1>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button onClick={() => setLang("ru")}>RU</button>
+          <button onClick={() => setLang("ro")}>RO</button>
+          <button onClick={() => setLang("en")}>EN</button>
+          <button onClick={loadAll}>{t(lang, "refresh")}</button>
+        </div>
       </div>
       <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 10 }}>
-        <button onClick={resetAllFilters}>Reset all filters</button>
+        <button onClick={resetAllFilters}>{t(lang, "resetFilters")}</button>
         {adminFiltersDirty && (
           <span
             style={{
@@ -1463,46 +1848,60 @@ export default function AdminPage() {
               fontWeight: 600,
             }}
           >
-            Filters active: {adminFiltersCount}
+            {t(lang, "filtersActive")}: {adminFiltersCount}
           </span>
         )}
       </div>
       {error && <div style={{ color: "#b11e46", marginTop: 8 }}>{error}</div>}
 
       <section style={{ marginTop: 24 }}>
-        <h2>Settings</h2>
+        <h2>{t(lang, "settings")}</h2>
         {settings && (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
-            <label><input type="checkbox" checked={settings.requireOtpForFirstOrder} onChange={(e) => setSettings({ ...settings, requireOtpForFirstOrder: e.target.checked })} /> requireOtpForFirstOrder</label>
-            <label><input type="checkbox" checked={settings.enablePartyPin} onChange={(e) => setSettings({ ...settings, enablePartyPin: e.target.checked })} /> enablePartyPin</label>
-            <label><input type="checkbox" checked={settings.allowPayOtherGuestsItems} onChange={(e) => setSettings({ ...settings, allowPayOtherGuestsItems: e.target.checked })} /> allowPayOtherGuestsItems</label>
-            <label><input type="checkbox" checked={settings.allowPayWholeTable} onChange={(e) => setSettings({ ...settings, allowPayWholeTable: e.target.checked })} /> allowPayWholeTable</label>
-            <label><input type="checkbox" checked={settings.tipsEnabled} onChange={(e) => setSettings({ ...settings, tipsEnabled: e.target.checked })} /> tipsEnabled</label>
-            <label><input type="checkbox" checked={settings.payCashEnabled} onChange={(e) => setSettings({ ...settings, payCashEnabled: e.target.checked })} /> payCashEnabled</label>
-            <label><input type="checkbox" checked={settings.payTerminalEnabled} onChange={(e) => setSettings({ ...settings, payTerminalEnabled: e.target.checked })} /> payTerminalEnabled</label>
-            <label>otpTtlSeconds <input value={settings.otpTtlSeconds} onChange={(e) => setSettings({ ...settings, otpTtlSeconds: Number(e.target.value) })} /></label>
-            <label>otpMaxAttempts <input value={settings.otpMaxAttempts} onChange={(e) => setSettings({ ...settings, otpMaxAttempts: Number(e.target.value) })} /></label>
-            <label>otpResendCooldownSeconds <input value={settings.otpResendCooldownSeconds} onChange={(e) => setSettings({ ...settings, otpResendCooldownSeconds: Number(e.target.value) })} /></label>
-            <label>otpLength <input value={settings.otpLength} onChange={(e) => setSettings({ ...settings, otpLength: Number(e.target.value) })} /></label>
-            <label><input type="checkbox" checked={settings.otpDevEchoCode} onChange={(e) => setSettings({ ...settings, otpDevEchoCode: e.target.checked })} /> otpDevEchoCode</label>
-            <label>tipsPercentages (comma) <input value={settings.tipsPercentages.join(",")} onChange={(e) => setSettings({ ...settings, tipsPercentages: e.target.value.split(",").map((x) => parseInt(x.trim(), 10)).filter((v) => !Number.isNaN(v)) })} /></label>
+            <label><input type="checkbox" checked={settings.requireOtpForFirstOrder} onChange={(e) => setSettings({ ...settings, requireOtpForFirstOrder: e.target.checked })} /> {t(lang, "requireOtpForFirstOrder")}</label>
+            <label><input type="checkbox" checked={settings.enablePartyPin} onChange={(e) => setSettings({ ...settings, enablePartyPin: e.target.checked })} /> {t(lang, "enablePartyPin")}</label>
+            <label><input type="checkbox" checked={settings.allowPayOtherGuestsItems} onChange={(e) => setSettings({ ...settings, allowPayOtherGuestsItems: e.target.checked })} /> {t(lang, "allowPayOtherGuestsItems")}</label>
+            <label><input type="checkbox" checked={settings.allowPayWholeTable} onChange={(e) => setSettings({ ...settings, allowPayWholeTable: e.target.checked })} /> {t(lang, "allowPayWholeTable")}</label>
+            <label><input type="checkbox" checked={settings.tipsEnabled} onChange={(e) => setSettings({ ...settings, tipsEnabled: e.target.checked })} /> {t(lang, "tipsEnabled")}</label>
+            <label><input type="checkbox" checked={settings.payCashEnabled} onChange={(e) => setSettings({ ...settings, payCashEnabled: e.target.checked })} /> {t(lang, "payCashEnabled")}</label>
+            <label><input type="checkbox" checked={settings.payTerminalEnabled} onChange={(e) => setSettings({ ...settings, payTerminalEnabled: e.target.checked })} /> {t(lang, "payTerminalEnabled")}</label>
+            <label>
+              {t(lang, "currency")}
+              <select
+                value={settings.currencyCode ?? "MDL"}
+                onChange={(e) => setSettings({ ...settings, currencyCode: e.target.value })}
+              >
+                {currencies.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.code} — {c.name}
+                  </option>
+                ))}
+                {currencies.length === 0 && <option value="MDL">MDL</option>}
+              </select>
+            </label>
+            <label>{t(lang, "otpTtlSeconds")} <input value={settings.otpTtlSeconds} onChange={(e) => setSettings({ ...settings, otpTtlSeconds: Number(e.target.value) })} /></label>
+            <label>{t(lang, "otpMaxAttempts")} <input value={settings.otpMaxAttempts} onChange={(e) => setSettings({ ...settings, otpMaxAttempts: Number(e.target.value) })} /></label>
+            <label>{t(lang, "otpResendCooldownSeconds")} <input value={settings.otpResendCooldownSeconds} onChange={(e) => setSettings({ ...settings, otpResendCooldownSeconds: Number(e.target.value) })} /></label>
+            <label>{t(lang, "otpLength")} <input value={settings.otpLength} onChange={(e) => setSettings({ ...settings, otpLength: Number(e.target.value) })} /></label>
+            <label><input type="checkbox" checked={settings.otpDevEchoCode} onChange={(e) => setSettings({ ...settings, otpDevEchoCode: e.target.checked })} /> {t(lang, "otpDevEchoCode")}</label>
+            <label>{t(lang, "tipsPercentages")} <input value={settings.tipsPercentages.join(",")} onChange={(e) => setSettings({ ...settings, tipsPercentages: e.target.value.split(",").map((x) => parseInt(x.trim(), 10)).filter((v) => !Number.isNaN(v)) })} /></label>
           </div>
         )}
-        <button onClick={saveSettings} style={{ marginTop: 12, padding: "8px 12px" }}>Save settings</button>
+        <button onClick={saveSettings} style={{ marginTop: 12, padding: "8px 12px" }}>{t(lang, "saveSettings")}</button>
       </section>
 
       <section style={{ marginTop: 24 }}>
-        <h2>Parties</h2>
+        <h2>{t(lang, "parties")}</h2>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <label>
-            Status
+            {t(lang, "status")}
             <select value={partyStatusFilter} onChange={(e) => setPartyStatusFilter(e.target.value)}>
-              <option value="ACTIVE">ACTIVE</option>
-              <option value="CLOSED">CLOSED</option>
+              <option value="ACTIVE">{t(lang, "statusActive")}</option>
+              <option value="CLOSED">{t(lang, "statusClosed")}</option>
             </select>
           </label>
           <label>
-            Table
+            {t(lang, "table")}
             <input
               value={partyTableFilter}
               onChange={(e) => setPartyTableFilter(e.target.value)}
@@ -1511,7 +1910,7 @@ export default function AdminPage() {
             />
           </label>
           <label>
-            PIN
+            {t(lang, "pin")}
             <input
               value={partyPinFilter}
               onChange={(e) => setPartyPinFilter(e.target.value)}
@@ -1520,7 +1919,7 @@ export default function AdminPage() {
             />
           </label>
           <label>
-            Expiring (min)
+            {t(lang, "expiringMin")}
             <input
               type="number"
               min={1}
@@ -1535,24 +1934,24 @@ export default function AdminPage() {
           </label>
           <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#7c2d12" }}>
             <span style={{ width: 10, height: 10, borderRadius: 999, background: "#fde68a", display: "inline-block" }} />
-            Expiring
+            {t(lang, "expiring")}
           </div>
-          <button onClick={loadAll}>Refresh</button>
+          <button onClick={loadAll}>{t(lang, "refreshParties")}</button>
         </div>
         {parties.length === 0 ? (
-          <div style={{ marginTop: 8, color: "#666" }}>No parties</div>
+          <div style={{ marginTop: 8, color: "#666" }}>{t(lang, "noParties")}</div>
         ) : (
           <div style={{ marginTop: 10 }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr>
                   <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>ID</th>
-                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Table</th>
-                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>PIN</th>
-                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Status</th>
-                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Participants</th>
-                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Created</th>
-                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Expires</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "table")}</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "pin")}</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "status")}</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "participants")}</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "created")}</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "expires")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -1613,9 +2012,9 @@ export default function AdminPage() {
                         {expanded && (
                           <tr>
                             <td colSpan={7} style={{ padding: "8px 6px", borderBottom: "1px solid #f0f0f0", background: "#fafafa" }}>
-                              <div style={{ fontSize: 12, color: "#666", marginBottom: 6 }}>Participants (GuestSession IDs)</div>
+                              <div style={{ fontSize: 12, color: "#666", marginBottom: 6 }}>{t(lang, "participantsLabel")}</div>
                               {p.guestSessionIds.length === 0 ? (
-                                <div style={{ color: "#999" }}>No participants</div>
+                                <div style={{ color: "#999" }}>{t(lang, "noParticipants")}</div>
                               ) : (
                                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                                   {p.guestSessionIds.map((id) => (
@@ -1642,7 +2041,7 @@ export default function AdminPage() {
                                   }}
                                   disabled={p.guestSessionIds.length === 0}
                                 >
-                                  Copy IDs
+                                  {t(lang, "copyIds")}
                                 </button>
                               </div>
                             </td>
@@ -1658,66 +2057,66 @@ export default function AdminPage() {
       </section>
 
       <section style={{ marginTop: 24 }}>
-        <h2>Stats</h2>
+        <h2>{t(lang, "stats")}</h2>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <label>From <input type="date" value={statsFrom} onChange={(e) => setStatsFrom(e.target.value)} /></label>
-          <label>To <input type="date" value={statsTo} onChange={(e) => setStatsTo(e.target.value)} /></label>
+          <label>{t(lang, "fromDate")} <input type="date" value={statsFrom} onChange={(e) => setStatsFrom(e.target.value)} /></label>
+          <label>{t(lang, "toDate")} <input type="date" value={statsTo} onChange={(e) => setStatsTo(e.target.value)} /></label>
           <label>
-            Table
+            {t(lang, "table")}
             <select value={statsTableId} onChange={(e) => setStatsTableId(e.target.value ? Number(e.target.value) : "")}>
-              <option value="">All</option>
+              <option value="">{t(lang, "all")}</option>
               {tables.map((t) => (
                 <option key={t.id} value={t.id}>#{t.number}</option>
               ))}
             </select>
           </label>
           <label>
-            Hall
+            {t(lang, "hall")}
             <select value={statsHallId} onChange={(e) => setStatsHallId(e.target.value ? Number(e.target.value) : "")}>
-              <option value="">All</option>
+              <option value="">{t(lang, "all")}</option>
               {halls.map((h) => (
                 <option key={h.id} value={h.id}>{h.name}</option>
               ))}
             </select>
           </label>
           <label>
-            Plan
+            {t(lang, "plan")}
             <select
               value={statsHallPlanId}
               onChange={(e) => setStatsHallPlanId(e.target.value ? Number(e.target.value) : "")}
               disabled={statsHallId === ""}
             >
-              <option value="">All</option>
+              <option value="">{t(lang, "all")}</option>
               {statsHallPlans.map((p) => (
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
             </select>
           </label>
           {statsHallId === "" && (
-            <span style={{ fontSize: 12, color: "#666" }}>Plan доступен после выбора Hall</span>
+            <span style={{ fontSize: 12, color: "#666" }}>{t(lang, "planAvailableAfterHall")}</span>
           )}
           <label>
-            Waiter
+            {t(lang, "waiter")}
             <select value={statsWaiterId} onChange={(e) => setStatsWaiterId(e.target.value ? Number(e.target.value) : "")}>
-              <option value="">All</option>
+              <option value="">{t(lang, "all")}</option>
               {staff.filter((s) => s.role === "WAITER").map((w) => (
                 <option key={w.id} value={w.id}>{w.username} #{w.id}</option>
               ))}
             </select>
           </label>
-          <label>Top limit <input type="number" min={1} max={100} value={statsLimit} onChange={(e) => setStatsLimit(Number(e.target.value))} style={{ width: 80 }} /></label>
-          <button onClick={loadStats}>Load</button>
-          <button onClick={downloadCsv}>Download CSV</button>
+          <label>{t(lang, "topLimit")} <input type="number" min={1} max={100} value={statsLimit} onChange={(e) => setStatsLimit(Number(e.target.value))} style={{ width: 80 }} /></label>
+          <button onClick={loadStats}>{t(lang, "load")}</button>
+          <button onClick={downloadCsv}>{t(lang, "downloadCsv")}</button>
         </div>
         {stats && (
           <div style={{ marginTop: 10, border: "1px solid #eee", borderRadius: 8, padding: 10 }}>
-            <div>Period: {stats.from} → {stats.to}</div>
-            <div>Orders: {stats.ordersCount}</div>
-            <div>Waiter calls: {stats.callsCount}</div>
-            <div>Paid bills: {stats.paidBillsCount}</div>
-            <div>Gross: {money(stats.grossCents)}</div>
-            <div>Tips: {money(stats.tipsCents)}</div>
-            <div>Active tables: {stats.activeTablesCount}</div>
+            <div>{t(lang, "period")}: {stats.from} → {stats.to}</div>
+            <div>{t(lang, "ordersCount")}: {stats.ordersCount}</div>
+            <div>{t(lang, "callsCount")}: {stats.callsCount}</div>
+            <div>{t(lang, "paidBills")}: {stats.paidBillsCount}</div>
+            <div>{t(lang, "gross")}: {money(stats.grossCents)}</div>
+            <div>{t(lang, "tips")}: {money(stats.tipsCents)}</div>
+            <div>{t(lang, "activeTables")}: {stats.activeTablesCount}</div>
           </div>
         )}
         {daily.length > 0 && (
@@ -1725,12 +2124,12 @@ export default function AdminPage() {
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr>
-                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Day</th>
-                  <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Orders</th>
-                  <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Calls</th>
-                  <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Paid bills</th>
-                  <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Gross</th>
-                  <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Tips</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "day")}</th>
+                  <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "ordersCount")}</th>
+                  <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "callsCount")}</th>
+                  <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "paidBills")}</th>
+                  <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "gross")}</th>
+                  <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "tips")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -1752,16 +2151,16 @@ export default function AdminPage() {
         {(topItems.length > 0 || topCategories.length > 0) && (
           <div style={{ marginTop: 16, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
             <div style={{ border: "1px solid #eee", borderRadius: 8, padding: 10 }}>
-              <strong>Top items</strong>
+              <strong>{t(lang, "topItems")}</strong>
               {topItems.length === 0 ? (
-                <div style={{ color: "#666", marginTop: 6 }}>No data</div>
+                <div style={{ color: "#666", marginTop: 6 }}>{t(lang, "noData")}</div>
               ) : (
                 <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 6 }}>
                   <thead>
                     <tr>
-                      <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Item</th>
-                      <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Qty</th>
-                      <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Gross</th>
+                      <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "items")}</th>
+                      <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "qty")}</th>
+                      <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "gross")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1777,16 +2176,16 @@ export default function AdminPage() {
               )}
             </div>
             <div style={{ border: "1px solid #eee", borderRadius: 8, padding: 10 }}>
-              <strong>Top categories</strong>
+              <strong>{t(lang, "topCategories")}</strong>
               {topCategories.length === 0 ? (
-                <div style={{ color: "#666", marginTop: 6 }}>No data</div>
+                <div style={{ color: "#666", marginTop: 6 }}>{t(lang, "noData")}</div>
               ) : (
                 <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 6 }}>
                   <thead>
                     <tr>
-                      <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Category</th>
-                      <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Qty</th>
-                      <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Gross</th>
+                      <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "categories")}</th>
+                      <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "qty")}</th>
+                      <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "gross")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1806,28 +2205,28 @@ export default function AdminPage() {
       </section>
 
       <section style={{ marginTop: 24 }}>
-        <h2>Audit Logs</h2>
+        <h2>{t(lang, "audit")}</h2>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <label>
-            Action
-            <input list="audit-actions" value={auditAction} onChange={(e) => setAuditAction(e.target.value)} placeholder="CREATE/UPDATE/DELETE" />
+            {t(lang, "action")}
+            <input list="audit-actions" value={auditAction} onChange={(e) => setAuditAction(e.target.value)} placeholder={t(lang, "auditActionPlaceholder")} />
           </label>
           <label>
-            Entity
-            <input list="audit-entities" value={auditEntityType} onChange={(e) => setAuditEntityType(e.target.value)} placeholder="MenuItem/StaffUser" />
+            {t(lang, "entity")}
+            <input list="audit-entities" value={auditEntityType} onChange={(e) => setAuditEntityType(e.target.value)} placeholder={t(lang, "auditEntityPlaceholder")} />
           </label>
-          <label>Actor <input value={auditActor} onChange={(e) => setAuditActor(e.target.value)} placeholder="username" /></label>
-          <label>From <input type="date" value={auditFrom} onChange={(e) => setAuditFrom(e.target.value)} /></label>
-          <label>To <input type="date" value={auditTo} onChange={(e) => setAuditTo(e.target.value)} /></label>
-          <label>Before ID <input type="number" value={auditBeforeId} onChange={(e) => setAuditBeforeId(e.target.value ? Number(e.target.value) : "")} /></label>
-          <label>After ID <input type="number" value={auditAfterId} onChange={(e) => setAuditAfterId(e.target.value ? Number(e.target.value) : "")} /></label>
-          <label>Limit <input type="number" min={1} max={500} value={auditLimit} onChange={(e) => setAuditLimit(Number(e.target.value))} style={{ width: 90 }} /></label>
-          <button onClick={loadAuditLogs} disabled={auditLoading}>{auditLoading ? "Loading..." : "Load"}</button>
+          <label>{t(lang, "actor")} <input value={auditActor} onChange={(e) => setAuditActor(e.target.value)} placeholder={t(lang, "username")} /></label>
+          <label>{t(lang, "from")} <input type="date" value={auditFrom} onChange={(e) => setAuditFrom(e.target.value)} /></label>
+          <label>{t(lang, "to")} <input type="date" value={auditTo} onChange={(e) => setAuditTo(e.target.value)} /></label>
+          <label>{t(lang, "beforeId")} <input type="number" value={auditBeforeId} onChange={(e) => setAuditBeforeId(e.target.value ? Number(e.target.value) : "")} /></label>
+          <label>{t(lang, "afterId")} <input type="number" value={auditAfterId} onChange={(e) => setAuditAfterId(e.target.value ? Number(e.target.value) : "")} /></label>
+          <label>{t(lang, "limit")} <input type="number" min={1} max={500} value={auditLimit} onChange={(e) => setAuditLimit(Number(e.target.value))} style={{ width: 90 }} /></label>
+          <button onClick={loadAuditLogs} disabled={auditLoading}>{auditLoading ? t(lang, "loading") : t(lang, "load")}</button>
           <button onClick={downloadAuditCsv} disabled={auditLoading}>CSV</button>
-          <button onClick={() => { setAuditAfterId(""); setAuditBeforeId(""); loadAuditLogs(); }} disabled={auditLoading}>Latest</button>
-          <button onClick={loadAuditPrevPage} disabled={auditLoading || auditLogs.length === 0}>Prev page</button>
-          <button onClick={loadAuditNextPage} disabled={auditLoading || auditLogs.length === 0}>Next page</button>
-          <button onClick={clearAuditFilters} disabled={auditLoading}>Clear</button>
+          <button onClick={() => { setAuditAfterId(""); setAuditBeforeId(""); loadAuditLogs(); }} disabled={auditLoading}>{t(lang, "latest")}</button>
+          <button onClick={loadAuditPrevPage} disabled={auditLoading || auditLogs.length === 0}>{t(lang, "prevPage")}</button>
+          <button onClick={loadAuditNextPage} disabled={auditLoading || auditLogs.length === 0}>{t(lang, "nextPage")}</button>
+          <button onClick={clearAuditFilters} disabled={auditLoading}>{t(lang, "clear")}</button>
         </div>
         <datalist id="audit-actions">
           <option value="CREATE" />
@@ -1847,11 +2246,11 @@ export default function AdminPage() {
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr>
-                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>ID</th>
-                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>When</th>
-                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Actor</th>
-                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Action</th>
-                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Entity</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "auditId")}</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "when")}</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "auditActor")}</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "auditAction")}</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "auditEntity")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -1875,24 +2274,24 @@ export default function AdminPage() {
       </section>
 
       <section style={{ marginTop: 24 }}>
-        <h2>Menu Categories</h2>
+        <h2>{t(lang, "categories")}</h2>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <input placeholder="Name (RU)" value={newCatNameRu} onChange={(e) => setNewCatNameRu(e.target.value)} />
-          <input type="number" placeholder="Sort" value={newCatSort} onChange={(e) => setNewCatSort(Number(e.target.value))} />
-          <button onClick={createCategory}>Add</button>
+          <input placeholder={t(lang, "menuCategoryNameRu")} value={newCatNameRu} onChange={(e) => setNewCatNameRu(e.target.value)} />
+          <input type="number" placeholder={t(lang, "sort")} value={newCatSort} onChange={(e) => setNewCatSort(Number(e.target.value))} />
+          <button onClick={createCategory}>{t(lang, "add")}</button>
         </div>
         {editingCategoryId && (
           <div style={{ marginTop: 10, border: "1px dashed #ddd", padding: 10 }}>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <input placeholder="Name RU" value={editCatNameRu} onChange={(e) => setEditCatNameRu(e.target.value)} />
-              <input placeholder="Name RO" value={editCatNameRo} onChange={(e) => setEditCatNameRo(e.target.value)} />
-              <input placeholder="Name EN" value={editCatNameEn} onChange={(e) => setEditCatNameEn(e.target.value)} />
-              <input type="number" placeholder="Sort" value={editCatSort} onChange={(e) => setEditCatSort(Number(e.target.value))} />
-              <label><input type="checkbox" checked={editCatActive} onChange={(e) => setEditCatActive(e.target.checked)} /> Active</label>
+              <input placeholder={t(lang, "menuCategoryNameRu")} value={editCatNameRu} onChange={(e) => setEditCatNameRu(e.target.value)} />
+              <input placeholder={t(lang, "menuCategoryNameRo")} value={editCatNameRo} onChange={(e) => setEditCatNameRo(e.target.value)} />
+              <input placeholder={t(lang, "menuCategoryNameEn")} value={editCatNameEn} onChange={(e) => setEditCatNameEn(e.target.value)} />
+              <input type="number" placeholder={t(lang, "sort")} value={editCatSort} onChange={(e) => setEditCatSort(Number(e.target.value))} />
+              <label><input type="checkbox" checked={editCatActive} onChange={(e) => setEditCatActive(e.target.checked)} /> {t(lang, "active")}</label>
             </div>
             <div style={{ marginTop: 8 }}>
-              <button onClick={saveEditedCategory}>Save</button>
-              <button onClick={() => setEditingCategoryId(null)} style={{ marginLeft: 8 }}>Cancel</button>
+              <button onClick={saveEditedCategory}>{t(lang, "save")}</button>
+              <button onClick={() => setEditingCategoryId(null)} style={{ marginLeft: 8 }}>{t(lang, "cancel")}</button>
             </div>
           </div>
         )}
@@ -1901,7 +2300,7 @@ export default function AdminPage() {
             <div key={c.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "6px 0", borderBottom: "1px solid #eee" }}>
               <strong>{c.nameRu}</strong>
               <span>#{c.sortOrder}</span>
-              <span>{c.isActive ? "ACTIVE" : "INACTIVE"}</span>
+              <span>{c.isActive ? t(lang, "active") : t(lang, "inactive")}</span>
               <button onClick={() => {
                 setEditingCategoryId(c.id);
                 setEditCatNameRu(c.nameRu);
@@ -1909,104 +2308,118 @@ export default function AdminPage() {
                 setEditCatNameEn(c.nameEn ?? "");
                 setEditCatSort(c.sortOrder);
                 setEditCatActive(c.isActive);
-              }}>Edit</button>
-              <button onClick={() => toggleCategory(c)}>{c.isActive ? "Disable" : "Enable"}</button>
+              }}>{t(lang, "edit")}</button>
+              <button onClick={() => toggleCategory(c)}>{c.isActive ? t(lang, "disable") : t(lang, "enable")}</button>
             </div>
           ))}
         </div>
       </section>
 
       <section style={{ marginTop: 24 }}>
-        <h2>Menu Items</h2>
+        <h2>{t(lang, "items")}</h2>
         <div style={{ marginBottom: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <input
-            placeholder="Search (RU/RO/EN)"
+            placeholder={`${t(lang, "search")} (RU/RO/EN)`}
             value={menuSearch}
             onChange={(e) => setMenuSearch(e.target.value)}
           />
           <select value={menuFilterCategoryId} onChange={(e) => setMenuFilterCategoryId(e.target.value ? Number(e.target.value) : "")}>
-            <option value="">All categories</option>
+            <option value="">{t(lang, "allCategories")}</option>
             {categories.map((c) => (
               <option key={c.id} value={c.id}>{c.nameRu}</option>
             ))}
           </select>
           <select value={menuFilterActive} onChange={(e) => setMenuFilterActive(e.target.value)}>
-            <option value="">All statuses</option>
-            <option value="ACTIVE">Active</option>
-            <option value="INACTIVE">Inactive</option>
+            <option value="">{t(lang, "allStatuses")}</option>
+            <option value="ACTIVE">{t(lang, "active")}</option>
+            <option value="INACTIVE">{t(lang, "inactive")}</option>
           </select>
           <select value={menuFilterStopList} onChange={(e) => setMenuFilterStopList(e.target.value)}>
-            <option value="">Stop list: any</option>
-            <option value="STOP">Stop list</option>
-            <option value="OK">Not in stop list</option>
+            <option value="">{t(lang, "stopListAny")}</option>
+            <option value="STOP">{t(lang, "stopList")}</option>
+            <option value="OK">{t(lang, "notInStopList")}</option>
           </select>
-          <button onClick={() => setMenuSearch("")}>Clear</button>
-          <button onClick={() => { setMenuSearch(""); setMenuFilterCategoryId(""); setMenuFilterActive(""); setMenuFilterStopList(""); }}>Reset filters</button>
+          <button onClick={() => setMenuSearch("")}>{t(lang, "clear")}</button>
+          <button onClick={() => { setMenuSearch(""); setMenuFilterCategoryId(""); setMenuFilterActive(""); setMenuFilterStopList(""); }}>{t(lang, "resetFilters")}</button>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <select value={newItemCatId} onChange={(e) => setNewItemCatId(e.target.value ? Number(e.target.value) : "")}>
-            <option value="">Category</option>
+            <option value="">{t(lang, "categories")}</option>
             {categories.map((c) => (
               <option key={c.id} value={c.id}>{c.nameRu}</option>
             ))}
           </select>
-          <input placeholder="Name (RU)" value={newItemNameRu} onChange={(e) => setNewItemNameRu(e.target.value)} />
-          <input placeholder="Name (RO)" value={newItemNameRo} onChange={(e) => setNewItemNameRo(e.target.value)} />
-          <input placeholder="Name (EN)" value={newItemNameEn} onChange={(e) => setNewItemNameEn(e.target.value)} />
-          <input placeholder="Desc (RU)" value={newItemDescRu} onChange={(e) => setNewItemDescRu(e.target.value)} />
-          <input placeholder="Desc (RO)" value={newItemDescRo} onChange={(e) => setNewItemDescRo(e.target.value)} />
-          <input placeholder="Desc (EN)" value={newItemDescEn} onChange={(e) => setNewItemDescEn(e.target.value)} />
-          <input placeholder="Ingredients (RU)" value={newItemIngredientsRu} onChange={(e) => setNewItemIngredientsRu(e.target.value)} />
-          <input placeholder="Ingredients (RO)" value={newItemIngredientsRo} onChange={(e) => setNewItemIngredientsRo(e.target.value)} />
-          <input placeholder="Ingredients (EN)" value={newItemIngredientsEn} onChange={(e) => setNewItemIngredientsEn(e.target.value)} />
-          <input placeholder="Allergens" value={newItemAllergens} onChange={(e) => setNewItemAllergens(e.target.value)} />
-          <input placeholder="Weight" value={newItemWeight} onChange={(e) => setNewItemWeight(e.target.value)} />
-          <input placeholder="Tags (csv)" value={newItemTags} onChange={(e) => setNewItemTags(e.target.value)} />
-          <input placeholder="Photo URLs (csv)" value={newItemPhotos} onChange={(e) => setNewItemPhotos(e.target.value)} />
-          <input type="number" placeholder="Kcal" value={newItemKcal} onChange={(e) => setNewItemKcal(Number(e.target.value))} />
-          <input type="number" placeholder="Protein g" value={newItemProtein} onChange={(e) => setNewItemProtein(Number(e.target.value))} />
-          <input type="number" placeholder="Fat g" value={newItemFat} onChange={(e) => setNewItemFat(Number(e.target.value))} />
-          <input type="number" placeholder="Carbs g" value={newItemCarbs} onChange={(e) => setNewItemCarbs(Number(e.target.value))} />
-          <input type="number" placeholder="Price cents" value={newItemPrice} onChange={(e) => setNewItemPrice(Number(e.target.value))} />
-          <input placeholder="Currency" value={newItemCurrency} onChange={(e) => setNewItemCurrency(e.target.value)} />
-          <label><input type="checkbox" checked={newItemActive} onChange={(e) => setNewItemActive(e.target.checked)} /> Active</label>
-          <label><input type="checkbox" checked={newItemStopList} onChange={(e) => setNewItemStopList(e.target.checked)} /> Stop list</label>
-          <button onClick={createItem}>Add</button>
+          <input placeholder={t(lang, "menuCategoryNameRu")} value={newItemNameRu} onChange={(e) => setNewItemNameRu(e.target.value)} />
+          <input placeholder={t(lang, "menuCategoryNameRo")} value={newItemNameRo} onChange={(e) => setNewItemNameRo(e.target.value)} />
+          <input placeholder={t(lang, "menuCategoryNameEn")} value={newItemNameEn} onChange={(e) => setNewItemNameEn(e.target.value)} />
+          <input placeholder={t(lang, "descRu")} value={newItemDescRu} onChange={(e) => setNewItemDescRu(e.target.value)} />
+          <input placeholder={t(lang, "descRo")} value={newItemDescRo} onChange={(e) => setNewItemDescRo(e.target.value)} />
+          <input placeholder={t(lang, "descEn")} value={newItemDescEn} onChange={(e) => setNewItemDescEn(e.target.value)} />
+          <input placeholder={t(lang, "ingredientsRu")} value={newItemIngredientsRu} onChange={(e) => setNewItemIngredientsRu(e.target.value)} />
+          <input placeholder={t(lang, "ingredientsRo")} value={newItemIngredientsRo} onChange={(e) => setNewItemIngredientsRo(e.target.value)} />
+          <input placeholder={t(lang, "ingredientsEn")} value={newItemIngredientsEn} onChange={(e) => setNewItemIngredientsEn(e.target.value)} />
+          <input placeholder={t(lang, "allergens")} value={newItemAllergens} onChange={(e) => setNewItemAllergens(e.target.value)} />
+          <input placeholder={t(lang, "weight")} value={newItemWeight} onChange={(e) => setNewItemWeight(e.target.value)} />
+          <input placeholder={t(lang, "tagsCsv")} value={newItemTags} onChange={(e) => setNewItemTags(e.target.value)} />
+          <input placeholder={t(lang, "photosCsv")} value={newItemPhotos} onChange={(e) => setNewItemPhotos(e.target.value)} />
+          <input type="number" placeholder={t(lang, "kcal")} value={newItemKcal} onChange={(e) => setNewItemKcal(Number(e.target.value))} />
+          <input type="number" placeholder={t(lang, "proteinG")} value={newItemProtein} onChange={(e) => setNewItemProtein(Number(e.target.value))} />
+          <input type="number" placeholder={t(lang, "fatG")} value={newItemFat} onChange={(e) => setNewItemFat(Number(e.target.value))} />
+          <input type="number" placeholder={t(lang, "carbsG")} value={newItemCarbs} onChange={(e) => setNewItemCarbs(Number(e.target.value))} />
+          <input type="number" placeholder={t(lang, "priceCents")} value={newItemPrice} onChange={(e) => setNewItemPrice(Number(e.target.value))} />
+          <select value={newItemCurrency} onChange={(e) => setNewItemCurrency(e.target.value)}>
+            {currencies.map((c) => (
+              <option key={c.code} value={c.code}>
+                {c.code}
+              </option>
+            ))}
+            {currencies.length === 0 && <option value={newItemCurrency}>{newItemCurrency}</option>}
+          </select>
+          <label><input type="checkbox" checked={newItemActive} onChange={(e) => setNewItemActive(e.target.checked)} /> {t(lang, "active")}</label>
+          <label><input type="checkbox" checked={newItemStopList} onChange={(e) => setNewItemStopList(e.target.checked)} /> {t(lang, "stopList")}</label>
+          <button onClick={createItem}>{t(lang, "add")}</button>
         </div>
         {editingItemId && (
           <div style={{ marginTop: 10, border: "1px dashed #ddd", padding: 10 }}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 8 }}>
               <select value={editItem.categoryId ?? ""} onChange={(e) => setEditItem({ ...editItem, categoryId: e.target.value ? Number(e.target.value) : undefined })}>
-                <option value="">Category</option>
+                <option value="">{t(lang, "categories")}</option>
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>{c.nameRu}</option>
                 ))}
               </select>
-              <input placeholder="Name RU" value={editItem.nameRu ?? ""} onChange={(e) => setEditItem({ ...editItem, nameRu: e.target.value })} />
-              <input placeholder="Name RO" value={editItem.nameRo ?? ""} onChange={(e) => setEditItem({ ...editItem, nameRo: e.target.value })} />
-              <input placeholder="Name EN" value={editItem.nameEn ?? ""} onChange={(e) => setEditItem({ ...editItem, nameEn: e.target.value })} />
-              <input placeholder="Desc RU" value={editItem.descriptionRu ?? ""} onChange={(e) => setEditItem({ ...editItem, descriptionRu: e.target.value })} />
-              <input placeholder="Desc RO" value={editItem.descriptionRo ?? ""} onChange={(e) => setEditItem({ ...editItem, descriptionRo: e.target.value })} />
-              <input placeholder="Desc EN" value={editItem.descriptionEn ?? ""} onChange={(e) => setEditItem({ ...editItem, descriptionEn: e.target.value })} />
-              <input placeholder="Ingredients RU" value={editItem.ingredientsRu ?? ""} onChange={(e) => setEditItem({ ...editItem, ingredientsRu: e.target.value })} />
-              <input placeholder="Ingredients RO" value={editItem.ingredientsRo ?? ""} onChange={(e) => setEditItem({ ...editItem, ingredientsRo: e.target.value })} />
-              <input placeholder="Ingredients EN" value={editItem.ingredientsEn ?? ""} onChange={(e) => setEditItem({ ...editItem, ingredientsEn: e.target.value })} />
-              <input placeholder="Allergens" value={editItem.allergens ?? ""} onChange={(e) => setEditItem({ ...editItem, allergens: e.target.value })} />
-              <input placeholder="Weight" value={editItem.weight ?? ""} onChange={(e) => setEditItem({ ...editItem, weight: e.target.value })} />
-              <input placeholder="Tags csv" value={editItem.tags ?? ""} onChange={(e) => setEditItem({ ...editItem, tags: e.target.value })} />
-              <input placeholder="Photo URLs csv" value={editItem.photoUrls ?? ""} onChange={(e) => setEditItem({ ...editItem, photoUrls: e.target.value })} />
-              <input type="number" placeholder="Kcal" value={editItem.kcal ?? 0} onChange={(e) => setEditItem({ ...editItem, kcal: Number(e.target.value) })} />
-              <input type="number" placeholder="Protein g" value={editItem.proteinG ?? 0} onChange={(e) => setEditItem({ ...editItem, proteinG: Number(e.target.value) })} />
-              <input type="number" placeholder="Fat g" value={editItem.fatG ?? 0} onChange={(e) => setEditItem({ ...editItem, fatG: Number(e.target.value) })} />
-              <input type="number" placeholder="Carbs g" value={editItem.carbsG ?? 0} onChange={(e) => setEditItem({ ...editItem, carbsG: Number(e.target.value) })} />
-              <input type="number" placeholder="Price cents" value={editItem.priceCents ?? 0} onChange={(e) => setEditItem({ ...editItem, priceCents: Number(e.target.value) })} />
-              <input placeholder="Currency" value={editItem.currency ?? "MDL"} onChange={(e) => setEditItem({ ...editItem, currency: e.target.value })} />
-              <label><input type="checkbox" checked={!!editItem.isActive} onChange={(e) => setEditItem({ ...editItem, isActive: e.target.checked })} /> Active</label>
-              <label><input type="checkbox" checked={!!editItem.isStopList} onChange={(e) => setEditItem({ ...editItem, isStopList: e.target.checked })} /> Stop list</label>
+              <input placeholder={t(lang, "menuCategoryNameRu")} value={editItem.nameRu ?? ""} onChange={(e) => setEditItem({ ...editItem, nameRu: e.target.value })} />
+              <input placeholder={t(lang, "menuCategoryNameRo")} value={editItem.nameRo ?? ""} onChange={(e) => setEditItem({ ...editItem, nameRo: e.target.value })} />
+              <input placeholder={t(lang, "menuCategoryNameEn")} value={editItem.nameEn ?? ""} onChange={(e) => setEditItem({ ...editItem, nameEn: e.target.value })} />
+              <input placeholder={t(lang, "descRu")} value={editItem.descriptionRu ?? ""} onChange={(e) => setEditItem({ ...editItem, descriptionRu: e.target.value })} />
+              <input placeholder={t(lang, "descRo")} value={editItem.descriptionRo ?? ""} onChange={(e) => setEditItem({ ...editItem, descriptionRo: e.target.value })} />
+              <input placeholder={t(lang, "descEn")} value={editItem.descriptionEn ?? ""} onChange={(e) => setEditItem({ ...editItem, descriptionEn: e.target.value })} />
+              <input placeholder={t(lang, "ingredientsRu")} value={editItem.ingredientsRu ?? ""} onChange={(e) => setEditItem({ ...editItem, ingredientsRu: e.target.value })} />
+              <input placeholder={t(lang, "ingredientsRo")} value={editItem.ingredientsRo ?? ""} onChange={(e) => setEditItem({ ...editItem, ingredientsRo: e.target.value })} />
+              <input placeholder={t(lang, "ingredientsEn")} value={editItem.ingredientsEn ?? ""} onChange={(e) => setEditItem({ ...editItem, ingredientsEn: e.target.value })} />
+              <input placeholder={t(lang, "allergens")} value={editItem.allergens ?? ""} onChange={(e) => setEditItem({ ...editItem, allergens: e.target.value })} />
+              <input placeholder={t(lang, "weight")} value={editItem.weight ?? ""} onChange={(e) => setEditItem({ ...editItem, weight: e.target.value })} />
+              <input placeholder={t(lang, "tagsCsv")} value={editItem.tags ?? ""} onChange={(e) => setEditItem({ ...editItem, tags: e.target.value })} />
+              <input placeholder={t(lang, "photosCsv")} value={editItem.photoUrls ?? ""} onChange={(e) => setEditItem({ ...editItem, photoUrls: e.target.value })} />
+              <input type="number" placeholder={t(lang, "kcal")} value={editItem.kcal ?? 0} onChange={(e) => setEditItem({ ...editItem, kcal: Number(e.target.value) })} />
+              <input type="number" placeholder={t(lang, "proteinG")} value={editItem.proteinG ?? 0} onChange={(e) => setEditItem({ ...editItem, proteinG: Number(e.target.value) })} />
+              <input type="number" placeholder={t(lang, "fatG")} value={editItem.fatG ?? 0} onChange={(e) => setEditItem({ ...editItem, fatG: Number(e.target.value) })} />
+              <input type="number" placeholder={t(lang, "carbsG")} value={editItem.carbsG ?? 0} onChange={(e) => setEditItem({ ...editItem, carbsG: Number(e.target.value) })} />
+              <input type="number" placeholder={t(lang, "priceCents")} value={editItem.priceCents ?? 0} onChange={(e) => setEditItem({ ...editItem, priceCents: Number(e.target.value) })} />
+              <select value={editItem.currency ?? "MDL"} onChange={(e) => setEditItem({ ...editItem, currency: e.target.value })}>
+                {currencies.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.code}
+                  </option>
+                ))}
+                {currencies.length === 0 && <option value={editItem.currency ?? "MDL"}>{editItem.currency ?? "MDL"}</option>}
+              </select>
+              <label><input type="checkbox" checked={!!editItem.isActive} onChange={(e) => setEditItem({ ...editItem, isActive: e.target.checked })} /> {t(lang, "active")}</label>
+              <label><input type="checkbox" checked={!!editItem.isStopList} onChange={(e) => setEditItem({ ...editItem, isStopList: e.target.checked })} /> {t(lang, "stopList")}</label>
             </div>
             <div style={{ marginTop: 8 }}>
-              <button onClick={saveEditedItem}>Save</button>
-              <button onClick={() => { setEditingItemId(null); setEditItem({}); }} style={{ marginLeft: 8 }}>Cancel</button>
+              <button onClick={saveEditedItem}>{t(lang, "save")}</button>
+              <button onClick={() => { setEditingItemId(null); setEditItem({}); }} style={{ marginLeft: 8 }}>{t(lang, "cancel")}</button>
             </div>
           </div>
         )}
@@ -2036,38 +2449,38 @@ export default function AdminPage() {
             <div key={it.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "6px 0", borderBottom: "1px solid #eee" }}>
               <strong>{it.nameRu}</strong>
               <span>{money(it.priceCents, it.currency)}</span>
-              <span>{it.isActive ? "ACTIVE" : "INACTIVE"}</span>
-              <span>{it.isStopList ? "STOP" : ""}</span>
-              <button onClick={() => editItem(it)}>Edit</button>
-              <button onClick={() => toggleItem(it)}>{it.isActive ? "Disable" : "Enable"}</button>
-              <button onClick={() => toggleStopList(it)}>{it.isStopList ? "Unstop" : "Stop list"}</button>
+              <span>{it.isActive ? t(lang, "active") : t(lang, "inactive")}</span>
+              <span>{it.isStopList ? t(lang, "stopList") : ""}</span>
+              <button onClick={() => editItem(it)}>{t(lang, "edit")}</button>
+              <button onClick={() => toggleItem(it)}>{it.isActive ? t(lang, "disable") : t(lang, "enable")}</button>
+              <button onClick={() => toggleStopList(it)}>{it.isStopList ? t(lang, "enable") : t(lang, "stopList")}</button>
             </div>
           ))}
         </div>
       </section>
 
       <section style={{ marginTop: 24 }}>
-        <h2>Floor Plan</h2>
+        <h2>{t(lang, "floorPlan")}</h2>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <input type="checkbox" checked={planEditMode} onChange={(e) => setPlanEditMode(e.target.checked)} />
-            Edit mode
+            {t(lang, "editMode")}
           </label>
           <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <input type="checkbox" checked={snapEnabled} onChange={(e) => setSnapEnabled(e.target.checked)} />
-            Snap to grid
+            {t(lang, "snapToGrid")}
           </label>
           <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <input type="checkbox" checked={planPreview} onChange={(e) => setPlanPreview(e.target.checked)} />
-            Preview
+            {t(lang, "preview")}
           </label>
           <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <input type="checkbox" checked={panMode} onChange={(e) => setPanMode(e.target.checked)} />
-            Pan mode
+            {t(lang, "panMode")}
           </label>
-          <button onClick={fitPlanToScreen}>Fit to screen</button>
-          <button onClick={() => setPlanZoom(1)}>Reset zoom</button>
-          <button onClick={() => setPlanPan({ x: 0, y: 0 })}>Reset pan</button>
+          <button onClick={fitPlanToScreen}>{t(lang, "fitToScreen")}</button>
+          <button onClick={() => setPlanZoom(1)}>{t(lang, "resetZoom")}</button>
+          <button onClick={() => setPlanPan({ x: 0, y: 0 })}>{t(lang, "resetPan")}</button>
           <button onClick={() => setPlanZoom((z) => Math.max(0.3, Number((z - 0.1).toFixed(2))))}>-</button>
           <button onClick={() => setPlanZoom((z) => Math.min(2, Number((z + 0.1).toFixed(2))))}>+</button>
           <input
@@ -2078,9 +2491,9 @@ export default function AdminPage() {
             value={planZoom}
             onChange={(e) => setPlanZoom(Number(e.target.value))}
           />
-          <span style={{ color: "#666" }}>Zoom: {Math.round(planZoom * 100)}%</span>
+          <span style={{ color: "#666" }}>{t(lang, "zoom")}: {Math.round(planZoom * 100)}%</span>
           <select value={hallId} onChange={(e) => setHallId(e.target.value ? Number(e.target.value) : "")}>
-            <option value="">Select hall</option>
+            <option value="">{t(lang, "planSelectHall")}</option>
             {halls.map((h) => {
               const planName = hallPlans.find((p) => p.id === h.activePlanId)?.name;
               return (
@@ -2091,7 +2504,7 @@ export default function AdminPage() {
             })}
           </select>
           <select value={hallPlanId} onChange={(e) => setHallPlanId(e.target.value ? Number(e.target.value) : "")} disabled={!hallId}>
-            <option value="">Default plan</option>
+            <option value="">{t(lang, "planDefault")}</option>
             {hallPlans.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
@@ -2104,7 +2517,7 @@ export default function AdminPage() {
             }}
             disabled={!hallId || !hallPlanId}
           >
-            Set active
+            {t(lang, "setActivePlan")}
           </button>
           <button
             onClick={async () => {
@@ -2114,7 +2527,7 @@ export default function AdminPage() {
             }}
             disabled={!hallPlanId}
           >
-            Duplicate plan
+            {t(lang, "duplicatePlan")}
           </button>
           <button
             onClick={async () => {
@@ -2125,36 +2538,106 @@ export default function AdminPage() {
             }}
             disabled={!hallPlanId}
           >
-            Delete plan
+            {t(lang, "deletePlan")}
           </button>
-          <button onClick={autoLayoutTables}>Auto layout</button>
-          <button onClick={saveTableLayout}>Save layout</button>
-          <button onClick={exportPlanJson} disabled={!hallPlanId}>Export JSON</button>
+          <button onClick={autoLayoutTables}>{t(lang, "autoLayout")}</button>
+          <button onClick={resetLayouts}>{t(lang, "resetLayout")}</button>
+          <button onClick={snapLayouts}>{t(lang, "snapLayout")}</button>
+          <button onClick={saveTableLayout}>{t(lang, "saveLayout")}</button>
+          <button onClick={exportPlanJson} disabled={!hallPlanId}>{t(lang, "exportJson")}</button>
+          <button
+            onClick={() => setPlanVersionsOpen((v) => !v)}
+            disabled={!hallPlanId}
+          >
+            {planVersionsOpen ? t(lang, "hideHistory") : t(lang, "showHistory")}
+          </button>
           <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <span style={{ fontSize: 12, color: "#666" }}>Import JSON</span>
+            <span style={{ fontSize: 12, color: "#666" }}>{t(lang, "importJson")}</span>
             <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "#666" }}>
               <input
                 type="checkbox"
                 checked={applyLayoutsOnImport}
                 onChange={(e) => setApplyLayoutsOnImport(e.target.checked)}
               />
-              Apply layouts (overwrite)
+              {t(lang, "applyLayouts")}
             </label>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "#666" }}>
+              <input
+                type="checkbox"
+                checked={applyTablesOnImport}
+                onChange={(e) => setApplyTablesOnImport(e.target.checked)}
+              />
+              {t(lang, "applyTables")}
+            </label>
+            <span style={{ fontSize: 11, color: "#888" }}>{t(lang, "importHint")}</span>
             <input
               type="file"
               accept="application/json"
               onChange={(e) => {
                 const f = e.target.files?.[0];
-                if (f) importPlanJson(f, applyLayoutsOnImport);
+                if (f) importPlanJson(f, applyLayoutsOnImport, applyTablesOnImport);
                 e.currentTarget.value = "";
               }}
             />
           </label>
-          <span style={{ color: "#666" }}>Drag tables on the map. Click a table to edit size/shape.</span>
+          <span style={{ color: "#666" }}>{t(lang, "dragHint")}</span>
         </div>
+        {hallPlanId && planVersionsOpen && (
+          <div style={{ marginTop: 10, border: "1px solid #eee", borderRadius: 12, padding: 12, background: "#fafafa" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <strong>{t(lang, "planHistory")}</strong>
+              <span style={{ fontSize: 12, color: "#666" }}>
+                {planVersionsLoading ? t(lang, "planHistoryLoading") : `${planVersions.length} ${t(lang, "versionsCount")}`}
+              </span>
+            </div>
+            {planVersions.length === 0 && !planVersionsLoading && (
+              <div style={{ fontSize: 12, color: "#666", marginTop: 6 }}>{t(lang, "noVersions")}</div>
+            )}
+            {planVersions.length > 0 && (
+              <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
+                {planVersions.slice(0, 20).map((v) => (
+                  <div
+                    key={v.id}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr auto",
+                      gap: 8,
+                      alignItems: "center",
+                      padding: "6px 8px",
+                      background: "#fff",
+                      borderRadius: 8,
+                      border: "1px solid #eee",
+                    }}
+                  >
+                    <div style={{ fontSize: 12 }}>
+                      <div style={{ fontWeight: 600 }}>{v.name}</div>
+                      <div style={{ color: "#666" }}>
+                        {v.action || "UPDATE"} • {v.createdAt ? new Date(v.createdAt).toLocaleString() : "n/a"}
+                        {v.createdByStaffId ? ` • staff #${v.createdByStaffId}` : ""}
+                      </div>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        const ok = window.confirm(t(lang, "restoreConfirm"));
+                        if (!ok) return;
+                        await api(`/api/admin/hall-plans/${hallPlanId}/versions/${v.id}/restore`, { method: "POST" });
+                        loadAll();
+                      }}
+                    >
+                      {t(lang, "restore")}
+                    </button>
+                  </div>
+                ))}
+                {planVersions.length > 20 && (
+                  <div style={{ fontSize: 12, color: "#666" }}>{t(lang, "showingLatest")}</div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
-          <input placeholder="New hall name" value={newHallName} onChange={(e) => setNewHallName(e.target.value)} />
-          <input type="number" placeholder="Sort" value={newHallSort} onChange={(e) => setNewHallSort(Number(e.target.value))} />
+          <input placeholder={t(lang, "newHallName")} value={newHallName} onChange={(e) => setNewHallName(e.target.value)} />
+          <input type="number" placeholder={t(lang, "sort")} value={newHallSort} onChange={(e) => setNewHallSort(Number(e.target.value))} />
           <button
             onClick={async () => {
               if (!newHallName.trim()) return;
@@ -2164,10 +2647,10 @@ export default function AdminPage() {
               loadAll();
             }}
           >
-            Add hall
+            {t(lang, "addHall")}
           </button>
-          <input placeholder="New plan name" value={newPlanName} onChange={(e) => setNewPlanName(e.target.value)} />
-          <input type="number" placeholder="Plan sort" value={newPlanSort} onChange={(e) => setNewPlanSort(Number(e.target.value))} />
+          <input placeholder={t(lang, "newPlanName")} value={newPlanName} onChange={(e) => setNewPlanName(e.target.value)} />
+          <input type="number" placeholder={t(lang, "planSort")} value={newPlanSort} onChange={(e) => setNewPlanSort(Number(e.target.value))} />
           <button
             onClick={async () => {
               if (!hallId || !newPlanName.trim()) return;
@@ -2180,13 +2663,17 @@ export default function AdminPage() {
               loadAll();
             }}
           >
-            Add plan
+            {t(lang, "addPlan")}
           </button>
         </div>
         {hallId && (
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
-            <span style={{ fontSize: 12, color: "#666" }}>Quick switch:</span>
-            {["Day", "Evening", "Banquet"].map((name) => (
+            <span style={{ fontSize: 12, color: "#666" }}>{t(lang, "quickSwitch")}:</span>
+            {[
+              { key: "dayPlan", name: "Day" },
+              { key: "eveningPlan", name: "Evening" },
+              { key: "banquetPlan", name: "Banquet" },
+            ].map(({ key, name }) => (
               <button
                 key={name}
                 onClick={async () => {
@@ -2221,7 +2708,7 @@ export default function AdminPage() {
                   cursor: "pointer",
                 }}
               >
-                {name}
+                {t(lang, key)}
               </button>
             ))}
             {hallPlans.length > 0 &&
@@ -2249,19 +2736,19 @@ export default function AdminPage() {
         )}
         {hallId && (
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
-            <span style={{ fontSize: 12, color: "#666" }}>Templates:</span>
-            <button onClick={saveTemplate} disabled={!hallPlanId}>Save current</button>
+            <span style={{ fontSize: 12, color: "#666" }}>{t(lang, "templates")}:</span>
+            <button onClick={saveTemplate} disabled={!hallPlanId}>{t(lang, "saveCurrent")}</button>
             {planTemplates.map((t) => (
               <span key={t.id} style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
                 <button onClick={() => applyTemplate(t)}>{t.name}</button>
                 <button onClick={() => removeTemplate(t.id)} style={{ color: "#b00" }}>×</button>
               </span>
             ))}
-            {planTemplates.length === 0 && <span style={{ fontSize: 12, color: "#999" }}>No templates</span>}
+            {planTemplates.length === 0 && <span style={{ fontSize: 12, color: "#999" }}>{t(lang, "noTemplates")}</span>}
           </div>
         )}
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
-          <span style={{ fontSize: 12, color: "#666" }}>Legend:</span>
+          <span style={{ fontSize: 12, color: "#666" }}>{t(lang, "legend")}:</span>
           {staff.filter((s) => s.role === "WAITER").map((s) => (
             <span key={s.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12 }}>
               <span
@@ -2277,12 +2764,12 @@ export default function AdminPage() {
             </span>
           ))}
           {staff.filter((s) => s.role === "WAITER").length === 0 && (
-            <span style={{ fontSize: 12, color: "#999" }}>Нет официантов</span>
+            <span style={{ fontSize: 12, color: "#999" }}>{t(lang, "noWaiters")}</span>
           )}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
           <label>
-            Background URL
+            {t(lang, "backgroundUrl")}
             <input
               placeholder="https://.../floor.png"
               value={planBgUrl}
@@ -2490,7 +2977,7 @@ export default function AdminPage() {
                     >
                       <div style={{ fontWeight: 700, fontSize: 16 }}>#{t.number}</div>
                       <div style={{ fontSize: 12, color }}>
-                        {t.assignedWaiterId ? `Waiter #${t.assignedWaiterId}` : "Unassigned"}
+                        {t.assignedWaiterId ? `${t(lang, "waiterLabel")} #${t.assignedWaiterId}` : t(lang, "unassigned")}
                       </div>
                       {layout.layoutZone ? (
                         <div style={{ fontSize: 11, color: "#666" }}>{layout.layoutZone}</div>
@@ -2538,9 +3025,9 @@ export default function AdminPage() {
             </div>
           </div>
           <div style={{ border: "1px solid #eee", borderRadius: 12, padding: 12, background: "#fff" }}>
-            <h3 style={{ marginTop: 0 }}>Table settings</h3>
+            <h3 style={{ marginTop: 0 }}>{t(lang, "tableSettings")}</h3>
             <div style={{ marginBottom: 12 }}>
-              <div style={{ fontWeight: 600, marginBottom: 6 }}>Assign waiter (drag onto table)</div>
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>{t(lang, "assignWaiterDrag")}</div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {staff.filter((s) => s.role === "WAITER").map((s) => (
                   <div
@@ -2563,30 +3050,30 @@ export default function AdminPage() {
                   </div>
                 ))}
                 {staff.filter((s) => s.role === "WAITER").length === 0 && (
-                  <div style={{ color: "#777", fontSize: 12 }}>No waiters yet.</div>
+                  <div style={{ color: "#777", fontSize: 12 }}>{t(lang, "noWaitersYet")}</div>
                 )}
               </div>
               {!isInteractive && (
                 <div style={{ marginTop: 6, fontSize: 12, color: "#777" }}>
-                  Switch to Edit mode to enable drag & drop.
+                  {t(lang, "switchToEdit")}
                 </div>
               )}
             </div>
             {selectedTable ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <div><strong>Table #{selectedTable.number}</strong></div>
+                <div><strong>{t(lang, "tableSelected")}{selectedTable.number}</strong></div>
                 <label>
-                  Shape
+                  {t(lang, "shape")}
                   <select
                     value={selectedTable.layoutShape ?? "ROUND"}
                     onChange={(e) => updateSelectedTable({ layoutShape: e.target.value })}
                   >
-                    <option value="ROUND">Round</option>
-                    <option value="RECT">Rectangle</option>
+                    <option value="ROUND">{t(lang, "shapeRound")}</option>
+                    <option value="RECT">{t(lang, "shapeRect")}</option>
                   </select>
                 </label>
                 <label>
-                  Width (%)
+                  {t(lang, "widthPercent")}
                   <input
                     type="number"
                     min={4}
@@ -2596,7 +3083,7 @@ export default function AdminPage() {
                   />
                 </label>
                 <label>
-                  Height (%)
+                  {t(lang, "heightPercent")}
                   <input
                     type="number"
                     min={4}
@@ -2606,7 +3093,7 @@ export default function AdminPage() {
                   />
                 </label>
                 <label>
-                  Rotation (deg)
+                  {t(lang, "rotationDeg")}
                   <input
                     type="number"
                     min={0}
@@ -2616,26 +3103,26 @@ export default function AdminPage() {
                   />
                 </label>
                 <label>
-                  Zone
+                  {t(lang, "zone")}
                   <input
-                    placeholder="e.g. Terrace, Hall A"
+                    placeholder={t(lang, "zonePlaceholder")}
                     value={selectedTable.layoutZone ?? ""}
                     onChange={(e) => updateSelectedTable({ layoutZone: e.target.value })}
                   />
                 </label>
                 <div style={{ display: "flex", gap: 8 }}>
-                  <button onClick={saveTableLayout}>Save</button>
+                  <button onClick={saveTableLayout}>{t(lang, "save")}</button>
                   <button onClick={() => updateSelectedTable({ layoutShape: "ROUND", layoutW: 10, layoutH: 10, layoutRotation: 0 })}>
-                    Reset
+                    {t(lang, "resetShape")}
                   </button>
                 </div>
               </div>
             ) : (
-              <div style={{ color: "#666" }}>Click a table on the map to edit.</div>
+              <div style={{ color: "#666" }}>{t(lang, "dragHint")}</div>
             )}
             {hallId && (
               <div style={{ marginTop: 16, borderTop: "1px solid #eee", paddingTop: 12 }}>
-                <h4 style={{ margin: 0 }}>Hall settings</h4>
+                <h4 style={{ margin: 0 }}>{t(lang, "hallSettings")}</h4>
                 <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
                   <button
                     onClick={async () => {
@@ -2643,7 +3130,7 @@ export default function AdminPage() {
                       loadAll();
                     }}
                   >
-                    Activate
+                    {t(lang, "activate")}
                   </button>
                   <button
                     onClick={async () => {
@@ -2651,11 +3138,11 @@ export default function AdminPage() {
                       loadAll();
                     }}
                   >
-                    Deactivate
+                    {t(lang, "deactivate")}
                   </button>
                   <button
                     onClick={async () => {
-                      const ok = window.confirm("Delete hall? This will remove all plans/templates for the hall.");
+                      const ok = window.confirm(t(lang, "deleteHallConfirm"));
                       if (!ok) return;
                       try {
                         await api(`/api/admin/halls/${hallId}`, { method: "DELETE" });
@@ -2664,24 +3151,24 @@ export default function AdminPage() {
                       } catch (e: any) {
                         const msg = e?.message ?? "";
                         if (msg.includes("409")) {
-                          alert("Cannot delete hall: there are tables assigned. Move tables to another hall first.");
+                          alert(t(lang, "deleteHallBlocked"));
                         } else {
-                          alert(msg || "Failed to delete hall");
+                          alert(msg || t(lang, "deleteHallFailed"));
                         }
                       }
                     }}
                   >
-                    Delete
+                    {t(lang, "delete")}
                   </button>
                 </div>
               </div>
             )}
             <div style={{ marginTop: 16, borderTop: "1px solid #eee", paddingTop: 12 }}>
-              <h4 style={{ margin: 0 }}>Zones</h4>
+              <h4 style={{ margin: 0 }}>{t(lang, "zones")}</h4>
               {planZones.map((z, zi) => (
                 <div key={z.id} style={{ display: "grid", gridTemplateColumns: "1fr 60px 60px", gap: 6, marginTop: 8 }}>
                   <input
-                    placeholder="Zone name"
+                    placeholder={t(lang, "zoneName")}
                     value={z.name}
                     onChange={(e) =>
                       setPlanZones((prev) => prev.map((p, i) => (i === zi ? { ...p, name: e.target.value } : p)))
@@ -2694,7 +3181,7 @@ export default function AdminPage() {
                       setPlanZones((prev) => prev.map((p, i) => (i === zi ? { ...p, color: e.target.value } : p)))
                     }
                   />
-                  <button onClick={() => setPlanZones((prev) => prev.filter((_, i) => i !== zi))}>Del</button>
+                  <button onClick={() => setPlanZones((prev) => prev.filter((_, i) => i !== zi))}>{t(lang, "delete")}</button>
                   <input
                     type="number"
                     min={0}
@@ -2742,11 +3229,11 @@ export default function AdminPage() {
                 onClick={() =>
                   setPlanZones((prev) => [
                     ...prev,
-                    { id: String(Date.now()), name: "Zone", x: 10, y: 10, w: 30, h: 20, color: "#6C5CE7" },
+                    { id: String(Date.now()), name: t(lang, "zone"), x: 10, y: 10, w: 30, h: 20, color: "#6C5CE7" },
                   ])
                 }
               >
-                Add zone
+                {t(lang, "addZone")}
               </button>
             </div>
           </div>
@@ -2754,49 +3241,49 @@ export default function AdminPage() {
       </section>
 
       <section style={{ marginTop: 24 }}>
-        <h2>Tables & QR</h2>
+        <h2>{t(lang, "tables")}</h2>
         <div style={{ marginBottom: 8, color: "#666" }}>
-          Note: QR links include a timestamp. Re‑generate before printing if links were created long ago.
+          {t(lang, "qrNote")}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <input type="number" placeholder="Table #" value={newTableNumber} onChange={(e) => setNewTableNumber(Number(e.target.value))} />
-          <input placeholder="Public ID (optional)" value={newTablePublicId} onChange={(e) => setNewTablePublicId(e.target.value)} />
+          <input type="number" placeholder={t(lang, "tableNumber")} value={newTableNumber} onChange={(e) => setNewTableNumber(Number(e.target.value))} />
+          <input placeholder={t(lang, "publicIdOptional")} value={newTablePublicId} onChange={(e) => setNewTablePublicId(e.target.value)} />
           <select value={hallId} onChange={(e) => setHallId(e.target.value ? Number(e.target.value) : "")}>
-            <option value="">Select hall</option>
+            <option value="">{t(lang, "planSelectHall")}</option>
             {halls.map((h) => (
               <option key={h.id} value={h.id}>{h.name}</option>
             ))}
           </select>
           <select value={newTableWaiterId} onChange={(e) => setNewTableWaiterId(e.target.value ? Number(e.target.value) : "")}>
-            <option value="">Assign waiter</option>
+            <option value="">{t(lang, "assignWaiter")}</option>
             {staff.filter((s) => s.role === "WAITER").map((s) => (
               <option key={s.id} value={s.id}>{s.username}</option>
             ))}
           </select>
-          <button onClick={createTable}>Add</button>
-          <button onClick={refreshAllQrs}>Refresh all QR</button>
+          <button onClick={createTable}>{t(lang, "addTable")}</button>
+          <button onClick={refreshAllQrs}>{t(lang, "refreshAllQr")}</button>
         </div>
         <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <input placeholder="Filter by table # or publicId" value={tableFilterText} onChange={(e) => setTableFilterText(e.target.value)} />
+          <input placeholder={t(lang, "filterTablePlaceholder")} value={tableFilterText} onChange={(e) => setTableFilterText(e.target.value)} />
           <select value={tableFilterWaiterId} onChange={(e) => setTableFilterWaiterId(e.target.value ? Number(e.target.value) : "")}>
-            <option value="">All waiters</option>
+            <option value="">{t(lang, "allWaiters")}</option>
             {staff.filter((s) => s.role === "WAITER").map((s) => (
               <option key={s.id} value={s.id}>{s.username}</option>
             ))}
           </select>
           <select value={tableFilterHallId} onChange={(e) => setTableFilterHallId(e.target.value ? Number(e.target.value) : "")}>
-            <option value="">All halls</option>
+            <option value="">{t(lang, "allHalls")}</option>
             {halls.map((h) => (
               <option key={h.id} value={h.id}>{h.name}</option>
             ))}
           </select>
           <select value={tableFilterAssigned} onChange={(e) => setTableFilterAssigned(e.target.value)}>
-            <option value="">All assignments</option>
-            <option value="ASSIGNED">Assigned</option>
-            <option value="UNASSIGNED">Unassigned</option>
+            <option value="">{t(lang, "allAssignments")}</option>
+            <option value="ASSIGNED">{t(lang, "assigned")}</option>
+            <option value="UNASSIGNED">{t(lang, "unassigned")}</option>
           </select>
           <select value={bulkHallId} onChange={(e) => setBulkHallId(e.target.value ? Number(e.target.value) : "")}>
-            <option value="">Bulk hall</option>
+            <option value="">{t(lang, "bulkHall")}</option>
             {halls.map((h) => (
               <option key={h.id} value={h.id}>{h.name}</option>
             ))}
@@ -2823,9 +3310,9 @@ export default function AdminPage() {
               loadAll();
             }}
           >
-            Assign filtered to hall
+            {t(lang, "assignFilteredToHall")}
           </button>
-          <button onClick={() => { setTableFilterText(""); setTableFilterWaiterId(""); setTableFilterHallId(""); setTableFilterAssigned(""); }}>Clear</button>
+          <button onClick={() => { setTableFilterText(""); setTableFilterWaiterId(""); setTableFilterHallId(""); setTableFilterAssigned(""); }}>{t(lang, "clear")}</button>
         </div>
         <div style={{ marginTop: 10 }}>
           {tables
@@ -2843,13 +3330,13 @@ export default function AdminPage() {
             })
             .map((t) => (
             <div key={t.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "6px 0", borderBottom: "1px solid #eee" }}>
-              <strong>Table #{t.number}</strong>
+              <strong>{t(lang, "tableSelected")}{t.number}</strong>
               <span>{t.publicId}</span>
               <select
                 value={t.hallId ?? ""}
                 onChange={(e) => assignHall(t.id, e.target.value ? Number(e.target.value) : null)}
               >
-                <option value="">No hall</option>
+                <option value="">{t(lang, "noHall")}</option>
                 {halls.map((h) => (
                   <option key={h.id} value={h.id}>{h.name}</option>
                 ))}
@@ -2858,24 +3345,24 @@ export default function AdminPage() {
                 value={t.assignedWaiterId ?? ""}
                 onChange={(e) => assignWaiter(t.id, e.target.value ? Number(e.target.value) : null)}
               >
-                <option value="">No waiter</option>
+                <option value="">{t(lang, "noWaiter")}</option>
                 {staff.filter((s) => s.role === "WAITER").map((s) => (
                   <option key={s.id} value={s.id}>{s.username}</option>
                 ))}
               </select>
               {t.assignedWaiterId && (
-                <button onClick={() => assignWaiter(t.id, null)}>Clear waiter</button>
+                <button onClick={() => assignWaiter(t.id, null)}>{t(lang, "clearWaiter")}</button>
               )}
-              <button onClick={() => getSignedUrl(t.publicId)}>QR URL</button>
-              <button onClick={() => showQr(t.id, t.publicId)}>Show QR</button>
-              <button onClick={() => showQr(t.id, t.publicId)}>Refresh QR</button>
+              <button onClick={() => getSignedUrl(t.publicId)}>{t(lang, "qrUrl")}</button>
+              <button onClick={() => showQr(t.id, t.publicId)}>{t(lang, "showQr")}</button>
+              <button onClick={() => showQr(t.id, t.publicId)}>{t(lang, "refreshQr")}</button>
               {qrByTable[t.id] && (
                 <a
                   href={`https://api.qrserver.com/v1/create-qr-code/?size=512x512&data=${encodeURIComponent(qrByTable[t.id])}`}
                   download={`table_${t.number}.png`}
                   style={{ marginLeft: 8 }}
                 >
-                  Download QR
+                  {t(lang, "downloadQr")}
                 </a>
               )}
               {qrByTable[t.id] && (
@@ -2891,31 +3378,31 @@ export default function AdminPage() {
       </section>
 
       <section style={{ marginTop: 24 }}>
-        <h2>Staff</h2>
+        <h2>{t(lang, "staff")}</h2>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <input placeholder="Username" value={newStaffUser} onChange={(e) => setNewStaffUser(e.target.value)} />
-          <input placeholder="Password" value={newStaffPass} onChange={(e) => setNewStaffPass(e.target.value)} />
+          <input placeholder={t(lang, "staffUsername")} value={newStaffUser} onChange={(e) => setNewStaffUser(e.target.value)} />
+          <input placeholder={t(lang, "staffPassword")} value={newStaffPass} onChange={(e) => setNewStaffPass(e.target.value)} />
           <select value={newStaffRole} onChange={(e) => setNewStaffRole(e.target.value)}>
             <option value="WAITER">WAITER</option>
             <option value="KITCHEN">KITCHEN</option>
             <option value="ADMIN">ADMIN</option>
           </select>
-          <button onClick={createStaff}>Add</button>
+          <button onClick={createStaff}>{t(lang, "add")}</button>
         </div>
         <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <input placeholder="Filter by username" value={staffFilterText} onChange={(e) => setStaffFilterText(e.target.value)} />
+          <input placeholder={t(lang, "filterByUsername")} value={staffFilterText} onChange={(e) => setStaffFilterText(e.target.value)} />
           <select value={staffFilterRole} onChange={(e) => setStaffFilterRole(e.target.value)}>
-            <option value="">All roles</option>
+            <option value="">{t(lang, "allRoles")}</option>
             <option value="WAITER">WAITER</option>
             <option value="KITCHEN">KITCHEN</option>
             <option value="ADMIN">ADMIN</option>
           </select>
           <select value={staffFilterActive} onChange={(e) => setStaffFilterActive(e.target.value)}>
-            <option value="">All statuses</option>
-            <option value="ACTIVE">Active</option>
-            <option value="INACTIVE">Inactive</option>
+            <option value="">{t(lang, "allStatuses")}</option>
+            <option value="ACTIVE">{t(lang, "active")}</option>
+            <option value="INACTIVE">{t(lang, "inactive")}</option>
           </select>
-          <button onClick={() => { setStaffFilterText(""); setStaffFilterRole(""); setStaffFilterActive(""); }}>Clear</button>
+          <button onClick={() => { setStaffFilterText(""); setStaffFilterRole(""); setStaffFilterActive(""); }}>{t(lang, "clear")}</button>
         </div>
         <div style={{ marginTop: 10 }}>
           {staff
@@ -2937,40 +3424,40 @@ export default function AdminPage() {
                 <option value="KITCHEN">KITCHEN</option>
                 <option value="ADMIN">ADMIN</option>
               </select>
-              <span>{su.isActive ? "ACTIVE" : "INACTIVE"}</span>
-              <button onClick={() => resetStaffPassword(su)}>Reset password</button>
-              <button onClick={() => toggleStaff(su)}>{su.isActive ? "Disable" : "Enable"}</button>
+              <span>{su.isActive ? t(lang, "active") : t(lang, "inactive")}</span>
+              <button onClick={() => resetStaffPassword(su)}>{t(lang, "resetPassword")}</button>
+              <button onClick={() => toggleStaff(su)}>{su.isActive ? t(lang, "disable") : t(lang, "enable")}</button>
             </div>
           ))}
         </div>
       </section>
 
       <section style={{ marginTop: 24 }}>
-        <h2>Modifiers</h2>
+        <h2>{t(lang, "modifiers")}</h2>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <input placeholder="Group name (RU)" value={newModGroupNameRu} onChange={(e) => setNewModGroupNameRu(e.target.value)} />
-          <button onClick={createModGroup}>Add group</button>
+          <input placeholder={t(lang, "groupNameRu")} value={newModGroupNameRu} onChange={(e) => setNewModGroupNameRu(e.target.value)} />
+          <button onClick={createModGroup}>{t(lang, "addGroup")}</button>
         </div>
         <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 12 }}>
           {modGroups.map((g) => (
             <div key={g.id} style={{ border: "1px solid #eee", borderRadius: 8, padding: 10 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <strong>{g.nameRu}</strong>
-                <button onClick={() => toggleModGroup(g)}>{g.isActive ? "Disable" : "Enable"}</button>
+                <button onClick={() => toggleModGroup(g)}>{g.isActive ? t(lang, "disable") : t(lang, "enable")}</button>
               </div>
-              <button onClick={() => { setActiveModGroupId(g.id); loadModOptions(g.id); }} style={{ marginTop: 8 }}>Load options</button>
+              <button onClick={() => { setActiveModGroupId(g.id); loadModOptions(g.id); }} style={{ marginTop: 8 }}>{t(lang, "loadOptions")}</button>
               {activeModGroupId === g.id && (
                 <div style={{ marginTop: 8 }}>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <input placeholder="Option (RU)" value={newModOptionNameRu} onChange={(e) => setNewModOptionNameRu(e.target.value)} />
-                    <input type="number" placeholder="Price cents" value={newModOptionPrice} onChange={(e) => setNewModOptionPrice(Number(e.target.value))} />
-                    <button onClick={createModOption}>Add option</button>
+                    <input placeholder={t(lang, "optionRu")} value={newModOptionNameRu} onChange={(e) => setNewModOptionNameRu(e.target.value)} />
+                    <input type="number" placeholder={t(lang, "priceCentsShort")} value={newModOptionPrice} onChange={(e) => setNewModOptionPrice(Number(e.target.value))} />
+                    <button onClick={createModOption}>{t(lang, "addOption")}</button>
                   </div>
                   {(modOptions[g.id] ?? []).map((o) => (
                     <div key={o.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "4px 0" }}>
                       <span>{o.nameRu}</span>
                       <span>{o.priceCents}</span>
-                      <button onClick={() => toggleModOption(g.id, o)}>{o.isActive ? "Disable" : "Enable"}</button>
+                      <button onClick={() => toggleModOption(g.id, o)}>{o.isActive ? t(lang, "disable") : t(lang, "enable")}</button>
                     </div>
                   ))}
                 </div>
@@ -2981,33 +3468,33 @@ export default function AdminPage() {
       </section>
 
       <section style={{ marginTop: 24 }}>
-        <h2>Item → Modifier Groups</h2>
+        <h2>{t(lang, "itemModifierGroups")}</h2>
         <div style={{ marginTop: 10 }}>
           {items.map((it) => (
             <div key={it.id} style={{ border: "1px solid #eee", borderRadius: 8, padding: 10, marginBottom: 10 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <strong>{it.nameRu}</strong>
-                <button onClick={() => loadItemModGroups(it.id)}>Load</button>
+                <button onClick={() => loadItemModGroups(it.id)}>{t(lang, "load")}</button>
               </div>
               {(itemModGroups[it.id] ?? []).map((g, idx) => (
                 <div key={`${it.id}-${g.groupId}`} style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6 }}>
-                  <span>Group #{g.groupId}</span>
+                  <span>{t(lang, "groupLabel")}{g.groupId}</span>
                   <label><input type="checkbox" checked={g.isRequired} onChange={(e) => {
                     const next = (itemModGroups[it.id] ?? []).slice();
                     next[idx] = { ...g, isRequired: e.target.checked };
                     setItemModGroups((prev) => ({ ...prev, [it.id]: next }));
-                  }} /> required</label>
-                  <input type="number" placeholder="min" value={g.minSelect ?? ""} onChange={(e) => {
+                  }} /> {t(lang, "required")}</label>
+                  <input type="number" placeholder={t(lang, "min")} value={g.minSelect ?? ""} onChange={(e) => {
                     const next = (itemModGroups[it.id] ?? []).slice();
                     next[idx] = { ...g, minSelect: e.target.value ? Number(e.target.value) : null };
                     setItemModGroups((prev) => ({ ...prev, [it.id]: next }));
                   }} />
-                  <input type="number" placeholder="max" value={g.maxSelect ?? ""} onChange={(e) => {
+                  <input type="number" placeholder={t(lang, "max")} value={g.maxSelect ?? ""} onChange={(e) => {
                     const next = (itemModGroups[it.id] ?? []).slice();
                     next[idx] = { ...g, maxSelect: e.target.value ? Number(e.target.value) : null };
                     setItemModGroups((prev) => ({ ...prev, [it.id]: next }));
                   }} />
-                  <input type="number" placeholder="sort" value={g.sortOrder} onChange={(e) => {
+                  <input type="number" placeholder={t(lang, "sort")} value={g.sortOrder} onChange={(e) => {
                     const next = (itemModGroups[it.id] ?? []).slice();
                     next[idx] = { ...g, sortOrder: Number(e.target.value) };
                     setItemModGroups((prev) => ({ ...prev, [it.id]: next }));
@@ -3022,12 +3509,12 @@ export default function AdminPage() {
                   const next = [...current, { groupId, isRequired: false, minSelect: null, maxSelect: null, sortOrder: 0 }];
                   setItemModGroups((prev) => ({ ...prev, [it.id]: next }));
                 }}>
-                  <option value="">Add group</option>
+                  <option value="">{t(lang, "addGroupOption")}</option>
                   {modGroups.map((g) => (
                     <option key={g.id} value={g.id}>{g.nameRu}</option>
                   ))}
                 </select>
-                <button onClick={() => saveItemModGroups(it.id, itemModGroups[it.id] ?? [])}>Save</button>
+                <button onClick={() => saveItemModGroups(it.id, itemModGroups[it.id] ?? [])}>{t(lang, "save")}</button>
               </div>
             </div>
           ))}
