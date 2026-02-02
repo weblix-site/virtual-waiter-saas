@@ -13,6 +13,8 @@ public interface OrderRepo extends JpaRepository<Order, Long> {
   List<Order> findByTableIdInAndStatusNotInAndCreatedAtAfterOrderByCreatedAtDesc(List<Long> tableIds, List<String> statuses, Instant createdAt);
   List<Order> findTop200ByTableIdOrderByCreatedAtDesc(Long tableId);
   List<Order> findTop200ByGuestSessionIdOrderByCreatedAtDesc(Long guestSessionId);
+  List<Order> findByTableIdAndCreatedAtBetweenOrderByCreatedAtDesc(Long tableId, Instant from, Instant to);
+  List<Order> findByGuestSessionIdAndCreatedAtBetweenOrderByCreatedAtDesc(Long guestSessionId, Instant from, Instant to);
   List<Order> findByTableIdOrderByCreatedAtDesc(Long tableId);
   List<Order> findByGuestSessionIdOrderByCreatedAtDesc(Long guestSessionId);
   List<Order> findByIdIn(List<Long> ids);

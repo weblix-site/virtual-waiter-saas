@@ -18,19 +18,80 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  await SlaConfig.load();
   runApp(const StaffApp());
 }
 
 const String apiBase = String.fromEnvironment('API_BASE', defaultValue: 'http://localhost:8080');
 
-const int slaOrderWarnMin = 5;
-const int slaOrderCritMin = 10;
-const int slaCallWarnMin = 2;
-const int slaCallCritMin = 5;
-const int slaBillWarnMin = 5;
-const int slaBillCritMin = 10;
-const int slaKitchenWarnMin = 7;
-const int slaKitchenCritMin = 15;
+class SlaConfig {
+  static int orderWarn = 5;
+  static int orderCrit = 10;
+  static int callWarn = 2;
+  static int callCrit = 5;
+  static int billWarn = 5;
+  static int billCrit = 10;
+  static int kitchenWarn = 7;
+  static int kitchenCrit = 15;
+
+  static Future<void> load() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      orderWarn = prefs.getInt('sla_order_warn') ?? orderWarn;
+      orderCrit = prefs.getInt('sla_order_crit') ?? orderCrit;
+      callWarn = prefs.getInt('sla_call_warn') ?? callWarn;
+      callCrit = prefs.getInt('sla_call_crit') ?? callCrit;
+      billWarn = prefs.getInt('sla_bill_warn') ?? billWarn;
+      billCrit = prefs.getInt('sla_bill_crit') ?? billCrit;
+      kitchenWarn = prefs.getInt('sla_kitchen_warn') ?? kitchenWarn;
+      kitchenCrit = prefs.getInt('sla_kitchen_crit') ?? kitchenCrit;
+    } catch (_) {}
+  }
+
+  static Future<void> save({
+    required int orderWarn,
+    required int orderCrit,
+    required int callWarn,
+    required int callCrit,
+    required int billWarn,
+    required int billCrit,
+    required int kitchenWarn,
+    required int kitchenCrit,
+  }) async {
+    SlaConfig.orderWarn = orderWarn;
+    SlaConfig.orderCrit = orderCrit;
+    SlaConfig.callWarn = callWarn;
+    SlaConfig.callCrit = callCrit;
+    SlaConfig.billWarn = billWarn;
+    SlaConfig.billCrit = billCrit;
+    SlaConfig.kitchenWarn = kitchenWarn;
+    SlaConfig.kitchenCrit = kitchenCrit;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('sla_order_warn', orderWarn);
+      await prefs.setInt('sla_order_crit', orderCrit);
+      await prefs.setInt('sla_call_warn', callWarn);
+      await prefs.setInt('sla_call_crit', callCrit);
+      await prefs.setInt('sla_bill_warn', billWarn);
+      await prefs.setInt('sla_bill_crit', billCrit);
+      await prefs.setInt('sla_kitchen_warn', kitchenWarn);
+      await prefs.setInt('sla_kitchen_crit', kitchenCrit);
+    } catch (_) {}
+  }
+
+  static Future<void> resetDefaults() async {
+    await save(
+      orderWarn: 5,
+      orderCrit: 10,
+      callWarn: 2,
+      callCrit: 5,
+      billWarn: 5,
+      billCrit: 10,
+      kitchenWarn: 7,
+      kitchenCrit: 15,
+    );
+  }
+}
 
 DateTime? _parseIso(String? value) {
   if (value == null || value.isEmpty) return null;
@@ -73,7 +134,7 @@ Widget _slaChip(Duration age, int warnMin, int critMin) {
   );
 }
 
-Widget _slaSummaryRow(int warn, int crit) {
+Widget _slaSummaryRow(BuildContext context, int warn, int crit) {
   return Row(
     children: [
       Container(
@@ -83,7 +144,7 @@ Widget _slaSummaryRow(int warn, int crit) {
           borderRadius: BorderRadius.circular(999),
           border: Border.all(color: Colors.orange, width: 1),
         ),
-        child: Text('Warn: $warn', style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.w600)),
+        child: Text('${_tr(context, 'warn')}: $warn', style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.w600)),
       ),
       const SizedBox(width: 8),
       Container(
@@ -93,7 +154,7 @@ Widget _slaSummaryRow(int warn, int crit) {
           borderRadius: BorderRadius.circular(999),
           border: Border.all(color: Colors.red, width: 1),
         ),
-        child: Text('Crit: $crit', style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w600)),
+        child: Text('${_tr(context, 'crit')}: $crit', style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w600)),
       ),
     ],
   );
@@ -129,6 +190,20 @@ String _tr(BuildContext context, String key) {
     'billCancelled': {'ru': 'Счёт отменён', 'ro': 'Nota anulată', 'en': 'Bill cancelled'},
     'closeParty': {'ru': 'Закрыть Party', 'ro': 'Închide Party', 'en': 'Close party'},
     'partyClosed': {'ru': 'Party закрыт', 'ro': 'Party închis', 'en': 'Party closed'},
+    'markServed': {'ru': 'Выдано', 'ro': 'Servit', 'en': 'Served'},
+    'closeOrder': {'ru': 'Закрыть', 'ro': 'Închide', 'en': 'Close'},
+    'confirm': {'ru': 'Подтверждение', 'ro': 'Confirmare', 'en': 'Confirm'},
+    'confirmCloseOrder': {'ru': 'Закрыть заказ?', 'ro': 'Închide comanda?', 'en': 'Close order?'},
+    'confirmCancelBill': {'ru': 'Отменить счёт?', 'ro': 'Anulează nota?', 'en': 'Cancel bill?'},
+    'confirmCloseParty': {'ru': 'Закрыть Party?', 'ro': 'Închide Party?', 'en': 'Close party?'},
+    'confirmPaidQuestion': {'ru': 'Подтвердить оплату?', 'ro': 'Confirmă plata?', 'en': 'Confirm paid?'},
+    'slaSettings': {'ru': 'Настройки SLA', 'ro': 'Setări SLA', 'en': 'SLA settings'},
+    'save': {'ru': 'Сохранить', 'ro': 'Salvează', 'en': 'Save'},
+    'resetDefaults': {'ru': 'Сбросить', 'ro': 'Resetare', 'en': 'Reset'},
+    'heatmap': {'ru': 'Теплокарта', 'ro': 'Heatmap', 'en': 'Heatmap'},
+    'low': {'ru': 'Низкая', 'ro': 'Scăzută', 'en': 'Low'},
+    'medium': {'ru': 'Средняя', 'ro': 'Mediu', 'en': 'Medium'},
+    'high': {'ru': 'Высокая', 'ro': 'Ridicată', 'en': 'High'},
     'waiterCalls': {'ru': 'Вызовы официанта', 'ro': 'Apeluri chelner', 'en': 'Waiter Calls'},
     'billRequests': {'ru': 'Запросы счёта', 'ro': 'Cereri de plată', 'en': 'Bill Requests'},
     'kitchenQueue': {'ru': 'Очередь кухни', 'ro': 'Coadă bucătărie', 'en': 'Kitchen Queue'},
@@ -159,6 +234,22 @@ String _tr(BuildContext context, String key) {
     'noHistory': {'ru': 'Нет истории по выбранным фильтрам', 'ro': 'Nu există istoric pentru selecție', 'en': 'No history for selection'},
     'order': {'ru': 'Заказ', 'ro': 'Comandă', 'en': 'Order'},
     'items': {'ru': 'позиции', 'ro': 'poziții', 'en': 'items'},
+    'warn': {'ru': 'Предупр.', 'ro': 'Avert.', 'en': 'Warn'},
+    'crit': {'ru': 'Крит.', 'ro': 'Crit.', 'en': 'Crit'},
+    'cents': {'ru': 'центов', 'ro': 'cenți', 'en': 'cents'},
+    'kitchenCount': {'ru': 'Кухня', 'ro': 'Bucătărie', 'en': 'Kitchen'},
+    'notification': {'ru': 'Уведомление', 'ro': 'Notificare', 'en': 'Notification'},
+    'showStatusBadges': {'ru': 'Показать статусы', 'ro': 'Afișează statusuri', 'en': 'Show status badges'},
+    'hideStatusBadges': {'ru': 'Скрыть статусы', 'ro': 'Ascunde statusuri', 'en': 'Hide status badges'},
+    'hallFallback': {'ru': 'Зал', 'ro': 'Sală', 'en': 'Hall'},
+    'back': {'ru': 'Назад', 'ro': 'Înapoi', 'en': 'Back'},
+    'dateFrom': {'ru': 'С', 'ro': 'De la', 'en': 'From'},
+    'dateTo': {'ru': 'По', 'ro': 'Până la', 'en': 'To'},
+    'selectDate': {'ru': 'Выбрать', 'ro': 'Selectează', 'en': 'Select'},
+    'clear': {'ru': 'Очистить', 'ro': 'Curăță', 'en': 'Clear'},
+    'today': {'ru': 'Сегодня', 'ro': 'Astăzi', 'en': 'Today'},
+    'last7days': {'ru': '7 дней', 'ro': '7 zile', 'en': '7 days'},
+    'last30days': {'ru': '30 дней', 'ro': '30 zile', 'en': '30 days'},
     'closeCallTitle': {'ru': 'Закрыть вызов?', 'ro': 'Închide apelul?', 'en': 'Close call?'},
     'closeCallBody': {'ru': 'Отметить вызов официанта как закрытый?', 'ro': 'Marcați apelul chelnerului ca închis?', 'en': 'Mark this waiter call as closed?'},
     'cancel': {'ru': 'Отмена', 'ro': 'Anulează', 'en': 'Cancel'},
@@ -181,6 +272,26 @@ String _tr(BuildContext context, String key) {
   final entry = dict[key];
   if (entry == null) return key;
   return entry[lang] ?? entry['ru']!;
+}
+
+Future<bool> _confirmAction(
+  BuildContext context, {
+  required String titleKey,
+  required String contentKey,
+  required String confirmKey,
+}) async {
+  final res = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text(_tr(ctx, titleKey)),
+      content: Text(_tr(ctx, contentKey)),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(_tr(ctx, 'cancel'))),
+        ElevatedButton(onPressed: () => Navigator.of(ctx).pop(true), child: Text(_tr(ctx, confirmKey))),
+      ],
+    ),
+  );
+  return res == true;
 }
 
 String _statusLabel(BuildContext context, String status) {
@@ -314,6 +425,111 @@ class _HomeScreenState extends State<HomeScreen> {
 
   String get _auth => base64Encode(utf8.encode('${widget.username}:${widget.password}'));
 
+  Future<void> _showSlaDialog() async {
+    int clampInt(String v, int fallback) {
+      final n = int.tryParse(v.trim());
+      if (n == null || n <= 0) return fallback;
+      return n;
+    }
+
+    final orderWarnCtrl = TextEditingController(text: SlaConfig.orderWarn.toString());
+    final orderCritCtrl = TextEditingController(text: SlaConfig.orderCrit.toString());
+    final callWarnCtrl = TextEditingController(text: SlaConfig.callWarn.toString());
+    final callCritCtrl = TextEditingController(text: SlaConfig.callCrit.toString());
+    final billWarnCtrl = TextEditingController(text: SlaConfig.billWarn.toString());
+    final billCritCtrl = TextEditingController(text: SlaConfig.billCrit.toString());
+    final kitchenWarnCtrl = TextEditingController(text: SlaConfig.kitchenWarn.toString());
+    final kitchenCritCtrl = TextEditingController(text: SlaConfig.kitchenCrit.toString());
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(_tr(ctx, 'slaSettings')),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _homeSlaRow(ctx, _tr(ctx, 'orders'), orderWarnCtrl, orderCritCtrl),
+              _homeSlaRow(ctx, _tr(ctx, 'calls'), callWarnCtrl, callCritCtrl),
+              _homeSlaRow(ctx, _tr(ctx, 'bills'), billWarnCtrl, billCritCtrl),
+              _homeSlaRow(ctx, _tr(ctx, 'kitchen'), kitchenWarnCtrl, kitchenCritCtrl),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              await SlaConfig.resetDefaults();
+              if (!ctx.mounted) return;
+              Navigator.of(ctx).pop();
+              if (mounted) setState(() {});
+            },
+            child: Text(_tr(ctx, 'resetDefaults')),
+          ),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(_tr(ctx, 'cancel'))),
+          ElevatedButton(
+            onPressed: () async {
+              int ow = clampInt(orderWarnCtrl.text, 5);
+              int oc = clampInt(orderCritCtrl.text, 10);
+              int cw = clampInt(callWarnCtrl.text, 2);
+              int cc = clampInt(callCritCtrl.text, 5);
+              int bw = clampInt(billWarnCtrl.text, 5);
+              int bc = clampInt(billCritCtrl.text, 10);
+              int kw = clampInt(kitchenWarnCtrl.text, 7);
+              int kc = clampInt(kitchenCritCtrl.text, 15);
+              if (oc <= ow) oc = ow + 1;
+              if (cc <= cw) cc = cw + 1;
+              if (bc <= bw) bc = bw + 1;
+              if (kc <= kw) kc = kw + 1;
+              await SlaConfig.save(
+                orderWarn: ow,
+                orderCrit: oc,
+                callWarn: cw,
+                callCrit: cc,
+                billWarn: bw,
+                billCrit: bc,
+                kitchenWarn: kw,
+                kitchenCrit: kc,
+              );
+              if (!ctx.mounted) return;
+              Navigator.of(ctx).pop();
+              if (mounted) setState(() {});
+            },
+            child: Text(_tr(ctx, 'save')),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _homeSlaRow(BuildContext ctx, String label, TextEditingController warnCtrl, TextEditingController critCtrl) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Expanded(child: Text(label)),
+          SizedBox(
+            width: 70,
+            child: TextField(
+              controller: warnCtrl,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(labelText: _tr(ctx, 'warn'), isDense: true),
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 70,
+            child: TextField(
+              controller: critCtrl,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(labelText: _tr(ctx, 'crit'), isDense: true),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _poll() async {
     try {
       final feed = await http.get(
@@ -445,7 +661,7 @@ class _HomeScreenState extends State<HomeScreen> {
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${_tr(context, 'push')}: ${message.data['type'] ?? message.notification?.title ?? 'Notification'}')),
+          SnackBar(content: Text('${_tr(context, 'push')}: ${message.data['type'] ?? message.notification?.title ?? _tr(context, 'notification')}')),
         );
       }
     });
@@ -496,11 +712,17 @@ class _HomeScreenState extends State<HomeScreen> {
                       items: _halls
                           .map((h) => DropdownMenuItem<int>(
                                 value: (h['id'] as num).toInt(),
-                                child: Text(h['name']?.toString() ?? 'Hall'),
+                                child: Text(h['name']?.toString() ?? _tr(context, 'hallFallback')),
                               ))
                           .toList(),
                       onChanged: (v) => setState(() => _hallId = v),
                     ),
+                  ),
+                  const SizedBox(width: 6),
+                  IconButton(
+                    tooltip: _tr(context, 'slaSettings'),
+                    onPressed: _showSlaDialog,
+                    icon: const Icon(Icons.tune),
                   ),
                 ],
               ),
@@ -759,8 +981,8 @@ class _OrdersTabState extends State<OrdersTab> {
                       maxAgeByTable[tableNumber] = age;
                     }
                     countByTable[tableNumber] = (countByTable[tableNumber] ?? 0) + 1;
-                    if (age.inMinutes >= slaOrderCritMin) crit++;
-                    else if (age.inMinutes >= slaOrderWarnMin) warn++;
+                    if (age.inMinutes >= SlaConfig.orderCrit) crit++;
+                    else if (age.inMinutes >= SlaConfig.orderWarn) warn++;
                   }
                   final focusTables = maxAgeByTable.entries.toList()
                     ..sort((a, b) => b.value.inSeconds.compareTo(a.value.inSeconds));
@@ -769,7 +991,7 @@ class _OrdersTabState extends State<OrdersTab> {
                     children: [
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                        child: _slaSummaryRow(warn, crit),
+                        child: _slaSummaryRow(context, warn, crit),
                       ),
                       if (_showFocus && topFocus.isNotEmpty)
                         SizedBox(
@@ -784,7 +1006,7 @@ class _OrdersTabState extends State<OrdersTab> {
                               final tableNo = entry.key;
                               final age = entry.value;
                               final count = countByTable[tableNo] ?? 0;
-                              final color = _slaColor(age, slaOrderWarnMin, slaOrderCritMin);
+                              final color = _slaColor(age, SlaConfig.orderWarn, SlaConfig.orderCrit);
                               final minutes = age.inMinutes < 1 ? '<1m' : '${age.inMinutes}m';
                               return Container(
                                 width: 180,
@@ -822,7 +1044,7 @@ class _OrdersTabState extends State<OrdersTab> {
                     return ListTile(
                       title: Text('${_tr(context, 'table')} #$tableNumber  •  ${_tr(context, 'orders')} #${o['id']}'),
                       subtitle: Text('${_statusLabel(context, o['status']?.toString() ?? '')} • ${items.length} ${_tr(context, 'items')}' + (assigned != null ? ' • ${_tr(context, 'waiter')} #$assigned' : '')),
-                      trailing: _slaChip(age, slaOrderWarnMin, slaOrderCritMin),
+                      trailing: _slaChip(age, SlaConfig.orderWarn, SlaConfig.orderCrit),
                       onTap: () {
                         Navigator.of(context).push(MaterialPageRoute(
                           builder: (_) => OrderDetailsScreen(
@@ -898,7 +1120,9 @@ class _CallsTabState extends State<CallsTab> {
       return;
     }
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${_tr(context, 'statusUpdated')}: $status')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${_tr(context, 'statusUpdated')}: ${_statusLabel(context, status)}')),
+    );
     _load();
   }
 
@@ -954,8 +1178,8 @@ class _CallsTabState extends State<CallsTab> {
                       maxAgeByTable[tableNumber] = age;
                     }
                     countByTable[tableNumber] = (countByTable[tableNumber] ?? 0) + 1;
-                    if (age.inMinutes >= slaCallCritMin) crit++;
-                    else if (age.inMinutes >= slaCallWarnMin) warn++;
+                    if (age.inMinutes >= SlaConfig.callCrit) crit++;
+                    else if (age.inMinutes >= SlaConfig.callWarn) warn++;
                   }
                   final focusTables = maxAgeByTable.entries.toList()
                     ..sort((a, b) => b.value.inSeconds.compareTo(a.value.inSeconds));
@@ -964,7 +1188,7 @@ class _CallsTabState extends State<CallsTab> {
                     children: [
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                        child: _slaSummaryRow(warn, crit),
+                        child: _slaSummaryRow(context, warn, crit),
                       ),
                       if (_showFocus && topFocus.isNotEmpty)
                         SizedBox(
@@ -979,7 +1203,7 @@ class _CallsTabState extends State<CallsTab> {
                               final tableNo = entry.key;
                               final age = entry.value;
                               final count = countByTable[tableNo] ?? 0;
-                              final color = _slaColor(age, slaCallWarnMin, slaCallCritMin);
+                              final color = _slaColor(age, SlaConfig.callWarn, SlaConfig.callCrit);
                               final minutes = age.inMinutes < 1 ? '<1m' : '${age.inMinutes}m';
                               return Container(
                                 width: 180,
@@ -1023,7 +1247,7 @@ class _CallsTabState extends State<CallsTab> {
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.end,
                                   children: [
-                                    _slaChip(age, slaCallWarnMin, slaCallCritMin),
+                                    _slaChip(age, SlaConfig.callWarn, SlaConfig.callCrit),
                                     const SizedBox(width: 8),
                                     if (canAck)
                                       OutlinedButton(
@@ -1108,11 +1332,11 @@ class WaiterCallDetailsScreen extends StatelessWidget {
     );
     if (res.statusCode >= 300) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Status update failed (${res.statusCode})')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${_tr(context, 'statusUpdateFailed')} (${res.statusCode})')));
       return;
     }
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Status -> $status')));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${_tr(context, 'statusUpdated')}: ${_statusLabel(context, status)}')));
     Navigator.of(context).pop(true);
   }
 
@@ -1127,7 +1351,7 @@ class WaiterCallDetailsScreen extends StatelessWidget {
           children: [
             Text('${_tr(context, 'table')} #${call['tableNumber']}', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 8),
-            Text('${_tr(context, 'status')}: ${call['status']}'),
+            Text('${_tr(context, 'status')}: ${_statusLabel(context, call['status']?.toString() ?? '')}'),
             const SizedBox(height: 16),
             Row(
               children: [
@@ -1194,6 +1418,13 @@ class _BillsTabState extends State<BillsTab> {
   }
 
   Future<void> _confirmPaid(int id) async {
+    final ok = await _confirmAction(
+      context,
+      titleKey: 'confirm',
+      contentKey: 'confirmPaidQuestion',
+      confirmKey: 'confirmPaid',
+    );
+    if (!ok) return;
     final res = await http.post(
       Uri.parse('$apiBase/api/staff/bill-requests/$id/confirm-paid'),
       headers: {'Authorization': 'Basic $_auth'},
@@ -1211,6 +1442,13 @@ class _BillsTabState extends State<BillsTab> {
   }
 
   Future<void> _cancelBill(int id) async {
+    final ok = await _confirmAction(
+      context,
+      titleKey: 'confirm',
+      contentKey: 'confirmCancelBill',
+      confirmKey: 'cancelBill',
+    );
+    if (!ok) return;
     final res = await http.post(
       Uri.parse('$apiBase/api/staff/bill-requests/$id/cancel'),
       headers: {'Authorization': 'Basic $_auth'},
@@ -1279,8 +1517,8 @@ class _BillsTabState extends State<BillsTab> {
                       maxAgeByTable[tableNumber] = age;
                     }
                     countByTable[tableNumber] = (countByTable[tableNumber] ?? 0) + 1;
-                    if (age.inMinutes >= slaBillCritMin) crit++;
-                    else if (age.inMinutes >= slaBillWarnMin) warn++;
+                    if (age.inMinutes >= SlaConfig.billCrit) crit++;
+                    else if (age.inMinutes >= SlaConfig.billWarn) warn++;
                   }
                   final focusTables = maxAgeByTable.entries.toList()
                     ..sort((a, b) => b.value.inSeconds.compareTo(a.value.inSeconds));
@@ -1289,7 +1527,7 @@ class _BillsTabState extends State<BillsTab> {
                     children: [
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                        child: _slaSummaryRow(warn, crit),
+                        child: _slaSummaryRow(context, warn, crit),
                       ),
                       if (_showFocus && topFocus.isNotEmpty)
                         SizedBox(
@@ -1304,7 +1542,7 @@ class _BillsTabState extends State<BillsTab> {
                               final tableNo = entry.key;
                               final age = entry.value;
                               final count = countByTable[tableNo] ?? 0;
-                              final color = _slaColor(age, slaBillWarnMin, slaBillCritMin);
+                              final color = _slaColor(age, SlaConfig.billWarn, SlaConfig.billCrit);
                               final minutes = age.inMinutes < 1 ? '<1m' : '${age.inMinutes}m';
                               return Container(
                                 width: 180,
@@ -1344,15 +1582,15 @@ class _BillsTabState extends State<BillsTab> {
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('${b['mode']} • ${b['totalCents']} cents • ${status ?? ""}'),
+                          Text('${b['mode']} • ${b['totalCents']} ${_tr(context, 'cents')} • ${status ?? ""}'),
                           const SizedBox(height: 6),
-                          _slaChip(age, slaBillWarnMin, slaBillCritMin),
+                          _slaChip(age, SlaConfig.billWarn, SlaConfig.billCrit),
                         ],
                       ),
                       children: [
                         ...items.map((it) => ListTile(
                               title: Text('${it['name']} × ${it['qty']}'),
-                              subtitle: Text('${it['lineTotalCents']} cents'),
+                              subtitle: Text('${it['lineTotalCents']} ${_tr(context, 'cents')}'),
                             )),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -1382,6 +1620,13 @@ class _BillsTabState extends State<BillsTab> {
                               width: double.infinity,
                               child: OutlinedButton(
                                 onPressed: () async {
+                                  final ok = await _confirmAction(
+                                    context,
+                                    titleKey: 'confirm',
+                                    contentKey: 'confirmCloseParty',
+                                    confirmKey: 'closeParty',
+                                  );
+                                  if (!ok) return;
                                   final res = await http.post(
                                     Uri.parse('$apiBase/api/staff/parties/$partyId/close'),
                                     headers: {'Authorization': 'Basic $_auth'},
@@ -1432,6 +1677,26 @@ class _KitchenTabState extends State<KitchenTab> {
   bool _showFocus = true;
 
   String get _auth => base64Encode(utf8.encode('${widget.username}:${widget.password}'));
+
+  Future<void> _setOrderStatus(int orderId, String status) async {
+    final res = await http.post(
+      Uri.parse('$apiBase/api/staff/orders/$orderId/status'),
+      headers: {'Authorization': 'Basic $_auth', 'Content-Type': 'application/json'},
+      body: jsonEncode({'status': status}),
+    );
+    if (res.statusCode >= 300) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${_tr(context, 'statusUpdateFailed')} (${res.statusCode})')),
+      );
+      return;
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${_tr(context, 'statusUpdated')}: ${_statusLabel(context, status)}')),
+    );
+    _load();
+  }
 
   Future<void> _load() async {
     setState(() {
@@ -1528,8 +1793,8 @@ class _KitchenTabState extends State<KitchenTab> {
                       maxAgeByTable[tableNumber] = age;
                     }
                     countByTable[tableNumber] = (countByTable[tableNumber] ?? 0) + 1;
-                    if (ageSec >= slaKitchenCritMin * 60) crit++;
-                    else if (ageSec >= slaKitchenWarnMin * 60) warn++;
+                    if (ageSec >= SlaConfig.kitchenCrit * 60) crit++;
+                    else if (ageSec >= SlaConfig.kitchenWarn * 60) warn++;
                   }
                   final focusTables = maxAgeByTable.entries.toList()
                     ..sort((a, b) => b.value.inSeconds.compareTo(a.value.inSeconds));
@@ -1538,7 +1803,7 @@ class _KitchenTabState extends State<KitchenTab> {
                     children: [
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                        child: _slaSummaryRow(warn, crit),
+                        child: _slaSummaryRow(context, warn, crit),
                       ),
                       if (_showFocus && topFocus.isNotEmpty)
                         SizedBox(
@@ -1553,7 +1818,7 @@ class _KitchenTabState extends State<KitchenTab> {
                               final tableNo = entry.key;
                               final age = entry.value;
                               final count = countByTable[tableNo] ?? 0;
-                              final color = _slaColor(age, slaKitchenWarnMin, slaKitchenCritMin);
+                              final color = _slaColor(age, SlaConfig.kitchenWarn, SlaConfig.kitchenCrit);
                               final minutes = age.inMinutes < 1 ? '<1m' : '${age.inMinutes}m';
                               return Container(
                                 width: 180,
@@ -1567,11 +1832,11 @@ class _KitchenTabState extends State<KitchenTab> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Text('Table #$tableNo', style: const TextStyle(fontWeight: FontWeight.w700)),
+                                    Text('${_tr(context, 'table')} #$tableNo', style: const TextStyle(fontWeight: FontWeight.w700)),
                                     const SizedBox(height: 6),
-                                    Text('Oldest: $minutes', style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+                                    Text('${_tr(context, 'oldest')}: $minutes', style: TextStyle(color: color, fontWeight: FontWeight.w600)),
                                     const SizedBox(height: 4),
-                                    Text('Kitchen: $count', style: const TextStyle(color: Colors.black54)),
+                                    Text('${_tr(context, 'kitchenCount')}: $count', style: const TextStyle(color: Colors.black54)),
                                   ],
                                 ),
                               );
@@ -1589,17 +1854,48 @@ class _KitchenTabState extends State<KitchenTab> {
                             final ageSec = (o['ageSeconds'] ?? 0) as int;
                             final ageMin = (ageSec / 60).floor();
                             final age = Duration(seconds: ageSec);
+                            final status = (o['status'] ?? '').toString().toUpperCase();
+                            final orderId = (o['id'] as num).toInt();
+                            final bool canServe = status == 'READY';
                             return ListTile(
                               title: Text('${_tr(context, 'table')} #$tableNumber  •  ${_tr(context, 'orders')} #${o['id']}'),
                               subtitle: Text('${_statusLabel(context, o['status']?.toString() ?? '')} • ${items.length} ${_tr(context, 'items')} • ${ageMin}m'),
-                              trailing: _slaChip(age, slaKitchenWarnMin, slaKitchenCritMin),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _slaChip(age, SlaConfig.kitchenWarn, SlaConfig.kitchenCrit),
+                                  if (canServe) ...[
+                                    const SizedBox(width: 8),
+                                    PopupMenuButton<String>(
+                                      tooltip: _tr(context, 'markServed'),
+                                      onSelected: (v) async {
+                                        if (v == 'CLOSED') {
+                                          final ok = await _confirmAction(
+                                            context,
+                                            titleKey: 'confirm',
+                                            contentKey: 'confirmCloseOrder',
+                                            confirmKey: 'closeOrder',
+                                          );
+                                          if (!ok) return;
+                                        }
+                                        _setOrderStatus(orderId, v);
+                                      },
+                                      itemBuilder: (ctx) => [
+                                        PopupMenuItem(value: 'SERVED', child: Text(_tr(ctx, 'markServed'))),
+                                        PopupMenuItem(value: 'CLOSED', child: Text(_tr(ctx, 'closeOrder'))),
+                                      ],
+                                      child: const Icon(Icons.check_circle, color: Colors.green),
+                                    ),
+                                  ],
+                                ],
+                              ),
                               onTap: () {
                                 Navigator.of(context).push(MaterialPageRoute(
                                   builder: (_) => OrderDetailsScreen(
                                     order: o,
                                     username: widget.username,
                                     password: widget.password,
-                                    actions: const ['ACCEPTED', 'IN_PROGRESS', 'READY', 'SERVED'],
+                                    actions: const ['ACCEPTED', 'IN_PROGRESS', 'READY', 'SERVED', 'CLOSED'],
                                   ),
                                 ));
                               },
@@ -1662,6 +1958,7 @@ class _FloorPlanTabState extends State<FloorPlanTab> {
   Timer? _blinkTimer;
   bool _blinkOn = true;
   final Map<String, Map<String, dynamic>> _layoutCache = {};
+  bool _syncingActivePlan = false;
 
   String get _auth => base64Encode(utf8.encode('${widget.username}:${widget.password}'));
 
@@ -1731,7 +2028,7 @@ class _FloorPlanTabState extends State<FloorPlanTab> {
           if (status == 'NEW') {
             hot.add(tableId);
             final ageMin = _ageFromIso(o['createdAt']?.toString()).inMinutes.toDouble();
-            final intensity = (ageMin / slaOrderCritMin).clamp(0, 1);
+            final intensity = (ageMin / SlaConfig.orderCrit).clamp(0, 1);
             final prev = heat[tableId] ?? 0;
             if (intensity > prev) heat[tableId] = intensity;
           }
@@ -1807,6 +2104,35 @@ class _FloorPlanTabState extends State<FloorPlanTab> {
 
   Future<void> _loadDynamic() async {
     try {
+      if (_useActivePlan && !_syncingActivePlan) {
+        final hallId = _hallId;
+        if (hallId != null) {
+          _syncingActivePlan = true;
+          try {
+            final hallsRes = await http.get(
+              Uri.parse('$apiBase/api/staff/halls'),
+              headers: {'Authorization': 'Basic $_auth'},
+            );
+            if (hallsRes.statusCode == 200) {
+              final hallsBody = (jsonDecode(hallsRes.body) as List<dynamic>).cast<Map<String, dynamic>>();
+              final hall = hallsBody.firstWhere(
+                (h) => (h['id'] as num?)?.toInt() == hallId,
+                orElse: () => const {},
+              );
+              final activePlanId = (hall['activePlanId'] as num?)?.toInt();
+              if (activePlanId != null && activePlanId != _planId) {
+                _planId = activePlanId;
+                _layoutCache.remove('$hallId:active');
+                await _loadAll(forceLayout: true);
+                _syncingActivePlan = false;
+                return;
+              }
+            }
+          } finally {
+            _syncingActivePlan = false;
+          }
+        }
+      }
       int? hallId = _hallId;
       if (hallId == null && _halls.isNotEmpty) {
         hallId = (_halls.first['id'] as num).toInt();
@@ -1834,7 +2160,7 @@ class _FloorPlanTabState extends State<FloorPlanTab> {
           if (status == 'NEW') {
             hot.add(tableId);
             final ageMin = _ageFromIso(o['createdAt']?.toString()).inMinutes.toDouble();
-            final intensity = (ageMin / slaOrderCritMin).clamp(0, 1);
+            final intensity = (ageMin / SlaConfig.orderCrit).clamp(0, 1);
             final prev = heat[tableId] ?? 0;
             if (intensity > prev) heat[tableId] = intensity;
           }
@@ -1939,6 +2265,111 @@ class _FloorPlanTabState extends State<FloorPlanTab> {
     } catch (_) {}
   }
 
+  Future<void> _showSlaDialog() async {
+    int clampInt(String v, int fallback) {
+      final n = int.tryParse(v.trim());
+      if (n == null || n <= 0) return fallback;
+      return n;
+    }
+
+    final orderWarnCtrl = TextEditingController(text: SlaConfig.orderWarn.toString());
+    final orderCritCtrl = TextEditingController(text: SlaConfig.orderCrit.toString());
+    final callWarnCtrl = TextEditingController(text: SlaConfig.callWarn.toString());
+    final callCritCtrl = TextEditingController(text: SlaConfig.callCrit.toString());
+    final billWarnCtrl = TextEditingController(text: SlaConfig.billWarn.toString());
+    final billCritCtrl = TextEditingController(text: SlaConfig.billCrit.toString());
+    final kitchenWarnCtrl = TextEditingController(text: SlaConfig.kitchenWarn.toString());
+    final kitchenCritCtrl = TextEditingController(text: SlaConfig.kitchenCrit.toString());
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(_tr(ctx, 'slaSettings')),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _slaRow(ctx, _tr(ctx, 'orders'), orderWarnCtrl, orderCritCtrl),
+              _slaRow(ctx, _tr(ctx, 'calls'), callWarnCtrl, callCritCtrl),
+              _slaRow(ctx, _tr(ctx, 'bills'), billWarnCtrl, billCritCtrl),
+              _slaRow(ctx, _tr(ctx, 'kitchen'), kitchenWarnCtrl, kitchenCritCtrl),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              await SlaConfig.resetDefaults();
+              if (!ctx.mounted) return;
+              Navigator.of(ctx).pop();
+              if (mounted) setState(() {});
+            },
+            child: Text(_tr(ctx, 'resetDefaults')),
+          ),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(_tr(ctx, 'cancel'))),
+          ElevatedButton(
+            onPressed: () async {
+              int ow = clampInt(orderWarnCtrl.text, 5);
+              int oc = clampInt(orderCritCtrl.text, 10);
+              int cw = clampInt(callWarnCtrl.text, 2);
+              int cc = clampInt(callCritCtrl.text, 5);
+              int bw = clampInt(billWarnCtrl.text, 5);
+              int bc = clampInt(billCritCtrl.text, 10);
+              int kw = clampInt(kitchenWarnCtrl.text, 7);
+              int kc = clampInt(kitchenCritCtrl.text, 15);
+              if (oc <= ow) oc = ow + 1;
+              if (cc <= cw) cc = cw + 1;
+              if (bc <= bw) bc = bw + 1;
+              if (kc <= kw) kc = kw + 1;
+              await SlaConfig.save(
+                orderWarn: ow,
+                orderCrit: oc,
+                callWarn: cw,
+                callCrit: cc,
+                billWarn: bw,
+                billCrit: bc,
+                kitchenWarn: kw,
+                kitchenCrit: kc,
+              );
+              if (!ctx.mounted) return;
+              Navigator.of(ctx).pop();
+              if (mounted) setState(() {});
+            },
+            child: Text(_tr(ctx, 'save')),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _slaRow(BuildContext ctx, String label, TextEditingController warnCtrl, TextEditingController critCtrl) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Expanded(child: Text(label)),
+          SizedBox(
+            width: 70,
+            child: TextField(
+              controller: warnCtrl,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(labelText: _tr(ctx, 'warn'), isDense: true),
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 70,
+            child: TextField(
+              controller: critCtrl,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(labelText: _tr(ctx, 'crit'), isDense: true),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _pollTimer?.cancel();
@@ -2009,9 +2440,14 @@ class _FloorPlanTabState extends State<FloorPlanTab> {
         title: Text(_tr(context, 'hall')),
         actions: [
           IconButton(
-            tooltip: _showStatusBadges ? 'Hide status badges' : 'Show status badges',
+            tooltip: _showStatusBadges ? _tr(context, 'hideStatusBadges') : _tr(context, 'showStatusBadges'),
             onPressed: () => setState(() => _showStatusBadges = !_showStatusBadges),
             icon: Icon(_showStatusBadges ? Icons.visibility : Icons.visibility_off),
+          ),
+          IconButton(
+            tooltip: _tr(context, 'slaSettings'),
+            onPressed: _showSlaDialog,
+            icon: const Icon(Icons.tune),
           ),
           if (_halls.isNotEmpty)
             DropdownButtonHideUnderline(
@@ -2020,7 +2456,7 @@ class _FloorPlanTabState extends State<FloorPlanTab> {
                 items: _halls
                     .map((h) => DropdownMenuItem<int>(
                           value: (h['id'] as num).toInt(),
-                          child: Text(h['name']?.toString() ?? 'Hall'),
+                          child: Text(h['name']?.toString() ?? _tr(context, 'hallFallback')),
                         ))
                     .toList(),
                 onChanged: (v) {
@@ -2181,19 +2617,46 @@ class _FloorPlanTabState extends State<FloorPlanTab> {
                                   children: [
                                     _legendDot(Colors.blue.shade600),
                                     const SizedBox(width: 6),
-                                    const Text('NEW', style: TextStyle(fontSize: 11)),
+                                    Text(_statusLabel(context, 'NEW'), style: const TextStyle(fontSize: 11)),
                                     const SizedBox(width: 10),
                                     _legendDot(Colors.amber.shade700),
                                     const SizedBox(width: 6),
-                                    const Text('ACCEPTED', style: TextStyle(fontSize: 11)),
+                                    Text(_statusLabel(context, 'ACCEPTED'), style: const TextStyle(fontSize: 11)),
                                     const SizedBox(width: 10),
                                     _legendDot(Colors.orange.shade600),
                                     const SizedBox(width: 6),
-                                    const Text('IN_PROGRESS', style: TextStyle(fontSize: 11)),
+                                    Text(_statusLabel(context, 'IN_PROGRESS'), style: const TextStyle(fontSize: 11)),
                                     const SizedBox(width: 10),
                                     _legendDot(Colors.green.shade600),
                                     const SizedBox(width: 6),
-                                    const Text('READY', style: TextStyle(fontSize: 11)),
+                                    Text(_statusLabel(context, 'READY'), style: const TextStyle(fontSize: 11)),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text('${_tr(context, 'heatmap')}: ', style: const TextStyle(fontSize: 11)),
+                                    _legendDot(Colors.green.shade600),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '${_tr(context, 'low')} (0–${SlaConfig.orderWarn}m)',
+                                      style: const TextStyle(fontSize: 11),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    _legendDot(Colors.orange.shade600),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '${_tr(context, 'medium')} (${SlaConfig.orderWarn + 1}–${SlaConfig.orderCrit}m)',
+                                      style: const TextStyle(fontSize: 11),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    _legendDot(Colors.red.shade600),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '${_tr(context, 'high')} (>${SlaConfig.orderCrit}m)',
+                                      style: const TextStyle(fontSize: 11),
+                                    ),
                                   ],
                                 ),
                               ],
@@ -2417,6 +2880,8 @@ class _HistoryTabState extends State<HistoryTab> {
   List<Map<String, dynamic>> _orders = const [];
   int? _selectedTableId;
   int? _selectedGuestSessionId;
+  DateTime? _fromDate;
+  DateTime? _toDate;
 
   String get _auth => base64Encode(utf8.encode('${widget.username}:${widget.password}'));
 
@@ -2468,6 +2933,12 @@ class _HistoryTabState extends State<HistoryTab> {
       if (_selectedGuestSessionId != null) {
         params.add('guestSessionId=$_selectedGuestSessionId');
       }
+      if (_fromDate != null) {
+        params.add('from=${_formatDate(_fromDate!)}');
+      }
+      if (_toDate != null) {
+        params.add('to=${_formatDate(_toDate!)}');
+      }
       final res = await http.get(
         Uri.parse('$apiBase/api/staff/orders/history?${params.join("&")}'),
         headers: {'Authorization': 'Basic $_auth'},
@@ -2480,6 +2951,47 @@ class _HistoryTabState extends State<HistoryTab> {
     } finally {
       setState(() => _loading = false);
     }
+  }
+
+  String _formatDate(DateTime d) {
+    final y = d.year.toString().padLeft(4, '0');
+    final m = d.month.toString().padLeft(2, '0');
+    final day = d.day.toString().padLeft(2, '0');
+    return '$y-$m-$day';
+  }
+
+  Future<void> _pickFromDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+      initialDate: _fromDate ?? DateTime.now(),
+    );
+    if (picked != null) {
+      setState(() => _fromDate = picked);
+      await _loadOrders();
+    }
+  }
+
+  Future<void> _pickToDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+      initialDate: _toDate ?? DateTime.now(),
+    );
+    if (picked != null) {
+      setState(() => _toDate = picked);
+      await _loadOrders();
+    }
+  }
+
+  Future<void> _clearDates() async {
+    setState(() {
+      _fromDate = null;
+      _toDate = null;
+    });
+    await _loadOrders();
   }
 
   Future<void> _refreshAll() async {
@@ -2571,6 +3083,82 @@ class _HistoryTabState extends State<HistoryTab> {
                               },
                             ),
                           ),
+                          if (_selectedGuestSessionId != null) ...[
+                            const SizedBox(width: 8),
+                            OutlinedButton(
+                              onPressed: () async {
+                                setState(() => _selectedGuestSessionId = null);
+                                await _loadOrders();
+                              },
+                              child: Text(_tr(context, 'back')),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text('${_tr(context, 'dateFrom')}:'),
+                              const SizedBox(width: 8),
+                              OutlinedButton(
+                                onPressed: _pickFromDate,
+                                child: Text(_fromDate == null ? _tr(context, 'selectDate') : _formatDate(_fromDate!)),
+                              ),
+                              const SizedBox(width: 12),
+                              Text('${_tr(context, 'dateTo')}:'),
+                              const SizedBox(width: 8),
+                              OutlinedButton(
+                                onPressed: _pickToDate,
+                                child: Text(_toDate == null ? _tr(context, 'selectDate') : _formatDate(_toDate!)),
+                              ),
+                              const SizedBox(width: 12),
+                              TextButton(onPressed: _clearDates, child: Text(_tr(context, 'clear'))),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            children: [
+                              OutlinedButton(
+                                onPressed: () async {
+                                  final today = DateTime.now();
+                                  setState(() {
+                                    _fromDate = DateTime(today.year, today.month, today.day);
+                                    _toDate = DateTime(today.year, today.month, today.day);
+                                  });
+                                  await _loadOrders();
+                                },
+                                child: Text(_tr(context, 'today')),
+                              ),
+                              OutlinedButton(
+                                onPressed: () async {
+                                  final now = DateTime.now();
+                                  setState(() {
+                                    _toDate = DateTime(now.year, now.month, now.day);
+                                    _fromDate = _toDate!.subtract(const Duration(days: 6));
+                                  });
+                                  await _loadOrders();
+                                },
+                                child: Text(_tr(context, 'last7days')),
+                              ),
+                              OutlinedButton(
+                                onPressed: () async {
+                                  final now = DateTime.now();
+                                  setState(() {
+                                    _toDate = DateTime(now.year, now.month, now.day);
+                                    _fromDate = _toDate!.subtract(const Duration(days: 29));
+                                  });
+                                  await _loadOrders();
+                                },
+                                child: Text(_tr(context, 'last30days')),
+                              ),
+                            ],
+                          ),
                         ],
                       ),
                     ),
@@ -2629,6 +3217,15 @@ class OrderDetailsScreen extends StatelessWidget {
   String get _auth => base64Encode(utf8.encode('$username:$password'));
 
   Future<void> _setStatus(BuildContext context, String status) async {
+    if (status == 'CLOSED') {
+      final ok = await _confirmAction(
+        context,
+        titleKey: 'confirm',
+        contentKey: 'confirmCloseOrder',
+        confirmKey: 'closeOrder',
+      );
+      if (!ok) return;
+    }
     final id = order['id'];
     final res = await http.post(
       Uri.parse('$apiBase/api/staff/orders/$id/status'),

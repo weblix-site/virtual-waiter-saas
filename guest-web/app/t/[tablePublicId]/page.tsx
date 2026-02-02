@@ -111,6 +111,7 @@ export default function TablePage({ params, searchParams }: any) {
   const [billPayMethod, setBillPayMethod] = useState<'CASH' | 'TERMINAL'>('CASH');
   const [billTipsPercent, setBillTipsPercent] = useState<number | ''>('');
   const [billLoading, setBillLoading] = useState(false);
+  const [billOptionsLoading, setBillOptionsLoading] = useState(false);
   const [party, setParty] = useState<{ partyId: number; pin: string; expiresAt: string } | null>(null);
   const [modifiersByItem, setModifiersByItem] = useState<Record<number, MenuItemModifiersResponse>>({});
   const [modOpenByItem, setModOpenByItem] = useState<Record<number, boolean>>({});
@@ -122,6 +123,7 @@ export default function TablePage({ params, searchParams }: any) {
   const [billRefreshLoading, setBillRefreshLoading] = useState(false);
   const [ordersHistory, setOrdersHistory] = useState<any[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
+  const [ordersExpanded, setOrdersExpanded] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -145,11 +147,7 @@ export default function TablePage({ params, searchParams }: any) {
         if (cancelled) return;
         setMenu(m);
 
-        const boRes = await fetch(`${API_BASE}/api/public/bill-options?guestSessionId=${ss.guestSessionId}`);
-        if (boRes.ok) {
-          const bo: BillOptionsResponse = await boRes.json();
-          if (!cancelled) setBillOptions(bo);
-        }
+        await refreshBillOptions();
 
         const lastBillRes = await fetch(`${API_BASE}/api/public/bill-request/latest?guestSessionId=${ss.guestSessionId}`, {
           headers: { ...sessionHeaders() },
@@ -175,6 +173,10 @@ export default function TablePage({ params, searchParams }: any) {
   }, [tablePublicId, lang, sig]);
 
   const cartTotalCents = useMemo(() => cart.reduce((sum, l) => sum + l.item.priceCents * l.qty, 0), [cart]);
+  const myChargesCents = useMemo(() => (billOptions?.myItems ?? []).reduce((sum, it) => sum + it.lineTotalCents, 0), [billOptions]);
+  const tableChargesCents = useMemo(() => (billOptions?.tableItems ?? []).reduce((sum, it) => sum + it.lineTotalCents, 0), [billOptions]);
+  const myChargesCount = useMemo(() => (billOptions?.myItems ?? []).reduce((sum, it) => sum + it.qty, 0), [billOptions]);
+  const tableChargesCount = useMemo(() => (billOptions?.tableItems ?? []).reduce((sum, it) => sum + it.qty, 0), [billOptions]);
 
   const billItemsForMode = useMemo(() => {
     if (!billOptions) return [] as BillOptionsItem[];
@@ -281,6 +283,24 @@ export default function TablePage({ params, searchParams }: any) {
     return session?.sessionSecret ? { "X-Session-Secret": session.sessionSecret } : {};
   }
 
+  async function refreshBillOptions() {
+    if (!session) return;
+    setBillOptionsLoading(true);
+    try {
+      const boRes = await fetch(`${API_BASE}/api/public/bill-options?guestSessionId=${session.guestSessionId}`, {
+        headers: { ...sessionHeaders() },
+      });
+      if (boRes.ok) {
+        const bo: BillOptionsResponse = await boRes.json();
+        setBillOptions(bo);
+      }
+    } catch (e: any) {
+      setError(e?.message ?? t(lang, "errorGeneric"));
+    } finally {
+      setBillOptionsLoading(false);
+    }
+  }
+
   async function loadOrdersHistory() {
     if (!session) return;
     setOrdersLoading(true);
@@ -357,6 +377,28 @@ export default function TablePage({ params, searchParams }: any) {
     return () => clearInterval(id);
   }, [session]);
 
+  function orderStatusLabel(status: string) {
+    const s = (status || "").toUpperCase();
+    if (s === "NEW") return t(lang, "orderStatusNew");
+    if (s === "ACCEPTED") return t(lang, "orderStatusAccepted");
+    if (s === "IN_PROGRESS" || s === "COOKING") return t(lang, "orderStatusInProgress");
+    if (s === "READY") return t(lang, "orderStatusReady");
+    if (s === "SERVED") return t(lang, "orderStatusServed");
+    if (s === "CLOSED") return t(lang, "orderStatusClosed");
+    if (s === "CANCELLED") return t(lang, "orderStatusCancelled");
+    return s || t(lang, "status");
+  }
+
+  function orderStatusColor(status: string) {
+    const s = (status || "").toUpperCase();
+    if (s === "NEW") return { bg: "#e0f2fe", fg: "#0369a1" };
+    if (s === "ACCEPTED" || s === "IN_PROGRESS" || s === "COOKING") return { bg: "#ffedd5", fg: "#9a3412" };
+    if (s === "READY") return { bg: "#dcfce7", fg: "#166534" };
+    if (s === "SERVED" || s === "CLOSED") return { bg: "#e5e7eb", fg: "#374151" };
+    if (s === "CANCELLED") return { bg: "#fee2e2", fg: "#991b1b" };
+    return { bg: "#e5e7eb", fg: "#374151" };
+  }
+
   async function placeOrder() {
     if (!session) return;
     if (cart.length === 0) return;
@@ -396,9 +438,7 @@ export default function TablePage({ params, searchParams }: any) {
       setOrderStatus(body.status);
       setCart([]);
       loadOrdersHistory();
-      // refresh bill options after ordering
-      const boRes = await fetch(`${API_BASE}/api/public/bill-options?guestSessionId=${session.guestSessionId}`);
-      if (boRes.ok) setBillOptions(await boRes.json());
+      await refreshBillOptions();
     } catch (e: any) {
       setError(e?.message ?? t(lang, "orderFailed"));
     } finally {
@@ -802,7 +842,35 @@ export default function TablePage({ params, searchParams }: any) {
                   <strong>{it.name}</strong>
                   <span>{money(it.priceCents, it.currency)}</span>
                 </div>
-                {it.weight && <div style={{ color: "#666", fontSize: 12 }}>{it.weight}</div>}
+                {(it.weight || it.kcal || it.proteinG || it.fatG || it.carbsG) && (
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", fontSize: 12, color: "#666", marginTop: 4 }}>
+                    {it.weight && (
+                      <span style={{ padding: "2px 6px", border: "1px solid #eee", borderRadius: 999 }}>
+                        {t(lang, "weightShort")}: {it.weight}
+                      </span>
+                    )}
+                    {it.kcal && (
+                      <span style={{ padding: "2px 6px", border: "1px solid #eee", borderRadius: 999 }}>
+                        {t(lang, "calories")}: {it.kcal}
+                      </span>
+                    )}
+                    {it.proteinG && (
+                      <span style={{ padding: "2px 6px", border: "1px solid #eee", borderRadius: 999 }}>
+                        {t(lang, "protein")}: {it.proteinG}г
+                      </span>
+                    )}
+                    {it.fatG && (
+                      <span style={{ padding: "2px 6px", border: "1px solid #eee", borderRadius: 999 }}>
+                        {t(lang, "fat")}: {it.fatG}г
+                      </span>
+                    )}
+                    {it.carbsG && (
+                      <span style={{ padding: "2px 6px", border: "1px solid #eee", borderRadius: 999 }}>
+                        {t(lang, "carbs")}: {it.carbsG}г
+                      </span>
+                    )}
+                  </div>
+                )}
                 {it.description && <p style={{ margin: "8px 0", color: "#444" }}>{it.description}</p>}
                 {it.ingredients && <div style={{ fontSize: 12, color: "#666" }}>{it.ingredients}</div>}
                 {it.allergens && <div style={{ fontSize: 12, color: "#b11e46" }}>{it.allergens}</div>}
@@ -829,8 +897,27 @@ export default function TablePage({ params, searchParams }: any) {
                   <div style={{ marginTop: 8, borderTop: "1px dashed #ddd", paddingTop: 8 }}>
                     {modifiersByItem[it.id].groups.map((g) => (
                       <div key={g.id} style={{ marginBottom: 8 }}>
-                        <div style={{ fontWeight: 600 }}>
-                          {g.name} {g.isRequired ? `(${t(lang, "required")})` : ""}
+                        <div style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                          {g.name}
+                          <span
+                            style={{
+                              fontSize: 11,
+                              padding: "2px 6px",
+                              borderRadius: 999,
+                              background: g.isRequired ? "#fee2e2" : "#e0f2fe",
+                              color: g.isRequired ? "#991b1b" : "#0369a1",
+                            }}
+                          >
+                            {g.isRequired ? t(lang, "modifiersRequiredLabel") : t(lang, "modifiersOptionalLabel")}
+                          </span>
+                          <span style={{ fontSize: 11, color: "#666" }}>
+                            {t(lang, "modifiersSelected")}:{" "}
+                            {(() => {
+                              const optionIds = new Set(g.options.map((o) => o.id));
+                              const selected = cart.find((c) => c.item.id === it.id)?.modifierOptionIds ?? [];
+                              return selected.filter((id) => optionIds.has(id)).length;
+                            })()}
+                          </span>
                         </div>
                         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                           {g.options.map((o) => {
@@ -841,8 +928,10 @@ export default function TablePage({ params, searchParams }: any) {
                                 onClick={() => toggleOption(it, g, o)}
                                 style={{
                                   padding: "6px 8px",
-                                  borderRadius: 6,
+                                  borderRadius: 8,
                                   border: selected ? "2px solid #333" : "1px solid #ddd",
+                                  background: selected ? "#111" : "#fff",
+                                  color: selected ? "#fff" : "#111",
                                 }}
                               >
                                 {o.name} {o.priceCents ? `+${money(o.priceCents, it.currency)}` : ""}
@@ -913,18 +1002,37 @@ export default function TablePage({ params, searchParams }: any) {
         </div>
       )}
 
-      <h2 style={{ marginTop: 24 }}>{lang === "en" ? "My orders" : lang === "ro" ? "Comenzile mele" : "Мои заказы"}</h2>
+      <h2 style={{ marginTop: 24 }}>{t(lang, "myOrders")}</h2>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+        <button onClick={loadOrdersHistory} disabled={ordersLoading}>
+          {ordersLoading ? t(lang, "loading") : t(lang, "refreshMyOrders")}
+        </button>
+        <button onClick={() => setOrdersExpanded((v) => !v)}>
+          {ordersExpanded ? t(lang, "hideOrders") : t(lang, "showOrders")}
+        </button>
+      </div>
       {ordersLoading ? (
         <p style={{ color: "#666" }}>{t(lang, "loading")}</p>
-      ) : ordersHistory.length === 0 ? (
-        <p style={{ color: "#666" }}>{lang === "en" ? "No orders yet" : lang === "ro" ? "Nu există comenzi" : "Заказов пока нет"}</p>
+      ) : !ordersExpanded ? null : ordersHistory.length === 0 ? (
+        <p style={{ color: "#666" }}>{t(lang, "noOrders")}</p>
       ) : (
         <div style={{ border: "1px solid #eee", borderRadius: 10, padding: 12 }}>
           {ordersHistory.map((o) => (
             <div key={o.orderId} style={{ padding: "8px 0", borderBottom: "1px dashed #eee" }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                <strong>{lang === "en" ? "Order" : lang === "ro" ? "Comanda" : "Заказ"} #{o.orderId}</strong>
-                <span>{o.status}</span>
+                <strong>{t(lang, "order")} #{o.orderId}</strong>
+                <span
+                  style={{
+                    padding: "2px 8px",
+                    borderRadius: 999,
+                    fontSize: 12,
+                    background: orderStatusColor(o.status).bg,
+                    color: orderStatusColor(o.status).fg,
+                    alignSelf: "center",
+                  }}
+                >
+                  {orderStatusLabel(o.status)}
+                </span>
               </div>
               <div style={{ color: "#666", fontSize: 12 }}>{o.createdAt}</div>
               <div style={{ marginTop: 6 }}>
@@ -936,6 +1044,37 @@ export default function TablePage({ params, searchParams }: any) {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      <h2 style={{ marginTop: 24 }}>{t(lang, "currentCharges")}</h2>
+      {!billOptions ? (
+        <p style={{ color: "#666" }}>{t(lang, "loading")}</p>
+      ) : billOptions.myItems.length === 0 && billOptions.tableItems.length === 0 ? (
+        <p style={{ color: "#666" }}>{t(lang, "noCharges")}</p>
+      ) : (
+        <div style={{ border: "1px solid #eee", borderRadius: 10, padding: 12 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <button onClick={refreshBillOptions} disabled={billOptionsLoading}>
+              {billOptionsLoading ? t(lang, "loading") : t(lang, "refreshCharges")}
+            </button>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10, marginTop: 10 }}>
+            <div style={{ border: "1px solid #f0f0f0", borderRadius: 8, padding: 10 }}>
+              <div style={{ fontWeight: 600 }}>{t(lang, "myItemsLabel")}</div>
+              <div style={{ color: "#666", fontSize: 12, marginTop: 4 }}>
+                {myChargesCount} {t(lang, "itemsCount")}
+              </div>
+              <div style={{ marginTop: 6, fontSize: 16 }}>{money(myChargesCents, "MDL")}</div>
+            </div>
+            <div style={{ border: "1px solid #f0f0f0", borderRadius: 8, padding: 10 }}>
+              <div style={{ fontWeight: 600 }}>{t(lang, "tableItemsLabel")}</div>
+              <div style={{ color: "#666", fontSize: 12, marginTop: 4 }}>
+                {tableChargesCount} {t(lang, "itemsCount")}
+              </div>
+              <div style={{ marginTop: 6, fontSize: 16 }}>{money(tableChargesCents, "MDL")}</div>
+            </div>
+          </div>
         </div>
       )}
 

@@ -44,6 +44,7 @@ public class AdminController {
   private final ModifierGroupRepo modifierGroupRepo;
   private final ModifierOptionRepo modifierOptionRepo;
   private final MenuItemModifierGroupRepo menuItemModifierGroupRepo;
+  private final HallPlanTemplateRepo hallPlanTemplateRepo;
   private final AuditService auditService;
   private final AuditLogRepo auditLogRepo;
   private final TablePartyRepo partyRepo;
@@ -66,6 +67,7 @@ public class AdminController {
     ModifierGroupRepo modifierGroupRepo,
     ModifierOptionRepo modifierOptionRepo,
     MenuItemModifierGroupRepo menuItemModifierGroupRepo,
+    HallPlanTemplateRepo hallPlanTemplateRepo,
     AuditService auditService,
     AuditLogRepo auditLogRepo,
     TablePartyRepo partyRepo,
@@ -87,6 +89,7 @@ public class AdminController {
     this.modifierGroupRepo = modifierGroupRepo;
     this.modifierOptionRepo = modifierOptionRepo;
     this.menuItemModifierGroupRepo = menuItemModifierGroupRepo;
+    this.hallPlanTemplateRepo = hallPlanTemplateRepo;
     this.auditService = auditService;
     this.auditLogRepo = auditLogRepo;
     this.partyRepo = partyRepo;
@@ -133,6 +136,19 @@ public class AdminController {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "User has no branch");
     }
     return u.branchId;
+  }
+
+  private Long resolveHallIdFromPlan(StaffUser u, Long hallId, Long planId) {
+    if (planId == null) return hallId;
+    HallPlan p = hallPlanRepo.findById(planId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Plan not found"));
+    BranchHall h = hallRepo.findById(p.hallId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hall not found"));
+    requireBranchAccess(u, h.branchId);
+    if (hallId != null && !Objects.equals(hallId, p.hallId)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "hallId does not match planId");
+    }
+    return p.hallId;
   }
 
   private void validateLayoutBounds(Double x, Double y, Double w, Double h) {
@@ -286,6 +302,8 @@ public class AdminController {
   public record PlanExportTable(String publicId, int number, Double layoutX, Double layoutY, Double layoutW, Double layoutH, String layoutShape, Integer layoutRotation, String layoutZone) {}
   public record PlanExportResponse(String name, long hallId, String backgroundUrl, String zonesJson, List<PlanExportTable> tables) {}
   public record PlanImportRequest(String name, String backgroundUrl, String zonesJson, List<PlanExportTable> tables, Boolean applyLayouts) {}
+  public record HallPlanTemplateDto(long id, long hallId, String name, String payloadJson, String createdAt, String updatedAt) {}
+  public record CreateHallPlanTemplateRequest(@NotBlank String name, @NotBlank String payloadJson) {}
 
   @GetMapping("/halls/{hallId}/plans")
   public List<HallPlanDto> listHallPlans(@PathVariable long hallId, Authentication auth) {
@@ -419,6 +437,56 @@ public class AdminController {
     }
     auditService.log(u, "IMPORT", "HallPlan", p.id, null);
     return new HallPlanDto(p.id, p.hallId, p.name, p.isActive, p.sortOrder, p.layoutBgUrl, p.layoutZonesJson);
+  }
+
+  @GetMapping("/halls/{hallId}/plan-templates")
+  public List<HallPlanTemplateDto> listPlanTemplates(@PathVariable long hallId, Authentication auth) {
+    StaffUser u = requireAdmin(auth);
+    BranchHall h = hallRepo.findById(hallId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hall not found"));
+    requireBranchAccess(u, h.branchId);
+    List<HallPlanTemplate> templates = hallPlanTemplateRepo.findByBranchIdAndHallIdOrderByUpdatedAtDesc(h.branchId, hallId);
+    List<HallPlanTemplateDto> out = new ArrayList<>();
+    for (HallPlanTemplate t : templates) {
+      out.add(new HallPlanTemplateDto(t.id, t.hallId, t.name, t.payloadJson, t.createdAt.toString(), t.updatedAt.toString()));
+    }
+    return out;
+  }
+
+  @PostMapping("/halls/{hallId}/plan-templates")
+  public HallPlanTemplateDto createPlanTemplate(
+    @PathVariable long hallId,
+    @Valid @RequestBody CreateHallPlanTemplateRequest req,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    BranchHall h = hallRepo.findById(hallId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hall not found"));
+    requireBranchAccess(u, h.branchId);
+    String name = req.name.trim();
+    HallPlanTemplate existing = hallPlanTemplateRepo.findTopByBranchIdAndHallIdAndNameIgnoreCase(h.branchId, hallId, name);
+    HallPlanTemplate t = existing == null ? new HallPlanTemplate() : existing;
+    if (existing == null) {
+      t.branchId = h.branchId;
+      t.hallId = hallId;
+      t.name = name;
+      t.createdAt = Instant.now();
+    }
+    t.payloadJson = req.payloadJson;
+    t.updatedAt = Instant.now();
+    t = hallPlanTemplateRepo.save(t);
+    auditService.log(u, existing == null ? "CREATE" : "UPDATE", "HallPlanTemplate", t.id, null);
+    return new HallPlanTemplateDto(t.id, t.hallId, t.name, t.payloadJson, t.createdAt.toString(), t.updatedAt.toString());
+  }
+
+  @DeleteMapping("/hall-plan-templates/{id}")
+  public void deletePlanTemplate(@PathVariable long id, Authentication auth) {
+    StaffUser u = requireAdmin(auth);
+    HallPlanTemplate t = hallPlanTemplateRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Template not found"));
+    requireBranchAccess(u, t.branchId);
+    hallPlanTemplateRepo.delete(t);
+    auditService.log(u, "DELETE", "HallPlanTemplate", t.id, null);
   }
 
   @DeleteMapping("/hall-plans/{id}")
@@ -1438,11 +1506,13 @@ public class AdminController {
     @RequestParam(value = "branchId", required = false) Long branchId,
     @RequestParam(value = "tableId", required = false) Long tableId,
     @RequestParam(value = "hallId", required = false) Long hallId,
+    @RequestParam(value = "planId", required = false) Long planId,
     @RequestParam(value = "waiterId", required = false) Long waiterId,
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
     long bid = resolveBranchId(u, branchId);
+    hallId = resolveHallIdFromPlan(u, hallId, planId);
     if (tableId != null) {
       CafeTable t = tableRepo.findById(tableId)
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
@@ -1488,11 +1558,13 @@ public class AdminController {
     @RequestParam(value = "branchId", required = false) Long branchId,
     @RequestParam(value = "tableId", required = false) Long tableId,
     @RequestParam(value = "hallId", required = false) Long hallId,
+    @RequestParam(value = "planId", required = false) Long planId,
     @RequestParam(value = "waiterId", required = false) Long waiterId,
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
     long bid = resolveBranchId(u, branchId);
+    hallId = resolveHallIdFromPlan(u, hallId, planId);
     if (tableId != null) {
       CafeTable t = tableRepo.findById(tableId)
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
@@ -1533,11 +1605,13 @@ public class AdminController {
     @RequestParam(value = "branchId", required = false) Long branchId,
     @RequestParam(value = "tableId", required = false) Long tableId,
     @RequestParam(value = "hallId", required = false) Long hallId,
+    @RequestParam(value = "planId", required = false) Long planId,
     @RequestParam(value = "waiterId", required = false) Long waiterId,
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
     long bid = resolveBranchId(u, branchId);
+    hallId = resolveHallIdFromPlan(u, hallId, planId);
     if (tableId != null) {
       CafeTable t = tableRepo.findById(tableId)
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
@@ -1576,12 +1650,14 @@ public class AdminController {
     @RequestParam(value = "branchId", required = false) Long branchId,
     @RequestParam(value = "tableId", required = false) Long tableId,
     @RequestParam(value = "hallId", required = false) Long hallId,
+    @RequestParam(value = "planId", required = false) Long planId,
     @RequestParam(value = "waiterId", required = false) Long waiterId,
     @RequestParam(value = "limit", required = false) Integer limit,
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
     long bid = resolveBranchId(u, branchId);
+    hallId = resolveHallIdFromPlan(u, hallId, planId);
     if (tableId != null) {
       CafeTable t = tableRepo.findById(tableId)
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
@@ -1618,12 +1694,14 @@ public class AdminController {
     @RequestParam(value = "branchId", required = false) Long branchId,
     @RequestParam(value = "tableId", required = false) Long tableId,
     @RequestParam(value = "hallId", required = false) Long hallId,
+    @RequestParam(value = "planId", required = false) Long planId,
     @RequestParam(value = "waiterId", required = false) Long waiterId,
     @RequestParam(value = "limit", required = false) Integer limit,
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
     long bid = resolveBranchId(u, branchId);
+    hallId = resolveHallIdFromPlan(u, hallId, planId);
     if (tableId != null) {
       CafeTable t = tableRepo.findById(tableId)
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));

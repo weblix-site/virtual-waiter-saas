@@ -39,6 +39,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.*;
 
 @RestController
@@ -325,6 +327,8 @@ public class StaffController {
   public List<StaffHistoryOrderDto> orderHistory(
     @RequestParam(value = "tableId", required = false) Long tableId,
     @RequestParam(value = "guestSessionId", required = false) Long guestSessionId,
+    @RequestParam(value = "from", required = false) String from,
+    @RequestParam(value = "to", required = false) String to,
     Authentication auth
   ) {
     StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
@@ -350,10 +354,20 @@ public class StaffController {
     }
 
     List<Order> orders;
+    Instant fromTs = parseInstantOrDateOrNull(from, true);
+    Instant toTs = parseInstantOrDateOrNull(to, false);
     if (guestSessionId != null && tableId == null) {
-      orders = orderRepo.findTop200ByGuestSessionIdOrderByCreatedAtDesc(guestSessionId);
+      if (fromTs != null && toTs != null) {
+        orders = orderRepo.findByGuestSessionIdAndCreatedAtBetweenOrderByCreatedAtDesc(guestSessionId, fromTs, toTs);
+      } else {
+        orders = orderRepo.findTop200ByGuestSessionIdOrderByCreatedAtDesc(guestSessionId);
+      }
     } else if (resolvedTableId != null) {
-      orders = orderRepo.findTop200ByTableIdOrderByCreatedAtDesc(resolvedTableId);
+      if (fromTs != null && toTs != null) {
+        orders = orderRepo.findByTableIdAndCreatedAtBetweenOrderByCreatedAtDesc(resolvedTableId, fromTs, toTs);
+      } else {
+        orders = orderRepo.findTop200ByTableIdOrderByCreatedAtDesc(resolvedTableId);
+      }
       if (guestSessionId != null) {
         orders = orders.stream().filter(o -> Objects.equals(o.guestSessionId, guestSessionId)).toList();
       }
@@ -390,6 +404,18 @@ public class StaffController {
       ));
     }
     return out;
+  }
+
+  private static Instant parseInstantOrDateOrNull(String v, boolean isStart) {
+    if (v == null || v.isBlank()) return null;
+    String s = v.trim();
+    try {
+      return Instant.parse(s);
+    } catch (Exception ignored) {
+      LocalDate d = LocalDate.parse(s);
+      return isStart ? d.atStartOfDay().toInstant(ZoneOffset.UTC)
+        : d.plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC).minusSeconds(1);
+    }
   }
 
   public record StaffOrderItemDto(long id, long menuItemId, String name, int unitPriceCents, int qty, String comment) {}
@@ -679,7 +705,7 @@ public class StaffController {
     String r = role == null ? "" : role.toUpperCase(Locale.ROOT);
     if ("ADMIN".equals(r)) return isAllowedTransition(current, next);
     if ("KITCHEN".equals(r)) {
-      return isAllowedTransition(current, next) && Set.of("ACCEPTED", "IN_PROGRESS", "READY", "SERVED").contains(next);
+      return isAllowedTransition(current, next) && Set.of("ACCEPTED", "IN_PROGRESS", "READY", "SERVED", "CLOSED").contains(next);
     }
     if ("WAITER".equals(r)) {
       return isAllowedTransition(current, next) && Set.of("ACCEPTED", "READY", "SERVED", "CLOSED", "CANCELLED").contains(next);

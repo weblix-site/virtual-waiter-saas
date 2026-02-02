@@ -103,6 +103,13 @@ Steps:
 Expected:
 - Photos, description, ingredients, K/B/F/C, tags present
 
+### B2.1 Menu card UI
+Steps:
+1. Check menu cards for weight/Kcal/PCF chips.
+2. Open modifiers; verify required/optional badges and selected count.
+Expected:
+- Chips and modifier badges render correctly
+
 ### B3. Modifiers
 Steps:
 1. Item with modifiers: try to add without required selection.
@@ -151,6 +158,14 @@ Expected:
 - Only allowed modes appear
 - Bill status updates (created/confirmed/cancelled)
 
+### B9.1 Current charges block
+Steps:
+1. Place an order and open “Текущие начисления”.
+2. Compare “Мои позиции” and “Позиции по столу” totals.
+3. Click “Обновить начисления”.
+Expected:
+- Totals update and match bill options
+
 ### B10. Tips
 Steps:
 1. Enable tips flag; create bill with tips.
@@ -173,6 +188,20 @@ Steps:
 1. View Orders/Calls/Bills/Kitchen tabs.
 Expected:
 - Focus cards appear and toggle works
+
+### C2.1 Floor plan active sync
+Steps:
+1. In admin set another active plan for the same hall.
+2. In staff app (Hall tab) with “Use active = ON” wait for sync.
+Expected:
+- Layout switches automatically to the new active plan
+
+### C2.2 SLA thresholds
+Steps:
+1. In staff app (Hall tab) open “SLA settings”, change warn/crit.
+2. Observe SLA chips and heatmap legend update.
+Expected:
+- New thresholds apply without restart
 
 ### C3. Order status transitions
 Steps:
@@ -197,15 +226,27 @@ Expected:
 ### C6. Bills
 Steps:
 1. Confirm paid
-2. Cancel bill (CREATED only)
+2. Cancel bill (CREATED only) — confirmation dialog
 Expected:
 - Status updates
+
+### C6.1 Party close confirmation
+Steps:
+1. In Bills tab, click “Close Party”.
+2. Confirm dialog appears, then confirm.
+Expected:
+- Party closes only after confirmation
 
 ### C7. History tab
 Steps:
 1. Select table, then guest session.
+2. Use back button to return to all guests.
+3. Set date range filter.
 Expected:
 - Orders list filtered by selection
+- Back clears guest filter
+- Date filter applies
+ - Presets (Today/7 days/30 days) apply correctly
 
 ---
 
@@ -217,6 +258,13 @@ Steps:
 2. Create item with RU/RO/EN
 Expected:
 - List updates
+
+### D1.1 Admin filters persistence
+Steps:
+1. Set menu/table/staff filters.
+2. Reload page.
+Expected:
+- Filters persist (localStorage)
 
 ### D2. Menu search
 Steps:
@@ -253,13 +301,21 @@ Expected:
 ### D7. Parties list
 Steps:
 1. Create party in guest; view in admin Parties list.
+2. Filter by Table and PIN.
+3. Expand row; copy participant IDs.
+4. Set party close/expiry near now, adjust Expiring (min), verify highlight + badge.
 Expected:
 - Party visible with participant IDs
+- Filters work
+- Copy button copies IDs
+- Expiring parties are highlighted and labeled
 
 ### D8. Stats + CSV
 Steps:
 1. Load stats for range.
 2. Download CSV.
+3. Set waiter filter and ensure counts match orders handled by that waiter (handled_by_staff_id).
+4. Set Hall and Plan filters (plan within hall) and verify stats are scoped.
 Expected:
 - Data matches activity
 

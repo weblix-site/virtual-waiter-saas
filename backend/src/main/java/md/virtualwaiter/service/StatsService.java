@@ -84,10 +84,11 @@ public class StatsService {
       "FROM bill_request_items bri\n" +
       "JOIN bill_requests br ON br.id = bri.bill_request_id\n" +
       "JOIN order_items oi ON oi.id = bri.order_item_id\n" +
+      "JOIN orders o ON o.id = oi.order_id\n" +
       "JOIN tables t ON t.id = br.table_id\n" +
       "LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id\n" +
       "WHERE " + tableFilter + " AND br.status = 'PAID_CONFIRMED' AND br.confirmed_at BETWEEN :fromTs AND :toTs\n" +
-      "  AND (:waiterId IS NULL OR br.confirmed_by_staff_id = :waiterId)\n" +
+      "  AND (:waiterId IS NULL OR o.handled_by_staff_id = :waiterId)\n" +
       "GROUP BY oi.menu_item_id, name\n" +
       "ORDER BY gross_cents DESC\n" +
       "LIMIT :limit";
@@ -113,11 +114,12 @@ public class StatsService {
       "FROM bill_request_items bri\n" +
       "JOIN bill_requests br ON br.id = bri.bill_request_id\n" +
       "JOIN order_items oi ON oi.id = bri.order_item_id\n" +
+      "JOIN orders o ON o.id = oi.order_id\n" +
       "JOIN tables t ON t.id = br.table_id\n" +
       "LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id\n" +
       "LEFT JOIN menu_categories mc ON mc.id = mi.category_id\n" +
       "WHERE " + tableFilter + " AND br.status = 'PAID_CONFIRMED' AND br.confirmed_at BETWEEN :fromTs AND :toTs\n" +
-      "  AND (:waiterId IS NULL OR br.confirmed_by_staff_id = :waiterId)\n" +
+      "  AND (:waiterId IS NULL OR o.handled_by_staff_id = :waiterId)\n" +
       "GROUP BY mc.id, name\n" +
       "ORDER BY gross_cents DESC\n" +
       "LIMIT :limit";
@@ -203,12 +205,17 @@ public class StatsService {
       "),\n" +
       "bills AS (\n" +
       "  SELECT date_trunc('day', br.confirmed_at) AS day,\n" +
-      "         COUNT(*) AS cnt,\n" +
-      "         COALESCE(SUM(br.total_cents),0) AS gross,\n" +
-      "         COALESCE(SUM(br.tips_amount_cents),0) AS tips\n" +
-      "  FROM bill_requests br JOIN tables t ON t.id = br.table_id\n" +
+      "         COUNT(DISTINCT br.id) AS cnt,\n" +
+      "         COALESCE(SUM(bri.line_total_cents +\n" +
+      "           COALESCE((COALESCE(br.tips_amount_cents,0) * bri.line_total_cents) / NULLIF(br.subtotal_cents,0),0)),0) AS gross,\n" +
+      "         COALESCE(SUM(COALESCE((COALESCE(br.tips_amount_cents,0) * bri.line_total_cents) / NULLIF(br.subtotal_cents,0),0)),0) AS tips\n" +
+      "  FROM bill_requests br\n" +
+      "  JOIN tables t ON t.id = br.table_id\n" +
+      "  JOIN bill_request_items bri ON bri.bill_request_id = br.id\n" +
+      "  JOIN order_items oi ON oi.id = bri.order_item_id\n" +
+      "  JOIN orders o ON o.id = oi.order_id\n" +
       "  WHERE " + tableFilter + " AND br.status = 'PAID_CONFIRMED' AND br.confirmed_at BETWEEN :fromTs AND :toTs\n" +
-      "    AND (:waiterId IS NULL OR br.confirmed_by_staff_id = :waiterId)\n" +
+      "    AND (:waiterId IS NULL OR o.handled_by_staff_id = :waiterId)\n" +
       "  GROUP BY 1\n" +
       ")\n" +
       "SELECT d.day,\n" +
@@ -267,21 +274,36 @@ public class StatsService {
       params
     );
     long paidBillsCount = queryLong(
-      "SELECT COUNT(*) FROM bill_requests br JOIN tables t ON t.id = br.table_id " +
+      "SELECT COUNT(DISTINCT br.id) FROM bill_requests br " +
+        "JOIN tables t ON t.id = br.table_id " +
+        "JOIN bill_request_items bri ON bri.bill_request_id = br.id " +
+        "JOIN order_items oi ON oi.id = bri.order_item_id " +
+        "JOIN orders o ON o.id = oi.order_id " +
         "WHERE " + tableFilter + " AND br.status = 'PAID_CONFIRMED' AND br.confirmed_at BETWEEN :fromTs AND :toTs " +
-        "AND (:waiterId IS NULL OR br.confirmed_by_staff_id = :waiterId)",
+        "AND (:waiterId IS NULL OR o.handled_by_staff_id = :waiterId)",
       params
     );
     long grossCents = queryLong(
-      "SELECT COALESCE(SUM(br.total_cents),0) FROM bill_requests br JOIN tables t ON t.id = br.table_id " +
+      "SELECT COALESCE(SUM(bri.line_total_cents + " +
+        "COALESCE((COALESCE(br.tips_amount_cents,0) * bri.line_total_cents) / NULLIF(br.subtotal_cents,0),0)),0) " +
+        "FROM bill_requests br " +
+        "JOIN tables t ON t.id = br.table_id " +
+        "JOIN bill_request_items bri ON bri.bill_request_id = br.id " +
+        "JOIN order_items oi ON oi.id = bri.order_item_id " +
+        "JOIN orders o ON o.id = oi.order_id " +
         "WHERE " + tableFilter + " AND br.status = 'PAID_CONFIRMED' AND br.confirmed_at BETWEEN :fromTs AND :toTs " +
-        "AND (:waiterId IS NULL OR br.confirmed_by_staff_id = :waiterId)",
+        "AND (:waiterId IS NULL OR o.handled_by_staff_id = :waiterId)",
       params
     );
     long tipsCents = queryLong(
-      "SELECT COALESCE(SUM(br.tips_amount_cents),0) FROM bill_requests br JOIN tables t ON t.id = br.table_id " +
+      "SELECT COALESCE(SUM(COALESCE((COALESCE(br.tips_amount_cents,0) * bri.line_total_cents) / NULLIF(br.subtotal_cents,0),0)),0) " +
+        "FROM bill_requests br " +
+        "JOIN tables t ON t.id = br.table_id " +
+        "JOIN bill_request_items bri ON bri.bill_request_id = br.id " +
+        "JOIN order_items oi ON oi.id = bri.order_item_id " +
+        "JOIN orders o ON o.id = oi.order_id " +
         "WHERE " + tableFilter + " AND br.status = 'PAID_CONFIRMED' AND br.confirmed_at BETWEEN :fromTs AND :toTs " +
-        "AND (:waiterId IS NULL OR br.confirmed_by_staff_id = :waiterId)",
+        "AND (:waiterId IS NULL OR o.handled_by_staff_id = :waiterId)",
       params
     );
     long activeTablesCount = queryLong(

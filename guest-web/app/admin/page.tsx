@@ -185,6 +185,15 @@ type PartyDto = {
   guestSessionIds: number[];
 };
 
+type HallPlanTemplateDto = {
+  id: number;
+  hallId: number;
+  name: string;
+  payloadJson: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 function money(priceCents: number, currency = "MDL") {
   return `${(priceCents / 100).toFixed(2)} ${currency}`;
 }
@@ -218,7 +227,8 @@ export default function AdminPage() {
   const planRef = useRef<HTMLDivElement | null>(null);
   const [dragWaiterId, setDragWaiterId] = useState<number | null>(null);
   const [dragOverTableId, setDragOverTableId] = useState<number | null>(null);
-  const [planTemplates, setPlanTemplates] = useState<{ name: string; payload: any }[]>([]);
+  const [planTemplates, setPlanTemplates] = useState<HallPlanTemplateDto[]>([]);
+  const [applyLayoutsOnImport, setApplyLayoutsOnImport] = useState(true);
   const zoneDragRef = useRef<{
     id: string;
     startX: number;
@@ -257,6 +267,8 @@ export default function AdminPage() {
   const [statsTo, setStatsTo] = useState("");
   const [statsTableId, setStatsTableId] = useState<number | "">("");
   const [statsHallId, setStatsHallId] = useState<number | "">("");
+  const [statsHallPlanId, setStatsHallPlanId] = useState<number | "">("");
+  const [statsHallPlans, setStatsHallPlans] = useState<HallPlanDto[]>([]);
   const [statsWaiterId, setStatsWaiterId] = useState<number | "">("");
   const [statsLimit, setStatsLimit] = useState(10);
   const [stats, setStats] = useState<StatsSummary | null>(null);
@@ -274,6 +286,12 @@ export default function AdminPage() {
   const [auditTo, setAuditTo] = useState("");
   const [parties, setParties] = useState<PartyDto[]>([]);
   const [partyStatusFilter, setPartyStatusFilter] = useState("ACTIVE");
+  const [expandedPartyId, setExpandedPartyId] = useState<number | null>(null);
+  const [partyTableFilter, setPartyTableFilter] = useState("");
+  const [partyPinFilter, setPartyPinFilter] = useState("");
+  const [partyExpiringMinutes, setPartyExpiringMinutes] = useState(30);
+  const [adminFiltersDirty, setAdminFiltersDirty] = useState(false);
+  const [adminFiltersCount, setAdminFiltersCount] = useState(0);
 
   const [newCatNameRu, setNewCatNameRu] = useState("");
   const [newCatSort, setNewCatSort] = useState(0);
@@ -301,6 +319,9 @@ export default function AdminPage() {
   const [newItemActive, setNewItemActive] = useState(true);
   const [newItemStopList, setNewItemStopList] = useState(false);
   const [menuSearch, setMenuSearch] = useState("");
+  const [menuFilterCategoryId, setMenuFilterCategoryId] = useState<number | "">("");
+  const [menuFilterActive, setMenuFilterActive] = useState<string | "">("");
+  const [menuFilterStopList, setMenuFilterStopList] = useState<string | "">("");
 
   const [editingCategoryId, setEditingCategoryId] = useState<number | null>(null);
   const [editCatNameRu, setEditCatNameRu] = useState("");
@@ -317,6 +338,8 @@ export default function AdminPage() {
   const [newTableWaiterId, setNewTableWaiterId] = useState<number | "">("");
   const [tableFilterText, setTableFilterText] = useState("");
   const [tableFilterWaiterId, setTableFilterWaiterId] = useState<number | "">("");
+  const [tableFilterHallId, setTableFilterHallId] = useState<number | "">("");
+  const [tableFilterAssigned, setTableFilterAssigned] = useState<string | "">("");
   const [bulkHallId, setBulkHallId] = useState<number | "">("");
 
   const [newStaffUser, setNewStaffUser] = useState("");
@@ -333,11 +356,38 @@ export default function AdminPage() {
   useEffect(() => {
     const u = localStorage.getItem("adminUser") ?? "";
     const p = localStorage.getItem("adminPass") ?? "";
+    const exp = localStorage.getItem("partyExpiringMinutes");
+    const menuSearchSaved = localStorage.getItem("admin_menu_search");
+    const menuCatSaved = localStorage.getItem("admin_menu_cat");
+    const menuActiveSaved = localStorage.getItem("admin_menu_active");
+    const menuStopSaved = localStorage.getItem("admin_menu_stop");
+    const tableTextSaved = localStorage.getItem("admin_table_search");
+    const tableWaiterSaved = localStorage.getItem("admin_table_waiter");
+    const tableHallSaved = localStorage.getItem("admin_table_hall");
+    const tableAssignedSaved = localStorage.getItem("admin_table_assigned");
+    const staffTextSaved = localStorage.getItem("admin_staff_search");
+    const staffRoleSaved = localStorage.getItem("admin_staff_role");
+    const staffActiveSaved = localStorage.getItem("admin_staff_active");
     if (u && p) {
       setUsername(u);
       setPassword(p);
       setAuthReady(true);
     }
+    if (exp) {
+      const n = Number(exp);
+      if (!Number.isNaN(n) && n > 0) setPartyExpiringMinutes(n);
+    }
+    if (menuSearchSaved) setMenuSearch(menuSearchSaved);
+    if (menuCatSaved) setMenuFilterCategoryId(menuCatSaved ? Number(menuCatSaved) : "");
+    if (menuActiveSaved) setMenuFilterActive(menuActiveSaved);
+    if (menuStopSaved) setMenuFilterStopList(menuStopSaved);
+    if (tableTextSaved) setTableFilterText(tableTextSaved);
+    if (tableWaiterSaved) setTableFilterWaiterId(tableWaiterSaved ? Number(tableWaiterSaved) : "");
+    if (tableHallSaved) setTableFilterHallId(tableHallSaved ? Number(tableHallSaved) : "");
+    if (tableAssignedSaved) setTableFilterAssigned(tableAssignedSaved);
+    if (staffTextSaved) setStaffFilterText(staffTextSaved);
+    if (staffRoleSaved) setStaffFilterRole(staffRoleSaved);
+    if (staffActiveSaved) setStaffFilterActive(staffActiveSaved);
   }, []);
 
   const authHeader = useMemo(() => {
@@ -537,15 +587,17 @@ export default function AdminPage() {
   }, [planZoom, snapEnabled]);
 
   useEffect(() => {
-    if (!hallId) return;
-    try {
-      const raw = localStorage.getItem(`vw_plan_templates_${hallId}`);
-      if (raw) setPlanTemplates(JSON.parse(raw));
-      else setPlanTemplates([]);
-    } catch (_) {
-      setPlanTemplates([]);
-    }
-  }, [hallId]);
+    if (!authReady || !hallId) return;
+    (async () => {
+      try {
+        const res = await api(`/api/admin/halls/${hallId}/plan-templates`);
+        const body = await res.json();
+        setPlanTemplates(body);
+      } catch (_) {
+        setPlanTemplates([]);
+      }
+    })();
+  }, [authReady, hallId]);
 
   async function loadAll() {
     if (!authReady) return;
@@ -637,6 +689,73 @@ export default function AdminPage() {
       setPlanZones([]);
     }
   }, [hallPlanId, hallPlans]);
+
+  useEffect(() => {
+    if (!authReady || statsHallId === "") {
+      setStatsHallPlans([]);
+      setStatsHallPlanId("");
+      return;
+    }
+    setStatsHallPlanId("");
+    (async () => {
+      try {
+        const res = await api(`/api/admin/halls/${statsHallId}/plans`);
+        const body = await res.json();
+        setStatsHallPlans(body);
+      } catch (_) {
+        setStatsHallPlans([]);
+      }
+    })();
+  }, [authReady, statsHallId]);
+
+  useEffect(() => {
+    localStorage.setItem("admin_menu_search", menuSearch);
+    localStorage.setItem("admin_menu_cat", menuFilterCategoryId === "" ? "" : String(menuFilterCategoryId));
+    localStorage.setItem("admin_menu_active", menuFilterActive);
+    localStorage.setItem("admin_menu_stop", menuFilterStopList);
+  }, [menuSearch, menuFilterCategoryId, menuFilterActive, menuFilterStopList]);
+
+  useEffect(() => {
+    localStorage.setItem("admin_table_search", tableFilterText);
+    localStorage.setItem("admin_table_waiter", tableFilterWaiterId === "" ? "" : String(tableFilterWaiterId));
+    localStorage.setItem("admin_table_hall", tableFilterHallId === "" ? "" : String(tableFilterHallId));
+    localStorage.setItem("admin_table_assigned", tableFilterAssigned);
+  }, [tableFilterText, tableFilterWaiterId, tableFilterHallId, tableFilterAssigned]);
+
+  useEffect(() => {
+    localStorage.setItem("admin_staff_search", staffFilterText);
+    localStorage.setItem("admin_staff_role", staffFilterRole);
+    localStorage.setItem("admin_staff_active", staffFilterActive);
+  }, [staffFilterText, staffFilterRole, staffFilterActive]);
+
+  useEffect(() => {
+    let count = 0;
+    if (menuSearch) count++;
+    if (menuFilterCategoryId !== "") count++;
+    if (menuFilterActive) count++;
+    if (menuFilterStopList) count++;
+    if (tableFilterText) count++;
+    if (tableFilterWaiterId !== "") count++;
+    if (tableFilterHallId !== "") count++;
+    if (tableFilterAssigned) count++;
+    if (staffFilterText) count++;
+    if (staffFilterRole) count++;
+    if (staffFilterActive) count++;
+    setAdminFiltersCount(count);
+    setAdminFiltersDirty(count > 0);
+  }, [
+    menuSearch,
+    menuFilterCategoryId,
+    menuFilterActive,
+    menuFilterStopList,
+    tableFilterText,
+    tableFilterWaiterId,
+    tableFilterHallId,
+    tableFilterAssigned,
+    staffFilterText,
+    staffFilterRole,
+    staffFilterActive,
+  ]);
 
   useEffect(() => {
     loadAll();
@@ -819,6 +938,12 @@ export default function AdminPage() {
 
   async function importPlanJson(file: File, applyLayouts = true) {
     if (!hallId) return;
+    if (applyLayouts) {
+      const ok = window.confirm(
+        "Apply layouts will overwrite current table positions/sizes for this hall. Continue?"
+      );
+      if (!ok) return;
+    }
     const text = await file.text();
     const parsed = JSON.parse(text);
     const name = parsed.name || `Imported ${new Date().toISOString()}`;
@@ -863,26 +988,42 @@ export default function AdminPage() {
           };
         }),
     };
-    const next = [...planTemplates.filter((t) => t.name !== name), { name, payload }];
-    setPlanTemplates(next);
-    localStorage.setItem(`vw_plan_templates_${hallId}`, JSON.stringify(next));
+    api(`/api/admin/halls/${hallId}/plan-templates`, {
+      method: "POST",
+      body: JSON.stringify({ name, payloadJson: JSON.stringify(payload) }),
+    })
+      .then((r) => r.json())
+      .then((saved) => {
+        setPlanTemplates((prev) => [saved, ...prev.filter((t) => t.id !== saved.id)]);
+      })
+      .catch(() => {});
   }
 
-  async function applyTemplate(t: { name: string; payload: any }) {
+  async function applyTemplate(t: HallPlanTemplateDto) {
     if (!hallId) return;
+    const ok = window.confirm(
+      "Apply template will overwrite current table positions/sizes for this hall. Continue?"
+    );
+    if (!ok) return;
+    let payload: any = null;
+    try {
+      payload = JSON.parse(t.payloadJson);
+    } catch (_) {}
+    if (!payload) return;
     const res = await api(`/api/admin/halls/${hallId}/plans/import`, {
       method: "POST",
-      body: JSON.stringify({ ...t.payload, applyLayouts: true }),
+      body: JSON.stringify({ ...payload, applyLayouts: true }),
     });
     const plan = await res.json();
     setHallPlanId(plan.id);
     loadAll();
   }
 
-  function removeTemplate(name: string) {
-    const next = planTemplates.filter((t) => t.name !== name);
-    setPlanTemplates(next);
-    if (hallId) localStorage.setItem(`vw_plan_templates_${hallId}`, JSON.stringify(next));
+  function removeTemplate(id: number) {
+    if (!hallId) return;
+    api(`/api/admin/hall-plan-templates/${id}`, { method: "DELETE" })
+      .then(() => setPlanTemplates((prev) => prev.filter((t) => t.id !== id)))
+      .catch(() => {});
   }
 
   function autoLayoutTables() {
@@ -902,6 +1043,20 @@ export default function AdminPage() {
         };
       })
     );
+  }
+
+  function resetAllFilters() {
+    setMenuSearch("");
+    setMenuFilterCategoryId("");
+    setMenuFilterActive("");
+    setMenuFilterStopList("");
+    setTableFilterText("");
+    setTableFilterWaiterId("");
+    setTableFilterHallId("");
+    setTableFilterAssigned("");
+    setStaffFilterText("");
+    setStaffFilterRole("");
+    setStaffFilterActive("");
   }
 
   const selectedTable = tables.find((t) => t.id === selectedTableId) ?? null;
@@ -1090,6 +1245,7 @@ export default function AdminPage() {
     if (statsTo) qs.set("to", statsTo);
     if (statsTableId !== "") qs.set("tableId", String(statsTableId));
     if (statsHallId !== "") qs.set("hallId", String(statsHallId));
+    if (statsHallPlanId !== "") qs.set("planId", String(statsHallPlanId));
     if (statsWaiterId !== "") qs.set("waiterId", String(statsWaiterId));
     const res = await api(`/api/admin/stats/summary?${qs.toString()}`);
     const body = await res.json();
@@ -1111,6 +1267,7 @@ export default function AdminPage() {
     if (statsTo) qs.set("to", statsTo);
     if (statsTableId !== "") qs.set("tableId", String(statsTableId));
     if (statsHallId !== "") qs.set("hallId", String(statsHallId));
+    if (statsHallPlanId !== "") qs.set("planId", String(statsHallPlanId));
     if (statsWaiterId !== "") qs.set("waiterId", String(statsWaiterId));
     const res = await api(`/api/admin/stats/daily.csv?${qs.toString()}`, {
       headers: { Authorization: authHeader },
@@ -1271,6 +1428,23 @@ export default function AdminPage() {
         <h1 style={{ margin: 0 }}>Admin</h1>
         <button onClick={loadAll}>Refresh</button>
       </div>
+      <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 10 }}>
+        <button onClick={resetAllFilters}>Reset all filters</button>
+        {adminFiltersDirty && (
+          <span
+            style={{
+              fontSize: 12,
+              padding: "2px 8px",
+              borderRadius: 999,
+              background: "#fee2e2",
+              color: "#991b1b",
+              fontWeight: 600,
+            }}
+          >
+            Filters active: {adminFiltersCount}
+          </span>
+        )}
+      </div>
       {error && <div style={{ color: "#b11e46", marginTop: 8 }}>{error}</div>}
 
       <section style={{ marginTop: 24 }}>
@@ -1305,6 +1479,42 @@ export default function AdminPage() {
               <option value="CLOSED">CLOSED</option>
             </select>
           </label>
+          <label>
+            Table
+            <input
+              value={partyTableFilter}
+              onChange={(e) => setPartyTableFilter(e.target.value)}
+              placeholder="#"
+              style={{ width: 80 }}
+            />
+          </label>
+          <label>
+            PIN
+            <input
+              value={partyPinFilter}
+              onChange={(e) => setPartyPinFilter(e.target.value)}
+              placeholder="0000"
+              style={{ width: 80 }}
+            />
+          </label>
+          <label>
+            Expiring (min)
+            <input
+              type="number"
+              min={1}
+              value={partyExpiringMinutes}
+              onChange={(e) => {
+                const n = Number(e.target.value);
+                setPartyExpiringMinutes(n);
+                if (!Number.isNaN(n) && n > 0) localStorage.setItem("partyExpiringMinutes", String(n));
+              }}
+              style={{ width: 80 }}
+            />
+          </label>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#7c2d12" }}>
+            <span style={{ width: 10, height: 10, borderRadius: 999, background: "#fde68a", display: "inline-block" }} />
+            Expiring
+          </div>
           <button onClick={loadAll}>Refresh</button>
         </div>
         {parties.length === 0 ? (
@@ -1324,19 +1534,101 @@ export default function AdminPage() {
                 </tr>
               </thead>
               <tbody>
-                {parties.map((p) => (
-                  <tr key={p.id}>
-                    <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{p.id}</td>
-                    <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>#{p.tableNumber}</td>
-                    <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{p.pin}</td>
-                    <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{p.status}</td>
-                    <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>
-                      {p.guestSessionIds.length === 0 ? "-" : p.guestSessionIds.join(", ")}
-                    </td>
-                    <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{p.createdAt}</td>
-                    <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{p.expiresAt}</td>
-                  </tr>
-                ))}
+                {parties
+                  .filter((p) => {
+                    if (partyTableFilter.trim()) {
+                      const num = Number(partyTableFilter.replace("#", "").trim());
+                      if (!Number.isNaN(num) && p.tableNumber !== num) return false;
+                      if (Number.isNaN(num) && !String(p.tableNumber).includes(partyTableFilter.trim())) return false;
+                    }
+                    if (partyPinFilter.trim() && !String(p.pin ?? "").includes(partyPinFilter.trim())) return false;
+                    return true;
+                  })
+                  .map((p) => {
+                    const expanded = expandedPartyId === p.id;
+                    const expiresAtMs = Date.parse(p.expiresAt);
+                    const expiringSoon =
+                      p.status === "ACTIVE" &&
+                      !Number.isNaN(expiresAtMs) &&
+                      expiresAtMs - Date.now() <= partyExpiringMinutes * 60 * 1000 &&
+                      expiresAtMs > Date.now();
+                    return (
+                      <React.Fragment key={p.id}>
+                        <tr
+                          onClick={() => setExpandedPartyId(expanded ? null : p.id)}
+                          style={{
+                            cursor: "pointer",
+                            background: expanded ? "#fafafa" : expiringSoon ? "#fff4e5" : "transparent",
+                          }}
+                        >
+                          <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{p.id}</td>
+                          <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>#{p.tableNumber}</td>
+                          <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{p.pin}</td>
+                          <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>
+                            {p.status}
+                            {expiringSoon && (
+                              <span
+                                style={{
+                                  marginLeft: 8,
+                                  padding: "2px 6px",
+                                  borderRadius: 999,
+                                  background: "#fde68a",
+                                  color: "#7c2d12",
+                                  fontSize: 11,
+                                  fontWeight: 600,
+                                }}
+                              >
+                                EXPIRING
+                              </span>
+                            )}
+                          </td>
+                          <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>
+                            {p.guestSessionIds.length === 0 ? "-" : p.guestSessionIds.length}
+                          </td>
+                          <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{p.createdAt}</td>
+                          <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{p.expiresAt}</td>
+                        </tr>
+                        {expanded && (
+                          <tr>
+                            <td colSpan={7} style={{ padding: "8px 6px", borderBottom: "1px solid #f0f0f0", background: "#fafafa" }}>
+                              <div style={{ fontSize: 12, color: "#666", marginBottom: 6 }}>Participants (GuestSession IDs)</div>
+                              {p.guestSessionIds.length === 0 ? (
+                                <div style={{ color: "#999" }}>No participants</div>
+                              ) : (
+                                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                                  {p.guestSessionIds.map((id) => (
+                                    <span
+                                      key={id}
+                                      style={{
+                                        padding: "4px 8px",
+                                        borderRadius: 999,
+                                        background: "#eef2ff",
+                                        color: "#334155",
+                                        fontSize: 12,
+                                      }}
+                                    >
+                                      #{id}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              <div style={{ marginTop: 8 }}>
+                                <button
+                                  onClick={() => {
+                                    const text = p.guestSessionIds.join(", ");
+                                    navigator.clipboard?.writeText(text);
+                                  }}
+                                  disabled={p.guestSessionIds.length === 0}
+                                >
+                                  Copy IDs
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
               </tbody>
             </table>
           </div>
@@ -1366,6 +1658,22 @@ export default function AdminPage() {
               ))}
             </select>
           </label>
+          <label>
+            Plan
+            <select
+              value={statsHallPlanId}
+              onChange={(e) => setStatsHallPlanId(e.target.value ? Number(e.target.value) : "")}
+              disabled={statsHallId === ""}
+            >
+              <option value="">All</option>
+              {statsHallPlans.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </label>
+          {statsHallId === "" && (
+            <span style={{ fontSize: 12, color: "#666" }}>Plan доступен после выбора Hall</span>
+          )}
           <label>
             Waiter
             <select value={statsWaiterId} onChange={(e) => setStatsWaiterId(e.target.value ? Number(e.target.value) : "")}>
@@ -1592,7 +1900,24 @@ export default function AdminPage() {
             value={menuSearch}
             onChange={(e) => setMenuSearch(e.target.value)}
           />
+          <select value={menuFilterCategoryId} onChange={(e) => setMenuFilterCategoryId(e.target.value ? Number(e.target.value) : "")}>
+            <option value="">All categories</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>{c.nameRu}</option>
+            ))}
+          </select>
+          <select value={menuFilterActive} onChange={(e) => setMenuFilterActive(e.target.value)}>
+            <option value="">All statuses</option>
+            <option value="ACTIVE">Active</option>
+            <option value="INACTIVE">Inactive</option>
+          </select>
+          <select value={menuFilterStopList} onChange={(e) => setMenuFilterStopList(e.target.value)}>
+            <option value="">Stop list: any</option>
+            <option value="STOP">Stop list</option>
+            <option value="OK">Not in stop list</option>
+          </select>
           <button onClick={() => setMenuSearch("")}>Clear</button>
+          <button onClick={() => { setMenuSearch(""); setMenuFilterCategoryId(""); setMenuFilterActive(""); setMenuFilterStopList(""); }}>Reset filters</button>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <select value={newItemCatId} onChange={(e) => setNewItemCatId(e.target.value ? Number(e.target.value) : "")}>
@@ -1670,6 +1995,18 @@ export default function AdminPage() {
               const nRo = (it.nameRo ?? "").toLowerCase();
               const nEn = (it.nameEn ?? "").toLowerCase();
               return nRu.includes(q) || nRo.includes(q) || nEn.includes(q);
+            })
+            .filter((it) => {
+              if (menuFilterCategoryId !== "" && it.categoryId !== menuFilterCategoryId) return false;
+              if (menuFilterActive) {
+                const active = menuFilterActive === "ACTIVE";
+                if (it.isActive !== active) return false;
+              }
+              if (menuFilterStopList) {
+                const stop = menuFilterStopList === "STOP";
+                if (it.isStopList !== stop) return false;
+              }
+              return true;
             })
             .map((it) => (
             <div key={it.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "6px 0", borderBottom: "1px solid #eee" }}>
@@ -1771,12 +2108,20 @@ export default function AdminPage() {
           <button onClick={exportPlanJson} disabled={!hallPlanId}>Export JSON</button>
           <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
             <span style={{ fontSize: 12, color: "#666" }}>Import JSON</span>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "#666" }}>
+              <input
+                type="checkbox"
+                checked={applyLayoutsOnImport}
+                onChange={(e) => setApplyLayoutsOnImport(e.target.checked)}
+              />
+              Apply layouts (overwrite)
+            </label>
             <input
               type="file"
               accept="application/json"
               onChange={(e) => {
                 const f = e.target.files?.[0];
-                if (f) importPlanJson(f, true);
+                if (f) importPlanJson(f, applyLayoutsOnImport);
                 e.currentTarget.value = "";
               }}
             />
@@ -1883,9 +2228,9 @@ export default function AdminPage() {
             <span style={{ fontSize: 12, color: "#666" }}>Templates:</span>
             <button onClick={saveTemplate} disabled={!hallPlanId}>Save current</button>
             {planTemplates.map((t) => (
-              <span key={t.name} style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+              <span key={t.id} style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
                 <button onClick={() => applyTemplate(t)}>{t.name}</button>
-                <button onClick={() => removeTemplate(t.name)} style={{ color: "#b00" }}>×</button>
+                <button onClick={() => removeTemplate(t.id)} style={{ color: "#b00" }}>×</button>
               </span>
             ))}
             {planTemplates.length === 0 && <span style={{ fontSize: 12, color: "#999" }}>No templates</span>}
@@ -2404,6 +2749,17 @@ export default function AdminPage() {
               <option key={s.id} value={s.id}>{s.username}</option>
             ))}
           </select>
+          <select value={tableFilterHallId} onChange={(e) => setTableFilterHallId(e.target.value ? Number(e.target.value) : "")}>
+            <option value="">All halls</option>
+            {halls.map((h) => (
+              <option key={h.id} value={h.id}>{h.name}</option>
+            ))}
+          </select>
+          <select value={tableFilterAssigned} onChange={(e) => setTableFilterAssigned(e.target.value)}>
+            <option value="">All assignments</option>
+            <option value="ASSIGNED">Assigned</option>
+            <option value="UNASSIGNED">Unassigned</option>
+          </select>
           <select value={bulkHallId} onChange={(e) => setBulkHallId(e.target.value ? Number(e.target.value) : "")}>
             <option value="">Bulk hall</option>
             {halls.map((h) => (
@@ -2420,6 +2776,9 @@ export default function AdminPage() {
                   if (!hit) return false;
                 }
                 if (tableFilterWaiterId !== "" && t.assignedWaiterId !== tableFilterWaiterId) return false;
+                if (tableFilterHallId !== "" && t.hallId !== tableFilterHallId) return false;
+                if (tableFilterAssigned === "ASSIGNED" && !t.assignedWaiterId) return false;
+                if (tableFilterAssigned === "UNASSIGNED" && t.assignedWaiterId) return false;
                 return true;
               });
               await api("/api/admin/tables/bulk-assign-hall", {
@@ -2431,7 +2790,7 @@ export default function AdminPage() {
           >
             Assign filtered to hall
           </button>
-          <button onClick={() => { setTableFilterText(""); setTableFilterWaiterId(""); }}>Clear</button>
+          <button onClick={() => { setTableFilterText(""); setTableFilterWaiterId(""); setTableFilterHallId(""); setTableFilterAssigned(""); }}>Clear</button>
         </div>
         <div style={{ marginTop: 10 }}>
           {tables
@@ -2442,6 +2801,9 @@ export default function AdminPage() {
                 if (!hit) return false;
               }
               if (tableFilterWaiterId !== "" && t.assignedWaiterId !== tableFilterWaiterId) return false;
+              if (tableFilterHallId !== "" && t.hallId !== tableFilterHallId) return false;
+              if (tableFilterAssigned === "ASSIGNED" && !t.assignedWaiterId) return false;
+              if (tableFilterAssigned === "UNASSIGNED" && t.assignedWaiterId) return false;
               return true;
             })
             .map((t) => (

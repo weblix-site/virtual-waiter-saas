@@ -96,20 +96,39 @@ export default function ItemPage({ params, searchParams }: any) {
         <div style={{ color: "#666", marginBottom: 12 }}>{t(lang, "noPhotos")}</div>
       )}
 
+      {(item.weight || item.kcal || item.proteinG || item.fatG || item.carbsG) && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", fontSize: 13, color: "#444", marginBottom: 10 }}>
+          {item.weight && (
+            <span style={{ padding: "4px 8px", border: "1px solid #eee", borderRadius: 999 }}>
+              {t(lang, "weightShort")}: {item.weight}
+            </span>
+          )}
+          {item.kcal && (
+            <span style={{ padding: "4px 8px", border: "1px solid #eee", borderRadius: 999 }}>
+              {t(lang, "calories")}: {item.kcal}
+            </span>
+          )}
+          {item.proteinG && (
+            <span style={{ padding: "4px 8px", border: "1px solid #eee", borderRadius: 999 }}>
+              {t(lang, "protein")}: {item.proteinG}g
+            </span>
+          )}
+          {item.fatG && (
+            <span style={{ padding: "4px 8px", border: "1px solid #eee", borderRadius: 999 }}>
+              {t(lang, "fat")}: {item.fatG}g
+            </span>
+          )}
+          {item.carbsG && (
+            <span style={{ padding: "4px 8px", border: "1px solid #eee", borderRadius: 999 }}>
+              {t(lang, "carbs")}: {item.carbsG}g
+            </span>
+          )}
+        </div>
+      )}
+
       {item.description && <p>{item.description}</p>}
       {item.ingredients && <div><strong>{t(lang, "ingredients")}:</strong> {item.ingredients}</div>}
       {item.allergens && <div style={{ color: "#b11e46" }}><strong>{t(lang, "allergens")}:</strong> {item.allergens}</div>}
-      {item.weight && <div><strong>{t(lang, "weight")}:</strong> {item.weight}</div>}
-
-      {(item.kcal || item.proteinG || item.fatG || item.carbsG) && (
-        <div style={{ marginTop: 12 }}>
-          <strong>{t(lang, "kbju")}:</strong>{" "}
-          {item.kcal ? `Kcal ${item.kcal}` : ""}{" "}
-          {item.proteinG ? `P ${item.proteinG}g` : ""}{" "}
-          {item.fatG ? `F ${item.fatG}g` : ""}{" "}
-          {item.carbsG ? `C ${item.carbsG}g` : ""}
-        </div>
-      )}
 
       {item.tags && item.tags.length > 0 && (
         <div style={{ marginTop: 12, display: "flex", gap: 6, flexWrap: "wrap" }}>
