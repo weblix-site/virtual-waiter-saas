@@ -32,6 +32,9 @@ public class AdminController {
   private final MenuCategoryRepo categoryRepo;
   private final MenuItemRepo itemRepo;
   private final CafeTableRepo tableRepo;
+  private final BranchRepo branchRepo;
+  private final BranchHallRepo hallRepo;
+  private final HallPlanRepo hallPlanRepo;
   private final BranchSettingsRepo settingsRepo;
   private final BranchSettingsService settingsService;
   private final QrSignatureService qrSig;
@@ -51,6 +54,9 @@ public class AdminController {
     MenuCategoryRepo categoryRepo,
     MenuItemRepo itemRepo,
     CafeTableRepo tableRepo,
+    BranchRepo branchRepo,
+    BranchHallRepo hallRepo,
+    HallPlanRepo hallPlanRepo,
     BranchSettingsRepo settingsRepo,
     BranchSettingsService settingsService,
     QrSignatureService qrSig,
@@ -69,6 +75,9 @@ public class AdminController {
     this.categoryRepo = categoryRepo;
     this.itemRepo = itemRepo;
     this.tableRepo = tableRepo;
+    this.branchRepo = branchRepo;
+    this.hallRepo = hallRepo;
+    this.hallPlanRepo = hallPlanRepo;
     this.settingsRepo = settingsRepo;
     this.settingsService = settingsService;
     this.qrSig = qrSig;
@@ -132,6 +141,181 @@ public class AdminController {
   public MeResponse me(Authentication auth) {
     StaffUser u = requireAdmin(auth);
     return new MeResponse(u.id, u.username, u.role, u.branchId);
+  }
+
+  public record BranchLayoutResponse(String backgroundUrl, String zonesJson) {}
+  public record UpdateBranchLayoutRequest(String backgroundUrl, String zonesJson) {}
+
+  @GetMapping("/branch-layout")
+  public BranchLayoutResponse getBranchLayout(@RequestParam(value = "branchId", required = false) Long branchId, Authentication auth) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
+    return new BranchLayoutResponse(b.layoutBgUrl, b.layoutZonesJson);
+  }
+
+  @PutMapping("/branch-layout")
+  public BranchLayoutResponse updateBranchLayout(
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @RequestBody UpdateBranchLayoutRequest req,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
+    if (req != null) {
+      b.layoutBgUrl = req.backgroundUrl;
+      b.layoutZonesJson = req.zonesJson;
+    }
+    branchRepo.save(b);
+    auditService.log(u, "UPDATE", "BranchLayout", b.id, null);
+    return new BranchLayoutResponse(b.layoutBgUrl, b.layoutZonesJson);
+  }
+
+  // --- Halls ---
+  public record HallDto(long id, long branchId, String name, boolean isActive, int sortOrder, String backgroundUrl, String zonesJson, Long activePlanId) {}
+  public record CreateHallRequest(@NotBlank String name, Integer sortOrder) {}
+  public record UpdateHallRequest(String name, Boolean isActive, Integer sortOrder, String backgroundUrl, String zonesJson, Long activePlanId) {}
+
+  @GetMapping("/halls")
+  public List<HallDto> listHalls(@RequestParam(value = "branchId", required = false) Long branchId, Authentication auth) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    List<BranchHall> halls = hallRepo.findByBranchIdOrderBySortOrderAscIdAsc(bid);
+    List<HallDto> out = new ArrayList<>();
+    for (BranchHall h : halls) {
+      out.add(new HallDto(h.id, h.branchId, h.name, h.isActive, h.sortOrder, h.layoutBgUrl, h.layoutZonesJson, h.activePlanId));
+    }
+    return out;
+  }
+
+  @GetMapping("/halls/{id}")
+  public HallDto getHall(@PathVariable long id, Authentication auth) {
+    StaffUser u = requireAdmin(auth);
+    BranchHall h = hallRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hall not found"));
+    requireBranchAccess(u, h.branchId);
+    return new HallDto(h.id, h.branchId, h.name, h.isActive, h.sortOrder, h.layoutBgUrl, h.layoutZonesJson, h.activePlanId);
+  }
+
+  @PostMapping("/halls")
+  public HallDto createHall(
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @Valid @RequestBody CreateHallRequest req,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    BranchHall h = new BranchHall();
+    h.branchId = bid;
+    h.name = req.name.trim();
+    h.sortOrder = req.sortOrder == null ? 0 : req.sortOrder;
+    h = hallRepo.save(h);
+    auditService.log(u, "CREATE", "BranchHall", h.id, null);
+    return new HallDto(h.id, h.branchId, h.name, h.isActive, h.sortOrder, h.layoutBgUrl, h.layoutZonesJson, h.activePlanId);
+  }
+
+  @PatchMapping("/halls/{id}")
+  public HallDto updateHall(@PathVariable long id, @RequestBody UpdateHallRequest req, Authentication auth) {
+    StaffUser u = requireAdmin(auth);
+    BranchHall h = hallRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hall not found"));
+    requireBranchAccess(u, h.branchId);
+    if (req.name != null && !req.name.isBlank()) h.name = req.name.trim();
+    if (req.isActive != null) h.isActive = req.isActive;
+    if (req.sortOrder != null) h.sortOrder = req.sortOrder;
+    if (req.backgroundUrl != null) h.layoutBgUrl = req.backgroundUrl;
+    if (req.zonesJson != null) h.layoutZonesJson = req.zonesJson;
+    if (req.activePlanId != null) h.activePlanId = req.activePlanId;
+    h = hallRepo.save(h);
+    auditService.log(u, "UPDATE", "BranchHall", h.id, null);
+    return new HallDto(h.id, h.branchId, h.name, h.isActive, h.sortOrder, h.layoutBgUrl, h.layoutZonesJson, h.activePlanId);
+  }
+
+  @DeleteMapping("/halls/{id}")
+  public void deleteHall(@PathVariable long id, Authentication auth) {
+    StaffUser u = requireAdmin(auth);
+    BranchHall h = hallRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hall not found"));
+    requireBranchAccess(u, h.branchId);
+    hallRepo.delete(h);
+    auditService.log(u, "DELETE", "BranchHall", h.id, null);
+  }
+
+  // --- Hall plans ---
+  public record HallPlanDto(long id, long hallId, String name, boolean isActive, int sortOrder, String backgroundUrl, String zonesJson) {}
+  public record CreateHallPlanRequest(@NotBlank String name, Integer sortOrder) {}
+  public record UpdateHallPlanRequest(String name, Boolean isActive, Integer sortOrder, String backgroundUrl, String zonesJson) {}
+
+  @GetMapping("/halls/{hallId}/plans")
+  public List<HallPlanDto> listHallPlans(@PathVariable long hallId, Authentication auth) {
+    StaffUser u = requireAdmin(auth);
+    BranchHall h = hallRepo.findById(hallId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hall not found"));
+    requireBranchAccess(u, h.branchId);
+    List<HallPlan> plans = hallPlanRepo.findByHallIdOrderBySortOrderAscIdAsc(hallId);
+    List<HallPlanDto> out = new ArrayList<>();
+    for (HallPlan p : plans) {
+      out.add(new HallPlanDto(p.id, p.hallId, p.name, p.isActive, p.sortOrder, p.layoutBgUrl, p.layoutZonesJson));
+    }
+    return out;
+  }
+
+  @PostMapping("/halls/{hallId}/plans")
+  public HallPlanDto createHallPlan(@PathVariable long hallId, @Valid @RequestBody CreateHallPlanRequest req, Authentication auth) {
+    StaffUser u = requireAdmin(auth);
+    BranchHall h = hallRepo.findById(hallId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hall not found"));
+    requireBranchAccess(u, h.branchId);
+    HallPlan p = new HallPlan();
+    p.hallId = hallId;
+    p.name = req.name.trim();
+    p.sortOrder = req.sortOrder == null ? 0 : req.sortOrder;
+    p = hallPlanRepo.save(p);
+    if (h.activePlanId == null) {
+      h.activePlanId = p.id;
+      hallRepo.save(h);
+    }
+    auditService.log(u, "CREATE", "HallPlan", p.id, null);
+    return new HallPlanDto(p.id, p.hallId, p.name, p.isActive, p.sortOrder, p.layoutBgUrl, p.layoutZonesJson);
+  }
+
+  @PatchMapping("/hall-plans/{id}")
+  public HallPlanDto updateHallPlan(@PathVariable long id, @RequestBody UpdateHallPlanRequest req, Authentication auth) {
+    StaffUser u = requireAdmin(auth);
+    HallPlan p = hallPlanRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Plan not found"));
+    BranchHall h = hallRepo.findById(p.hallId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hall not found"));
+    requireBranchAccess(u, h.branchId);
+    if (req.name != null && !req.name.isBlank()) p.name = req.name.trim();
+    if (req.isActive != null) p.isActive = req.isActive;
+    if (req.sortOrder != null) p.sortOrder = req.sortOrder;
+    if (req.backgroundUrl != null) p.layoutBgUrl = req.backgroundUrl;
+    if (req.zonesJson != null) p.layoutZonesJson = req.zonesJson;
+    p = hallPlanRepo.save(p);
+    auditService.log(u, "UPDATE", "HallPlan", p.id, null);
+    return new HallPlanDto(p.id, p.hallId, p.name, p.isActive, p.sortOrder, p.layoutBgUrl, p.layoutZonesJson);
+  }
+
+  @DeleteMapping("/hall-plans/{id}")
+  public void deleteHallPlan(@PathVariable long id, Authentication auth) {
+    StaffUser u = requireAdmin(auth);
+    HallPlan p = hallPlanRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Plan not found"));
+    BranchHall h = hallRepo.findById(p.hallId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hall not found"));
+    requireBranchAccess(u, h.branchId);
+    hallPlanRepo.delete(p);
+    if (Objects.equals(h.activePlanId, id)) {
+      h.activePlanId = null;
+      hallRepo.save(h);
+    }
+    auditService.log(u, "DELETE", "HallPlan", p.id, null);
   }
 
   public record AdminPartyDto(
@@ -589,9 +773,34 @@ public class AdminController {
   }
 
   // --- Tables ---
-  public record TableDto(long id, int number, String publicId, Long assignedWaiterId) {}
-  public record CreateTableRequest(@NotNull Integer number, String publicId, Long assignedWaiterId) {}
-  public record UpdateTableRequest(Integer number, String publicId, Long assignedWaiterId) {}
+  public record TableDto(
+    long id,
+    int number,
+    String publicId,
+    Long assignedWaiterId,
+    Long hallId,
+    Double layoutX,
+    Double layoutY,
+    Double layoutW,
+    Double layoutH,
+    String layoutShape,
+    Integer layoutRotation,
+    String layoutZone
+  ) {}
+  public record CreateTableRequest(@NotNull Integer number, String publicId, Long assignedWaiterId, Long hallId) {}
+  public record UpdateTableRequest(
+    Integer number,
+    String publicId,
+    Long assignedWaiterId,
+    Long hallId,
+    Double layoutX,
+    Double layoutY,
+    Double layoutW,
+    Double layoutH,
+    String layoutShape,
+    Integer layoutRotation,
+    String layoutZone
+  ) {}
 
   @GetMapping("/tables")
   public List<TableDto> listTables(@RequestParam(value = "branchId", required = false) Long branchId, Authentication auth) {
@@ -599,7 +808,22 @@ public class AdminController {
     long bid = resolveBranchId(u, branchId);
     List<CafeTable> tables = tableRepo.findByBranchId(bid);
     List<TableDto> out = new ArrayList<>();
-    for (CafeTable t : tables) out.add(new TableDto(t.id, t.number, t.publicId, t.assignedWaiterId));
+    for (CafeTable t : tables) {
+      out.add(new TableDto(
+        t.id,
+        t.number,
+        t.publicId,
+        t.assignedWaiterId,
+        t.hallId,
+        t.layoutX,
+        t.layoutY,
+        t.layoutW,
+        t.layoutH,
+        t.layoutShape,
+        t.layoutRotation,
+        t.layoutZone
+      ));
+    }
     return out;
   }
 
@@ -616,9 +840,23 @@ public class AdminController {
     t.number = req.number;
     t.publicId = (req.publicId == null || req.publicId.isBlank()) ? generatePublicId() : req.publicId.trim();
     t.assignedWaiterId = req.assignedWaiterId;
+    t.hallId = req.hallId;
     t = tableRepo.save(t);
     auditService.log(u, "CREATE", "CafeTable", t.id, null);
-    return new TableDto(t.id, t.number, t.publicId, t.assignedWaiterId);
+    return new TableDto(
+      t.id,
+      t.number,
+      t.publicId,
+      t.assignedWaiterId,
+      t.hallId,
+      t.layoutX,
+      t.layoutY,
+      t.layoutW,
+      t.layoutH,
+      t.layoutShape,
+      t.layoutRotation,
+      t.layoutZone
+    );
   }
 
   @PatchMapping("/tables/{id}")
@@ -630,9 +868,77 @@ public class AdminController {
     if (req.number != null) t.number = req.number;
     if (req.publicId != null && !req.publicId.isBlank()) t.publicId = req.publicId.trim();
     if (req.assignedWaiterId != null) t.assignedWaiterId = req.assignedWaiterId;
+    if (req.hallId != null) t.hallId = req.hallId;
+    if (req.layoutX != null) t.layoutX = req.layoutX;
+    if (req.layoutY != null) t.layoutY = req.layoutY;
+    if (req.layoutW != null) t.layoutW = req.layoutW;
+    if (req.layoutH != null) t.layoutH = req.layoutH;
+    if (req.layoutShape != null) t.layoutShape = req.layoutShape;
+    if (req.layoutRotation != null) t.layoutRotation = req.layoutRotation;
+    if (req.layoutZone != null) t.layoutZone = req.layoutZone;
     t = tableRepo.save(t);
     auditService.log(u, "UPDATE", "CafeTable", t.id, null);
-    return new TableDto(t.id, t.number, t.publicId, t.assignedWaiterId);
+    return new TableDto(
+      t.id,
+      t.number,
+      t.publicId,
+      t.assignedWaiterId,
+      t.hallId,
+      t.layoutX,
+      t.layoutY,
+      t.layoutW,
+      t.layoutH,
+      t.layoutShape,
+      t.layoutRotation,
+      t.layoutZone
+    );
+  }
+
+  public record TableLayoutItem(
+    @NotNull Long id,
+    Long hallId,
+    Double layoutX,
+    Double layoutY,
+    Double layoutW,
+    Double layoutH,
+    String layoutShape,
+    Integer layoutRotation,
+    String layoutZone
+  ) {}
+  public record UpdateTableLayoutRequest(@NotNull List<TableLayoutItem> tables) {}
+
+  @PostMapping("/tables/layout")
+  public Map<String, Object> updateTableLayout(
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @Valid @RequestBody UpdateTableLayoutRequest req,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    if (req.tables == null || req.tables.isEmpty()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "tables required");
+    }
+    int updated = 0;
+    for (TableLayoutItem item : req.tables) {
+      CafeTable t = tableRepo.findById(item.id)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
+      requireBranchAccess(u, t.branchId);
+      if (!Objects.equals(t.branchId, bid)) {
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong branch");
+      }
+      if (item.layoutX != null) t.layoutX = item.layoutX;
+      if (item.layoutY != null) t.layoutY = item.layoutY;
+      if (item.layoutW != null) t.layoutW = item.layoutW;
+      if (item.layoutH != null) t.layoutH = item.layoutH;
+      if (item.layoutShape != null) t.layoutShape = item.layoutShape;
+      if (item.layoutRotation != null) t.layoutRotation = item.layoutRotation;
+      if (item.layoutZone != null) t.layoutZone = item.layoutZone;
+      if (item.hallId != null) t.hallId = item.hallId;
+      tableRepo.save(t);
+      updated++;
+    }
+    auditService.log(u, "UPDATE", "CafeTableLayout", (long) updated, null);
+    return Map.of("updated", updated);
   }
 
   @DeleteMapping("/tables/{id}")

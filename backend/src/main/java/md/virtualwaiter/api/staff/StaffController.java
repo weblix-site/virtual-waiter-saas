@@ -9,6 +9,9 @@ import md.virtualwaiter.domain.BillRequest;
 import md.virtualwaiter.domain.BillRequestItem;
 import md.virtualwaiter.domain.TableParty;
 import md.virtualwaiter.domain.GuestSession;
+import md.virtualwaiter.domain.Branch;
+import md.virtualwaiter.domain.BranchHall;
+import md.virtualwaiter.domain.HallPlan;
 import md.virtualwaiter.repo.CafeTableRepo;
 import md.virtualwaiter.repo.GuestSessionRepo;
 import md.virtualwaiter.repo.OrderItemRepo;
@@ -18,6 +21,9 @@ import md.virtualwaiter.repo.WaiterCallRepo;
 import md.virtualwaiter.repo.BillRequestRepo;
 import md.virtualwaiter.repo.BillRequestItemRepo;
 import md.virtualwaiter.repo.TablePartyRepo;
+import md.virtualwaiter.repo.BranchRepo;
+import md.virtualwaiter.repo.BranchHallRepo;
+import md.virtualwaiter.repo.HallPlanRepo;
 import md.virtualwaiter.security.QrSignatureService;
 import md.virtualwaiter.service.PartyService;
 import md.virtualwaiter.service.StaffNotificationService;
@@ -47,6 +53,9 @@ public class StaffController {
   private final BillRequestItemRepo billRequestItemRepo;
   private final TablePartyRepo partyRepo;
   private final GuestSessionRepo guestSessionRepo;
+  private final BranchRepo branchRepo;
+  private final BranchHallRepo hallRepo;
+  private final HallPlanRepo hallPlanRepo;
   private final QrSignatureService qrSig;
   private final String publicBaseUrl;
   private final StaffNotificationService notificationService;
@@ -64,6 +73,9 @@ public class StaffController {
     BillRequestItemRepo billRequestItemRepo,
     TablePartyRepo partyRepo,
     GuestSessionRepo guestSessionRepo,
+    BranchRepo branchRepo,
+    BranchHallRepo hallRepo,
+    HallPlanRepo hallPlanRepo,
     QrSignatureService qrSig,
     @Value("${app.publicBaseUrl:http://localhost:3000}") String publicBaseUrl,
     StaffNotificationService notificationService,
@@ -80,6 +92,9 @@ public class StaffController {
     this.billRequestItemRepo = billRequestItemRepo;
     this.partyRepo = partyRepo;
     this.guestSessionRepo = guestSessionRepo;
+    this.branchRepo = branchRepo;
+    this.hallRepo = hallRepo;
+    this.hallPlanRepo = hallPlanRepo;
     this.qrSig = qrSig;
     this.publicBaseUrl = publicBaseUrl;
     this.notificationService = notificationService;
@@ -113,15 +128,89 @@ public class StaffController {
     return new MeResponse(u.id, u.username, u.role, u.branchId);
   }
 
-  public record StaffTableDto(long id, int number, String publicId, Long assignedWaiterId) {}
+  public record StaffTableDto(
+    long id,
+    int number,
+    String publicId,
+    Long assignedWaiterId,
+    Long hallId,
+    Double layoutX,
+    Double layoutY,
+    Double layoutW,
+    Double layoutH,
+    String layoutShape,
+    Integer layoutRotation,
+    String layoutZone
+  ) {}
+
+  public record BranchLayoutResponse(String backgroundUrl, String zonesJson) {}
+  public record HallDto(long id, long branchId, String name, boolean isActive, int sortOrder, String backgroundUrl, String zonesJson, Long activePlanId) {}
 
   @GetMapping("/tables")
-  public List<StaffTableDto> tables(Authentication auth) {
+  public List<StaffTableDto> tables(
+    @RequestParam(value = "hallId", required = false) Long hallId,
+    Authentication auth
+  ) {
     StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
     List<CafeTable> tables = tableRepo.findByBranchId(u.branchId);
+    if (hallId != null) {
+      tables = tables.stream().filter(t -> Objects.equals(t.hallId, hallId)).toList();
+    }
     List<StaffTableDto> out = new ArrayList<>();
     for (CafeTable t : tables) {
-      out.add(new StaffTableDto(t.id, t.number, t.publicId, t.assignedWaiterId));
+      out.add(new StaffTableDto(
+        t.id,
+        t.number,
+        t.publicId,
+        t.assignedWaiterId,
+        t.hallId,
+        t.layoutX,
+        t.layoutY,
+        t.layoutW,
+        t.layoutH,
+        t.layoutShape,
+        t.layoutRotation,
+        t.layoutZone
+      ));
+    }
+    return out;
+  }
+
+  @GetMapping("/branch-layout")
+  public BranchLayoutResponse branchLayout(
+    @RequestParam(value = "hallId", required = false) Long hallId,
+    Authentication auth
+  ) {
+    StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
+    if (u.branchId == null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "User has no branch");
+    }
+    if (hallId != null) {
+      BranchHall h = hallRepo.findById(hallId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hall not found"));
+      if (!Objects.equals(h.branchId, u.branchId)) {
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong branch");
+      }
+      if (h.activePlanId != null) {
+        HallPlan p = hallPlanRepo.findById(h.activePlanId).orElse(null);
+        if (p != null) {
+          return new BranchLayoutResponse(p.layoutBgUrl, p.layoutZonesJson);
+        }
+      }
+      return new BranchLayoutResponse(h.layoutBgUrl, h.layoutZonesJson);
+    }
+    Branch b = branchRepo.findById(u.branchId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    return new BranchLayoutResponse(b.layoutBgUrl, b.layoutZonesJson);
+  }
+
+  @GetMapping("/halls")
+  public List<HallDto> halls(Authentication auth) {
+    StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
+    List<BranchHall> halls = hallRepo.findByBranchIdAndIsActiveTrueOrderBySortOrderAscIdAsc(u.branchId);
+    List<HallDto> out = new ArrayList<>();
+    for (BranchHall h : halls) {
+      out.add(new HallDto(h.id, h.branchId, h.name, h.isActive, h.sortOrder, h.layoutBgUrl, h.layoutZonesJson, h.activePlanId));
     }
     return out;
   }

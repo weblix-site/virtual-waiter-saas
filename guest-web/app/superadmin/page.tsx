@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8080";
 
@@ -29,6 +29,42 @@ type BranchSummaryRow = {
   tipsCents: number;
 };
 
+type HallDto = {
+  id: number;
+  branchId: number;
+  name: string;
+  isActive: boolean;
+  sortOrder: number;
+  backgroundUrl?: string | null;
+  zonesJson?: string | null;
+  activePlanId?: number | null;
+};
+
+type HallPlanDto = {
+  id: number;
+  hallId: number;
+  name: string;
+  isActive: boolean;
+  sortOrder: number;
+  backgroundUrl?: string | null;
+  zonesJson?: string | null;
+};
+
+type TableDto = {
+  id: number;
+  number: number;
+  publicId: string;
+  assignedWaiterId?: number | null;
+  hallId?: number | null;
+  layoutX?: number | null;
+  layoutY?: number | null;
+  layoutW?: number | null;
+  layoutH?: number | null;
+  layoutShape?: string | null;
+  layoutRotation?: number | null;
+  layoutZone?: string | null;
+};
+
 function money(priceCents: number, currency = "MDL") {
   return `${(priceCents / 100).toFixed(2)} ${currency}`;
 }
@@ -50,6 +86,41 @@ export default function SuperAdminPage() {
   const [statsTo, setStatsTo] = useState("");
   const [stats, setStats] = useState<StatsSummary | null>(null);
   const [branchStats, setBranchStats] = useState<BranchSummaryRow[]>([]);
+  const [tables, setTables] = useState<TableDto[]>([]);
+  const [halls, setHalls] = useState<HallDto[]>([]);
+  const [hallPlans, setHallPlans] = useState<HallPlanDto[]>([]);
+  const [hallPlanId, setHallPlanId] = useState<number | "">("");
+  const [hallId, setHallId] = useState<number | "">("");
+  const [newHallName, setNewHallName] = useState("");
+  const [newHallSort, setNewHallSort] = useState(0);
+  const [selectedTableId, setSelectedTableId] = useState<number | null>(null);
+  const [planEditMode, setPlanEditMode] = useState(true);
+  const [snapEnabled, setSnapEnabled] = useState(true);
+  const [planBgUrl, setPlanBgUrl] = useState("");
+  const [planZones, setPlanZones] = useState<{ id: string; name: string; x: number; y: number; w: number; h: number; color: string }[]>([]);
+  const planRef = useRef<HTMLDivElement | null>(null);
+  const zoneDragRef = useRef<{
+    id: string;
+    startX: number;
+    startY: number;
+    baseX: number;
+    baseY: number;
+    baseW: number;
+    baseH: number;
+    mode: "move" | "resize";
+    corner?: "nw" | "ne" | "sw" | "se" | "n" | "s" | "e" | "w";
+  } | null>(null);
+  const dragRef = useRef<{
+    id: number;
+    startX: number;
+    startY: number;
+    baseX: number;
+    baseY: number;
+    baseW: number;
+    baseH: number;
+    mode: "move" | "resize";
+    corner?: "nw" | "ne" | "sw" | "se";
+  } | null>(null);
 
   const [newTenantName, setNewTenantName] = useState("");
   const [newBranchName, setNewBranchName] = useState("");
@@ -91,6 +162,145 @@ export default function SuperAdminPage() {
     return res;
   }
 
+  const waiterPalette = ["#FF6B6B", "#4ECDC4", "#FFD166", "#6C5CE7", "#00B894", "#FD79A8", "#0984E3"];
+  const waiterColor = (id?: number | null) => {
+    if (!id) return "#9aa0a6";
+    return waiterPalette[id % waiterPalette.length];
+  };
+
+  const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
+  const snap = (v: number, step = 2) => (snapEnabled ? Math.round(v / step) * step : v);
+
+  const layoutDefaults = (idx: number) => {
+    const cols = 6;
+    const col = idx % cols;
+    const row = Math.floor(idx / cols);
+    return {
+      layoutX: 5 + col * 15,
+      layoutY: 6 + row * 16,
+      layoutW: 10,
+      layoutH: 10,
+      layoutShape: "ROUND",
+      layoutRotation: 0,
+      layoutZone: "",
+    };
+  };
+
+  const getTableLayout = (t: TableDto, idx: number) => {
+    const d = layoutDefaults(idx);
+    return {
+      layoutX: t.layoutX ?? d.layoutX,
+      layoutY: t.layoutY ?? d.layoutY,
+      layoutW: t.layoutW ?? d.layoutW,
+      layoutH: t.layoutH ?? d.layoutH,
+      layoutShape: t.layoutShape ?? d.layoutShape,
+      layoutRotation: t.layoutRotation ?? d.layoutRotation,
+      layoutZone: t.layoutZone ?? d.layoutZone,
+    };
+  };
+
+  useEffect(() => {
+    const handleMove = (e: PointerEvent) => {
+      if (!planRef.current) return;
+      const rect = planRef.current.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+      const startRef = zoneDragRef.current ?? dragRef.current;
+      if (!startRef) return;
+      const dx = ((e.clientX - startRef.startX) / rect.width) * 100;
+      const dy = ((e.clientY - startRef.startY) / rect.height) * 100;
+      if (zoneDragRef.current) {
+        const z = zoneDragRef.current;
+        let nx = z.baseX;
+        let ny = z.baseY;
+        let nw = z.baseW;
+        let nh = z.baseH;
+        const minSize = 6;
+        if (z.mode === "move") {
+          nx = snap(clamp(z.baseX + dx, 0, 100 - z.baseW));
+          ny = snap(clamp(z.baseY + dy, 0, 100 - z.baseH));
+        } else {
+          const c = z.corner;
+          if (c === "se") {
+            nw = snap(clamp(z.baseW + dx, minSize, 100 - nx));
+            nh = snap(clamp(z.baseH + dy, minSize, 100 - ny));
+          } else if (c === "e") {
+            nw = snap(clamp(z.baseW + dx, minSize, 100 - nx));
+          } else if (c === "s") {
+            nh = snap(clamp(z.baseH + dy, minSize, 100 - ny));
+          } else if (c === "sw") {
+            nw = snap(clamp(z.baseW - dx, minSize, 100));
+            nx = snap(clamp(z.baseX + dx, 0, 100 - nw));
+            nh = snap(clamp(z.baseH + dy, minSize, 100 - ny));
+          } else if (c === "w") {
+            nw = snap(clamp(z.baseW - dx, minSize, 100));
+            nx = snap(clamp(z.baseX + dx, 0, 100 - nw));
+          } else if (c === "ne") {
+            nw = snap(clamp(z.baseW + dx, minSize, 100 - nx));
+            nh = snap(clamp(z.baseH - dy, minSize, 100));
+            ny = snap(clamp(z.baseY + dy, 0, 100 - nh));
+          } else if (c === "n") {
+            nh = snap(clamp(z.baseH - dy, minSize, 100));
+            ny = snap(clamp(z.baseY + dy, 0, 100 - nh));
+          } else if (c === "nw") {
+            nw = snap(clamp(z.baseW - dx, minSize, 100));
+            nx = snap(clamp(z.baseX + dx, 0, 100 - nw));
+            nh = snap(clamp(z.baseH - dy, minSize, 100));
+            ny = snap(clamp(z.baseY + dy, 0, 100 - nh));
+          }
+        }
+        setPlanZones((prev) => prev.map((p) => (p.id === z.id ? { ...p, x: nx, y: ny, w: nw, h: nh } : p)));
+        return;
+      }
+      if (!dragRef.current) return;
+      setTables((prev) =>
+        prev.map((t) => {
+          if (t.id !== dragRef.current!.id) return t;
+          const minSize = 4;
+          const wBase = dragRef.current!.baseW;
+          const hBase = dragRef.current!.baseH;
+          let nx = dragRef.current!.baseX;
+          let ny = dragRef.current!.baseY;
+          let nw = wBase;
+          let nh = hBase;
+          if (dragRef.current!.mode === "move") {
+            nx = snap(clamp(dragRef.current!.baseX + dx, 0, 100 - nw));
+            ny = snap(clamp(dragRef.current!.baseY + dy, 0, 100 - nh));
+          } else {
+            const c = dragRef.current!.corner;
+            if (c === "se") {
+              nw = snap(clamp(wBase + dx, minSize, 100 - nx));
+              nh = snap(clamp(hBase + dy, minSize, 100 - ny));
+            } else if (c === "sw") {
+              nw = snap(clamp(wBase - dx, minSize, 100));
+              nx = snap(clamp(dragRef.current!.baseX + dx, 0, 100 - nw));
+              nh = snap(clamp(hBase + dy, minSize, 100 - ny));
+            } else if (c === "ne") {
+              nw = snap(clamp(wBase + dx, minSize, 100 - nx));
+              nh = snap(clamp(hBase - dy, minSize, 100));
+              ny = snap(clamp(dragRef.current!.baseY + dy, 0, 100 - nh));
+            } else if (c === "nw") {
+              nw = snap(clamp(wBase - dx, minSize, 100));
+              nx = snap(clamp(dragRef.current!.baseX + dx, 0, 100 - nw));
+              nh = snap(clamp(hBase - dy, minSize, 100));
+              ny = snap(clamp(dragRef.current!.baseY + dy, 0, 100 - nh));
+            }
+          }
+          return { ...t, layoutX: nx, layoutY: ny, layoutW: nw, layoutH: nh };
+        })
+      );
+    };
+    const handleUp = () => {
+      dragRef.current = null;
+      zoneDragRef.current = null;
+    };
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
+    return () => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+    };
+  }, []);
+
   async function login() {
     setError(null);
     try {
@@ -125,6 +335,141 @@ export default function SuperAdminPage() {
     loadTenants();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authReady, tenantStatusFilter, branchStatusFilter, tenantId]);
+
+  async function loadTables() {
+    if (!branchId) return;
+    const hallsRes = await api(`/api/admin/halls?branchId=${branchId}`);
+    const hallsBody = await hallsRes.json();
+    setHalls(hallsBody);
+    if (!hallId && hallsBody.length > 0) {
+      setHallId(hallsBody[0].id);
+    }
+    const res = await api(`/api/admin/tables?branchId=${branchId}`);
+    setTables(await res.json());
+  }
+
+  async function saveTableLayout() {
+    if (!branchId || !hallId) return;
+    const payload = tables.map((t, idx) => {
+      const layout = getTableLayout(t, idx);
+      return {
+        id: t.id,
+        layoutX: layout.layoutX,
+        layoutY: layout.layoutY,
+        layoutW: layout.layoutW,
+        layoutH: layout.layoutH,
+        layoutShape: layout.layoutShape,
+        layoutRotation: layout.layoutRotation,
+        layoutZone: layout.layoutZone,
+        hallId,
+      };
+    });
+    await api(`/api/admin/tables/layout?branchId=${branchId}`, {
+      method: "POST",
+      body: JSON.stringify({ tables: payload }),
+    });
+    if (hallPlanId) {
+      await api(`/api/admin/hall-plans/${hallPlanId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ backgroundUrl: planBgUrl, zonesJson: JSON.stringify(planZones) }),
+      });
+      await api(`/api/admin/halls/${hallId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ activePlanId: hallPlanId }),
+      });
+    } else {
+      await api(`/api/admin/halls/${hallId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ backgroundUrl: planBgUrl, zonesJson: JSON.stringify(planZones) }),
+      });
+    }
+    loadTables();
+  }
+
+  function autoLayoutTables() {
+    setTables((prev) =>
+      prev.map((t, idx) => {
+        const d = layoutDefaults(idx);
+        return {
+          ...t,
+          layoutX: d.layoutX,
+          layoutY: d.layoutY,
+          layoutW: d.layoutW,
+          layoutH: d.layoutH,
+          layoutShape: d.layoutShape,
+          layoutRotation: d.layoutRotation,
+          layoutZone: d.layoutZone,
+        };
+      })
+    );
+  }
+
+  const selectedTable = tables.find((t) => t.id === selectedTableId) ?? null;
+
+  function updateSelectedTable(patch: Partial<TableDto>) {
+    if (!selectedTable) return;
+    setTables((prev) => prev.map((t) => (t.id === selectedTable.id ? { ...t, ...patch } : t)));
+  }
+
+  useEffect(() => {
+    if (branchId) loadTables();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [branchId]);
+
+  useEffect(() => {
+    if (!branchId || !hallId) return;
+    (async () => {
+      try {
+        const [hallRes, plansRes] = await Promise.all([
+          api(`/api/admin/halls/${hallId}`),
+          api(`/api/admin/halls/${hallId}/plans`),
+        ]);
+        const hall = await hallRes.json();
+        const plans = await plansRes.json();
+        setHallPlans(plans);
+        const activePlan = hall?.activePlanId ?? (plans[0]?.id ?? null);
+        setHallPlanId(activePlan ?? "");
+        if (activePlan) {
+          const plan = plans.find((p: HallPlanDto) => p.id === activePlan);
+          setPlanBgUrl(plan?.backgroundUrl ?? "");
+          if (plan?.zonesJson) {
+            try {
+              const parsed = JSON.parse(plan.zonesJson);
+              if (Array.isArray(parsed)) setPlanZones(parsed);
+            } catch (_) {}
+          } else {
+            setPlanZones([]);
+          }
+        } else {
+          setPlanBgUrl(hall?.backgroundUrl ?? "");
+          if (hall?.zonesJson) {
+            try {
+              const parsed = JSON.parse(hall.zonesJson);
+              if (Array.isArray(parsed)) setPlanZones(parsed);
+            } catch (_) {}
+          } else {
+            setPlanZones([]);
+          }
+        }
+      } catch (_) {}
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hallId, branchId]);
+
+  useEffect(() => {
+    if (!hallPlanId) return;
+    const plan = hallPlans.find((p) => p.id === hallPlanId);
+    if (!plan) return;
+    setPlanBgUrl(plan.backgroundUrl ?? "");
+    if (plan.zonesJson) {
+      try {
+        const parsed = JSON.parse(plan.zonesJson);
+        if (Array.isArray(parsed)) setPlanZones(parsed);
+      } catch (_) {}
+    } else {
+      setPlanZones([]);
+    }
+  }, [hallPlanId, hallPlans]);
 
   async function loadStats() {
     if (!tenantId) return;
@@ -390,6 +735,474 @@ export default function SuperAdminPage() {
             </div>
           </div>
         )}
+      </section>
+
+      <section style={{ marginTop: 24 }}>
+        <h2>Floor Plan (by branch)</h2>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <select value={branchId} onChange={(e) => setBranchId(e.target.value ? Number(e.target.value) : "")}>
+            <option value="">Select branch</option>
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>{b.name}</option>
+            ))}
+          </select>
+          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <input type="checkbox" checked={planEditMode} onChange={(e) => setPlanEditMode(e.target.checked)} />
+            Edit mode
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <input type="checkbox" checked={snapEnabled} onChange={(e) => setSnapEnabled(e.target.checked)} />
+            Snap to grid
+          </label>
+          <select value={hallId} onChange={(e) => setHallId(e.target.value ? Number(e.target.value) : "")} disabled={!branchId}>
+            <option value="">Select hall</option>
+            {halls.map((h) => (
+              <option key={h.id} value={h.id}>{h.name}</option>
+            ))}
+          </select>
+          <select value={hallPlanId} onChange={(e) => setHallPlanId(e.target.value ? Number(e.target.value) : "")} disabled={!hallId}>
+            <option value="">Default plan</option>
+            {hallPlans.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+          <button
+            onClick={async () => {
+              if (!hallId || !hallPlanId) return;
+              await api(`/api/admin/halls/${hallId}`, { method: "PATCH", body: JSON.stringify({ activePlanId: hallPlanId }) });
+              loadTables();
+            }}
+            disabled={!hallId || !hallPlanId}
+          >
+            Set active
+          </button>
+          <button
+            onClick={async () => {
+              if (!hallPlanId) return;
+              await api(`/api/admin/hall-plans/${hallPlanId}`, { method: "DELETE" });
+              setHallPlanId("");
+              loadTables();
+            }}
+            disabled={!hallPlanId}
+          >
+            Delete plan
+          </button>
+          <button onClick={loadTables} disabled={!branchId}>Load tables</button>
+          <button onClick={autoLayoutTables} disabled={!branchId}>Auto layout</button>
+          <button onClick={saveTableLayout} disabled={!branchId || !hallId}>Save layout</button>
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
+          <input placeholder="New hall name" value={newHallName} onChange={(e) => setNewHallName(e.target.value)} />
+          <input type="number" placeholder="Sort" value={newHallSort} onChange={(e) => setNewHallSort(Number(e.target.value))} />
+          <button
+            onClick={async () => {
+              if (!branchId || !newHallName.trim()) return;
+              await api(`/api/admin/halls?branchId=${branchId}`, { method: "POST", body: JSON.stringify({ name: newHallName.trim(), sortOrder: newHallSort }) });
+              setNewHallName("");
+              setNewHallSort(0);
+              loadTables();
+            }}
+            disabled={!branchId}
+          >
+            Add hall
+          </button>
+          <input placeholder="New plan name" value={newPlanName} onChange={(e) => setNewPlanName(e.target.value)} />
+          <input type="number" placeholder="Plan sort" value={newPlanSort} onChange={(e) => setNewPlanSort(Number(e.target.value))} />
+          <button
+            onClick={async () => {
+              if (!hallId || !newPlanName.trim()) return;
+              await api(`/api/admin/halls/${hallId}/plans`, { method: "POST", body: JSON.stringify({ name: newPlanName.trim(), sortOrder: newPlanSort }) });
+              setNewPlanName("");
+              setNewPlanSort(0);
+              loadTables();
+            }}
+            disabled={!hallId}
+          >
+            Add plan
+          </button>
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
+          <label>
+            Background URL
+            <input
+              placeholder="https://.../floor.png"
+              value={planBgUrl}
+              onChange={(e) => setPlanBgUrl(e.target.value)}
+              style={{ minWidth: 260 }}
+            />
+          </label>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1.3fr 0.7fr", gap: 16, marginTop: 12 }}>
+          <div
+            ref={planRef}
+            style={{
+              position: "relative",
+              height: 520,
+              borderRadius: 16,
+              border: "1px solid #e6e6e6",
+              background:
+                "radial-gradient(circle at 10% 10%, rgba(78,205,196,0.08), transparent 40%)," +
+                "radial-gradient(circle at 80% 20%, rgba(108,92,231,0.08), transparent 45%)," +
+                "linear-gradient(180deg, #fafafa, #f5f5f7)",
+              overflow: "hidden",
+            }}
+          >
+            {planBgUrl && (
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  backgroundImage: `url(${planBgUrl})`,
+                  backgroundSize: "cover",
+                  backgroundPosition: "center",
+                  opacity: 0.35,
+                }}
+              />
+            )}
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                backgroundImage:
+                  "linear-gradient(rgba(0,0,0,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.04) 1px, transparent 1px)",
+                backgroundSize: "24px 24px",
+                pointerEvents: "none",
+              }}
+            />
+            {planZones.map((z) => (
+              <div
+                key={z.id}
+                onPointerDown={(e) => {
+                  if (!planEditMode) return;
+                  zoneDragRef.current = {
+                    id: z.id,
+                    startX: e.clientX,
+                    startY: e.clientY,
+                    baseX: z.x,
+                    baseY: z.y,
+                    baseW: z.w,
+                    baseH: z.h,
+                    mode: "move",
+                  };
+                }}
+                style={{
+                  position: "absolute",
+                  left: `${z.x}%`,
+                  top: `${z.y}%`,
+                  width: `${z.w}%`,
+                  height: `${z.h}%`,
+                  borderRadius: 16,
+                  border: `1px dashed ${z.color}`,
+                  background: `${z.color}22`,
+                  display: "flex",
+                  alignItems: "flex-start",
+                  justifyContent: "flex-start",
+                  padding: 6,
+                  fontSize: 12,
+                  color: "#333",
+                }}
+              >
+                {z.name}
+                {planEditMode && (
+                  <>
+                    {["nw", "ne", "sw", "se"].map((corner) => (
+                      <div
+                        key={corner}
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                          zoneDragRef.current = {
+                            id: z.id,
+                            startX: e.clientX,
+                            startY: e.clientY,
+                            baseX: z.x,
+                            baseY: z.y,
+                            baseW: z.w,
+                            baseH: z.h,
+                            mode: "resize",
+                            corner: corner as "nw" | "ne" | "sw" | "se",
+                          };
+                        }}
+                        style={{
+                          position: "absolute",
+                          width: 8,
+                          height: 8,
+                          background: "#111",
+                          borderRadius: 2,
+                          boxShadow: "0 0 0 2px #fff",
+                          top: corner.includes("n") ? -4 : undefined,
+                          bottom: corner.includes("s") ? -4 : undefined,
+                          left: corner.includes("w") ? -4 : undefined,
+                          right: corner.includes("e") ? -4 : undefined,
+                          cursor: `${corner}-resize`,
+                        }}
+                      />
+                    ))}
+                  </>
+                )}
+              </div>
+            ))}
+            {tables
+              .filter((t) => (hallId === "" ? true : t.hallId === hallId))
+              .map((t, idx) => {
+              const layout = getTableLayout(t, idx);
+              const color = waiterColor(t.assignedWaiterId ?? null);
+              const selected = t.id === selectedTableId;
+              return (
+                <div
+                  key={t.id}
+                  onPointerDown={(e) => {
+                    if (!planEditMode) return;
+                    dragRef.current = {
+                      id: t.id,
+                      startX: e.clientX,
+                      startY: e.clientY,
+                      baseX: layout.layoutX ?? 0,
+                      baseY: layout.layoutY ?? 0,
+                      baseW: layout.layoutW ?? 10,
+                      baseH: layout.layoutH ?? 10,
+                      mode: "move",
+                    };
+                    setSelectedTableId(t.id);
+                  }}
+                  onClick={() => setSelectedTableId(t.id)}
+                  style={{
+                    position: "absolute",
+                    left: `${layout.layoutX}%`,
+                    top: `${layout.layoutY}%`,
+                    width: `${layout.layoutW}%`,
+                    height: `${layout.layoutH}%`,
+                    borderRadius: layout.layoutShape === "ROUND" ? 999 : 14,
+                    border: selected ? `2px solid ${color}` : "1px solid rgba(0,0,0,0.12)",
+                    background: selected ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.9)",
+                    boxShadow: selected ? "0 10px 28px rgba(0,0,0,0.18)" : "0 6px 18px rgba(0,0,0,0.12)",
+                    transform: `rotate(${layout.layoutRotation ?? 0}deg)`,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexDirection: "column",
+                    gap: 4,
+                    cursor: planEditMode ? "grab" : "default",
+                    userSelect: "none",
+                  }}
+                >
+                  <div style={{ fontWeight: 700, fontSize: 16 }}>#{t.number}</div>
+                  <div style={{ fontSize: 12, color }}>
+                    {t.assignedWaiterId ? `Waiter #${t.assignedWaiterId}` : "Unassigned"}
+                  </div>
+                  {layout.layoutZone ? (
+                    <div style={{ fontSize: 11, color: "#666" }}>{layout.layoutZone}</div>
+                  ) : null}
+                  {planEditMode && selected && (
+                    <>
+                      {["nw", "ne", "sw", "se"].map((corner) => (
+                        <div
+                          key={corner}
+                          onPointerDown={(e) => {
+                            e.stopPropagation();
+                            dragRef.current = {
+                              id: t.id,
+                              startX: e.clientX,
+                              startY: e.clientY,
+                              baseX: layout.layoutX ?? 0,
+                              baseY: layout.layoutY ?? 0,
+                              baseW: layout.layoutW ?? 10,
+                              baseH: layout.layoutH ?? 10,
+                              mode: "resize",
+                              corner: corner as "nw" | "ne" | "sw" | "se",
+                            };
+                          }}
+                          style={{
+                            position: "absolute",
+                            width: 10,
+                            height: 10,
+                            background: "#111",
+                            borderRadius: 2,
+                            boxShadow: "0 0 0 2px #fff",
+                            top: corner.includes("n") ? -4 : undefined,
+                            bottom: corner.includes("s") ? -4 : undefined,
+                            left: corner.includes("w") ? -4 : undefined,
+                            right: corner.includes("e") ? -4 : undefined,
+                            cursor: `${corner}-resize`,
+                          }}
+                        />
+                      ))}
+                      {["n", "s", "e", "w"].map((edge) => (
+                        <div
+                          key={edge}
+                          onPointerDown={(e) => {
+                            e.stopPropagation();
+                            zoneDragRef.current = {
+                              id: z.id,
+                              startX: e.clientX,
+                              startY: e.clientY,
+                              baseX: z.x,
+                              baseY: z.y,
+                              baseW: z.w,
+                              baseH: z.h,
+                              mode: "resize",
+                              corner: edge as "nw" | "ne" | "sw" | "se",
+                            };
+                          }}
+                          style={{
+                            position: "absolute",
+                            width: edge === "n" || edge === "s" ? 18 : 8,
+                            height: edge === "e" || edge === "w" ? 18 : 8,
+                            background: "#111",
+                            borderRadius: 4,
+                            boxShadow: "0 0 0 2px #fff",
+                            top: edge === "n" ? -6 : edge === "s" ? undefined : "50%",
+                            bottom: edge === "s" ? -6 : undefined,
+                            left: edge === "w" ? -6 : edge === "e" ? undefined : "50%",
+                            right: edge === "e" ? -6 : undefined,
+                            transform: edge === "n" || edge === "s" ? "translateX(-50%)" : "translateY(-50%)",
+                            cursor: `${edge}-resize`,
+                          }}
+                        />
+                      ))}
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ border: "1px solid #eee", borderRadius: 12, padding: 12, background: "#fff" }}>
+            <h3 style={{ marginTop: 0 }}>Table settings</h3>
+            {selectedTable ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <div><strong>Table #{selectedTable.number}</strong></div>
+                <label>
+                  Shape
+                  <select
+                    value={selectedTable.layoutShape ?? "ROUND"}
+                    onChange={(e) => updateSelectedTable({ layoutShape: e.target.value })}
+                  >
+                    <option value="ROUND">Round</option>
+                    <option value="RECT">Rectangle</option>
+                  </select>
+                </label>
+                <label>
+                  Width (%)
+                  <input
+                    type="number"
+                    min={4}
+                    max={30}
+                    value={selectedTable.layoutW ?? 10}
+                    onChange={(e) => updateSelectedTable({ layoutW: Number(e.target.value) })}
+                  />
+                </label>
+                <label>
+                  Height (%)
+                  <input
+                    type="number"
+                    min={4}
+                    max={30}
+                    value={selectedTable.layoutH ?? 10}
+                    onChange={(e) => updateSelectedTable({ layoutH: Number(e.target.value) })}
+                  />
+                </label>
+                <label>
+                  Rotation (deg)
+                  <input
+                    type="number"
+                    min={0}
+                    max={360}
+                    value={selectedTable.layoutRotation ?? 0}
+                    onChange={(e) => updateSelectedTable({ layoutRotation: Number(e.target.value) })}
+                  />
+                </label>
+                <label>
+                  Zone
+                  <input
+                    placeholder="e.g. Terrace, Hall A"
+                    value={selectedTable.layoutZone ?? ""}
+                    onChange={(e) => updateSelectedTable({ layoutZone: e.target.value })}
+                  />
+                </label>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={saveTableLayout}>Save</button>
+                  <button onClick={() => updateSelectedTable({ layoutShape: "ROUND", layoutW: 10, layoutH: 10, layoutRotation: 0 })}>
+                    Reset
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ color: "#666" }}>Click a table on the map to edit.</div>
+            )}
+            <div style={{ marginTop: 16, borderTop: "1px solid #eee", paddingTop: 12 }}>
+              <h4 style={{ margin: 0 }}>Zones</h4>
+              {planZones.map((z, zi) => (
+                <div key={z.id} style={{ display: "grid", gridTemplateColumns: "1fr 60px 60px", gap: 6, marginTop: 8 }}>
+                  <input
+                    placeholder="Zone name"
+                    value={z.name}
+                    onChange={(e) =>
+                      setPlanZones((prev) => prev.map((p, i) => (i === zi ? { ...p, name: e.target.value } : p)))
+                    }
+                  />
+                  <input
+                    type="color"
+                    value={z.color}
+                    onChange={(e) =>
+                      setPlanZones((prev) => prev.map((p, i) => (i === zi ? { ...p, color: e.target.value } : p)))
+                    }
+                  />
+                  <button onClick={() => setPlanZones((prev) => prev.filter((_, i) => i !== zi))}>Del</button>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={z.x}
+                    onChange={(e) =>
+                      setPlanZones((prev) => prev.map((p, i) => (i === zi ? { ...p, x: Number(e.target.value) } : p)))
+                    }
+                    placeholder="X"
+                  />
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={z.y}
+                    onChange={(e) =>
+                      setPlanZones((prev) => prev.map((p, i) => (i === zi ? { ...p, y: Number(e.target.value) } : p)))
+                    }
+                    placeholder="Y"
+                  />
+                  <input
+                    type="number"
+                    min={4}
+                    max={100}
+                    value={z.w}
+                    onChange={(e) =>
+                      setPlanZones((prev) => prev.map((p, i) => (i === zi ? { ...p, w: Number(e.target.value) } : p)))
+                    }
+                    placeholder="W"
+                  />
+                  <input
+                    type="number"
+                    min={4}
+                    max={100}
+                    value={z.h}
+                    onChange={(e) =>
+                      setPlanZones((prev) => prev.map((p, i) => (i === zi ? { ...p, h: Number(e.target.value) } : p)))
+                    }
+                    placeholder="H"
+                  />
+                </div>
+              ))}
+              <button
+                style={{ marginTop: 8 }}
+                onClick={() =>
+                  setPlanZones((prev) => [
+                    ...prev,
+                    { id: String(Date.now()), name: "Zone", x: 10, y: 10, w: 30, h: 20, color: "#6C5CE7" },
+                  ])
+                }
+              >
+                Add zone
+              </button>
+            </div>
+          </div>
+        </div>
       </section>
 
       <section style={{ marginTop: 24 }}>

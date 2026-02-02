@@ -348,6 +348,7 @@ class _HomeScreenState extends State<HomeScreen> {
       CallsTab(username: widget.username, password: widget.password),
       BillsTab(username: widget.username, password: widget.password),
       KitchenTab(username: widget.username, password: widget.password),
+      FloorPlanTab(username: widget.username, password: widget.password),
       HistoryTab(username: widget.username, password: widget.password),
       NotificationsTab(events: _events),
     ];
@@ -385,6 +386,7 @@ class _HomeScreenState extends State<HomeScreen> {
             label: 'Bills',
           ),
           const NavigationDestination(icon: Icon(Icons.kitchen), label: 'Kitchen'),
+          const NavigationDestination(icon: Icon(Icons.map), label: 'Hall'),
           const NavigationDestination(icon: Icon(Icons.history), label: 'History'),
           const NavigationDestination(icon: Icon(Icons.notifications), label: 'Events'),
         ],
@@ -1306,6 +1308,323 @@ class _KitchenTabState extends State<KitchenTab> {
         return 9;
     }
   }
+}
+
+class FloorPlanTab extends StatefulWidget {
+  final String username;
+  final String password;
+
+  const FloorPlanTab({super.key, required this.username, required this.password});
+
+  @override
+  State<FloorPlanTab> createState() => _FloorPlanTabState();
+}
+
+class _FloorPlanTabState extends State<FloorPlanTab> {
+  bool _loading = true;
+  String? _error;
+  List<Map<String, dynamic>> _tables = const [];
+  Set<int> _hotTableIds = {};
+  String _bgUrl = '';
+  List<Map<String, dynamic>> _zones = const [];
+  List<Map<String, dynamic>> _halls = const [];
+  int? _hallId;
+  Timer? _pollTimer;
+  Timer? _blinkTimer;
+  bool _blinkOn = true;
+
+  String get _auth => base64Encode(utf8.encode('${widget.username}:${widget.password}'));
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      List<Map<String, dynamic>> hallsBody = _halls;
+      int? hallId = _hallId;
+      final hallsRes = await http.get(
+        Uri.parse('$apiBase/api/staff/halls'),
+        headers: {'Authorization': 'Basic $_auth'},
+      );
+      if (hallsRes.statusCode == 200) {
+        hallsBody = (jsonDecode(hallsRes.body) as List<dynamic>).cast<Map<String, dynamic>>();
+        if (hallId == null && hallsBody.isNotEmpty) {
+          hallId = (hallsBody.first['id'] as num).toInt();
+        }
+      }
+
+      final tablesRes = await http.get(
+        Uri.parse('$apiBase/api/staff/tables${hallId != null ? "?hallId=$hallId" : ""}'),
+        headers: {'Authorization': 'Basic $_auth'},
+      );
+      if (tablesRes.statusCode != 200) throw Exception('Load tables failed (${tablesRes.statusCode})');
+      final tablesBody = (jsonDecode(tablesRes.body) as List<dynamic>).cast<Map<String, dynamic>>();
+
+      final ordersRes = await http.get(
+        Uri.parse('$apiBase/api/staff/orders/active?statusIn=NEW'),
+        headers: {'Authorization': 'Basic $_auth'},
+      );
+      if (ordersRes.statusCode != 200) throw Exception('Load orders failed (${ordersRes.statusCode})');
+      final ordersBody = (jsonDecode(ordersRes.body) as List<dynamic>).cast<Map<String, dynamic>>();
+      final hot = <int>{};
+      for (final o in ordersBody) {
+        final tableId = (o['tableId'] as num?)?.toInt();
+        if (tableId != null) hot.add(tableId);
+      }
+
+      final layoutRes = await http.get(
+        Uri.parse('$apiBase/api/staff/branch-layout${hallId != null ? "?hallId=$hallId" : ""}'),
+        headers: {'Authorization': 'Basic $_auth'},
+      );
+      String bgUrl = '';
+      List<Map<String, dynamic>> zones = const [];
+      if (layoutRes.statusCode == 200) {
+        final layout = jsonDecode(layoutRes.body);
+        bgUrl = (layout['backgroundUrl'] ?? '').toString();
+        final zonesJson = layout['zonesJson'];
+        if (zonesJson != null && zonesJson.toString().isNotEmpty) {
+          try {
+            final parsed = jsonDecode(zonesJson.toString());
+            if (parsed is List) {
+              zones = parsed.cast<Map<String, dynamic>>();
+            }
+          } catch (_) {}
+        }
+      }
+
+      setState(() {
+        _tables = tablesBody;
+        _hotTableIds = hot;
+        _bgUrl = bgUrl;
+        _zones = zones;
+        _halls = hallsBody;
+        _hallId = hallId;
+      });
+    } catch (e) {
+      setState(() => _error = e.toString());
+    } finally {
+      setState(() => _loading = false);
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+    _pollTimer = Timer.periodic(const Duration(seconds: 15), (_) => _load());
+    _blinkTimer = Timer.periodic(const Duration(milliseconds: 600), (_) {
+      if (mounted) setState(() => _blinkOn = !_blinkOn);
+    });
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    _blinkTimer?.cancel();
+    super.dispose();
+  }
+
+  Color _waiterColor(int? id) {
+    const palette = [
+      Color(0xFFFF6B6B),
+      Color(0xFF4ECDC4),
+      Color(0xFFFFD166),
+      Color(0xFF6C5CE7),
+      Color(0xFF00B894),
+      Color(0xFFFD79A8),
+      Color(0xFF0984E3),
+    ];
+    if (id == null) return Colors.grey.shade500;
+    return palette[id % palette.length];
+  }
+
+  Map<String, num> _defaultLayout(int index) {
+    final cols = 6;
+    final col = index % cols;
+    final row = index ~/ cols;
+    return {
+      'x': 5 + col * 15,
+      'y': 6 + row * 16,
+      'w': 10,
+      'h': 10,
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Hall'),
+        actions: [
+          if (_halls.isNotEmpty)
+            DropdownButtonHideUnderline(
+              child: DropdownButton<int>(
+                value: _hallId,
+                items: _halls
+                    .map((h) => DropdownMenuItem<int>(
+                          value: (h['id'] as num).toInt(),
+                          child: Text(h['name']?.toString() ?? 'Hall'),
+                        ))
+                    .toList(),
+                onChanged: (v) {
+                  setState(() => _hallId = v);
+                  _load();
+                },
+              ),
+            ),
+          IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
+        ],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(child: Text(_error!))
+              : LayoutBuilder(builder: (context, constraints) {
+                  final width = constraints.maxWidth;
+                  final height = constraints.maxHeight;
+                  return Stack(
+                    children: [
+                      Container(
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [Color(0xFFF7F8FA), Color(0xFFF1F3F7)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                        ),
+                      ),
+                      if (_bgUrl.isNotEmpty)
+                        Positioned.fill(
+                          child: Opacity(
+                            opacity: 0.35,
+                            child: Image.network(
+                              _bgUrl,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        ),
+                      Positioned.fill(
+                        child: CustomPaint(
+                          painter: _GridPainter(),
+                        ),
+                      ),
+                      ..._zones.map((z) {
+                        final x = (z['x'] as num?)?.toDouble() ?? 0;
+                        final y = (z['y'] as num?)?.toDouble() ?? 0;
+                        final w = (z['w'] as num?)?.toDouble() ?? 10;
+                        final h = (z['h'] as num?)?.toDouble() ?? 10;
+                        final name = (z['name'] ?? '').toString();
+                        final colorStr = (z['color'] ?? '#6C5CE7').toString();
+                        Color color;
+                        try {
+                          color = Color(int.parse(colorStr.replaceFirst('#', '0xff')));
+                        } catch (_) {
+                          color = const Color(0xFF6C5CE7);
+                        }
+                        return Positioned(
+                          left: (x / 100) * width,
+                          top: (y / 100) * height,
+                          width: (w / 100) * width,
+                          height: (h / 100) * height,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: color.withOpacity(0.7), style: BorderStyle.solid, width: 1),
+                              color: color.withOpacity(0.12),
+                            ),
+                            padding: const EdgeInsets.all(6),
+                            child: Align(
+                              alignment: Alignment.topLeft,
+                              child: Text(name, style: const TextStyle(fontSize: 11, color: Colors.black87)),
+                            ),
+                          ),
+                        );
+                      }),
+                      ..._tables.asMap().entries.map((entry) {
+                        final idx = entry.key;
+                        final t = entry.value;
+                        final def = _defaultLayout(idx);
+                        final xPct = (t['layoutX'] as num?)?.toDouble() ?? def['x']!;
+                        final yPct = (t['layoutY'] as num?)?.toDouble() ?? def['y']!;
+                        final wPct = (t['layoutW'] as num?)?.toDouble() ?? def['w']!;
+                        final hPct = (t['layoutH'] as num?)?.toDouble() ?? def['h']!;
+                        final rotation = (t['layoutRotation'] as num?)?.toDouble() ?? 0;
+                        final shape = (t['layoutShape'] as String?) ?? 'ROUND';
+                        final tableId = (t['id'] as num?)?.toInt() ?? 0;
+                        final waiterId = (t['assignedWaiterId'] as num?)?.toInt();
+                        final isHot = _hotTableIds.contains(tableId);
+                        final baseColor = _waiterColor(waiterId);
+                        final glow = isHot && _blinkOn;
+
+                        final left = (xPct / 100) * width;
+                        final top = (yPct / 100) * height;
+                        final w = (wPct / 100) * width;
+                        final h = (hPct / 100) * height;
+
+                        return Positioned(
+                          left: left,
+                          top: top,
+                          width: w,
+                          height: h,
+                          child: Transform.rotate(
+                            angle: rotation * 3.14159 / 180,
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 300),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.95),
+                                borderRadius: BorderRadius.circular(shape == 'ROUND' ? 999 : 14),
+                                border: Border.all(color: glow ? Colors.redAccent : baseColor.withOpacity(0.7), width: glow ? 2.5 : 1.2),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: glow ? Colors.redAccent.withOpacity(0.35) : Colors.black12,
+                                    blurRadius: glow ? 18 : 10,
+                                    spreadRadius: glow ? 1 : 0,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              child: Center(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text('#${t['number']}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      waiterId == null ? 'Unassigned' : 'Waiter #$waiterId',
+                                      style: TextStyle(color: baseColor, fontSize: 11),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
+                    ],
+                  );
+                }),
+    );
+  }
+}
+
+class _GridPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.black.withOpacity(0.04)
+      ..strokeWidth = 1;
+    const step = 24.0;
+    for (double x = 0; x < size.width; x += step) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+    }
+    for (double y = 0; y < size.height; y += step) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class HistoryTab extends StatefulWidget {

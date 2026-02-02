@@ -19,4 +19,28 @@ public class CafeTable {
 
   @Column(name="assigned_waiter_id")
   public Long assignedWaiterId;
+
+  @Column(name="hall_id")
+  public Long hallId;
+
+  @Column(name="layout_x")
+  public Double layoutX;
+
+  @Column(name="layout_y")
+  public Double layoutY;
+
+  @Column(name="layout_w")
+  public Double layoutW;
+
+  @Column(name="layout_h")
+  public Double layoutH;
+
+  @Column(name="layout_shape")
+  public String layoutShape;
+
+  @Column(name="layout_rotation")
+  public Integer layoutRotation;
+
+  @Column(name="layout_zone")
+  public String layoutZone;
 }
