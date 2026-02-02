@@ -20,6 +20,7 @@ import md.virtualwaiter.service.BranchSettingsService;
 import md.virtualwaiter.service.PartyService;
 import md.virtualwaiter.service.NotificationEventService;
 import md.virtualwaiter.service.RateLimitService;
+import md.virtualwaiter.config.BillProperties;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -63,6 +64,7 @@ public class PublicController {
   private final int orderLimitWindowSeconds;
   private final int partyLimitMax;
   private final int partyLimitWindowSeconds;
+  private final BillProperties billProperties;
 
   public PublicController(
     CafeTableRepo tableRepo,
@@ -84,6 +86,7 @@ public class PublicController {
     NotificationEventService notificationEventService,
     PartyService partyService,
     RateLimitService rateLimitService,
+    BillProperties billProperties,
     @Value("${app.rateLimit.otp.maxRequests:5}") int otpLimitMax,
     @Value("${app.rateLimit.otp.windowSeconds:300}") int otpLimitWindowSeconds,
     @Value("${app.rateLimit.order.maxRequests:10}") int orderLimitMax,
@@ -116,6 +119,30 @@ public class PublicController {
     this.orderLimitWindowSeconds = orderLimitWindowSeconds;
     this.partyLimitMax = partyLimitMax;
     this.partyLimitWindowSeconds = partyLimitWindowSeconds;
+    this.billProperties = billProperties;
+  }
+
+  private boolean expireBillIfNeeded(BillRequest br) {
+    if (br == null) return false;
+    if (!"CREATED".equals(br.status)) return false;
+    int expireMinutes = billProperties == null ? 120 : billProperties.expireMinutes;
+    if (expireMinutes <= 0) return false;
+    Instant cutoff = Instant.now().minusSeconds(expireMinutes * 60L);
+    if (br.createdAt != null && br.createdAt.isBefore(cutoff)) {
+      br.status = "EXPIRED";
+      billRequestRepo.save(br);
+      List<BillRequestItem> items = billRequestItemRepo.findByBillRequestId(br.id);
+      for (BillRequestItem it : items) {
+        OrderItem oi = orderItemRepo.findById(it.orderItemId).orElse(null);
+        if (oi == null) continue;
+        if (Objects.equals(oi.billRequestId, br.id)) {
+          oi.billRequestId = null;
+          orderItemRepo.save(oi);
+        }
+      }
+      return true;
+    }
+    return false;
   }
 
   public record StartSessionRequest(@NotBlank String tablePublicId, @NotBlank String sig, @NotNull Long ts, @NotBlank String locale) {}
@@ -1136,6 +1163,30 @@ public class PublicController {
     if (!Objects.equals(br.guestSessionId, s.id)) {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bill request does not belong to session");
     }
+    expireBillIfNeeded(br);
+    List<BillRequestItem> items = billRequestItemRepo.findByBillRequestId(br.id);
+    List<BillItemLine> lines = new ArrayList<>();
+    for (BillRequestItem it : items) {
+      OrderItem oi = orderItemRepo.findById(it.orderItemId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Order item missing: " + it.orderItemId));
+      lines.add(new BillItemLine(oi.id, oi.nameSnapshot, oi.qty, oi.unitPriceCents, it.lineTotalCents));
+    }
+    return new BillRequestResponse(br.id, br.status, br.paymentMethod, br.mode, br.subtotalCents, br.tipsPercent, br.tipsAmountCents, br.totalCents, lines);
+  }
+
+  @GetMapping("/bill-request/latest")
+  public BillRequestResponse latestBillRequest(
+    @RequestParam("guestSessionId") long guestSessionId,
+    jakarta.servlet.http.HttpServletRequest httpReq
+  ) {
+    GuestSession s = sessionRepo.findById(guestSessionId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
+    requireSessionSecret(s, httpReq);
+    BillRequest br = billRequestRepo.findTopByGuestSessionIdOrderByCreatedAtDesc(s.id);
+    if (br == null) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "BillRequest not found");
+    }
+    expireBillIfNeeded(br);
     List<BillRequestItem> items = billRequestItemRepo.findByBillRequestId(br.id);
     List<BillItemLine> lines = new ArrayList<>();
     for (BillRequestItem it : items) {
@@ -1183,6 +1234,35 @@ public class PublicController {
       }
     }
     return new CancelBillRequestResponse(br.id, br.status);
+  }
+
+  public record CloseBillRequestResponse(long billRequestId, String status) {}
+
+  @PostMapping("/bill-request/{id}/close")
+  public CloseBillRequestResponse closeBillRequest(
+    @PathVariable("id") long id,
+    @RequestBody Map<String, Object> body,
+    jakarta.servlet.http.HttpServletRequest httpReq
+  ) {
+    Object raw = body == null ? null : body.get("guestSessionId");
+    if (!(raw instanceof Number)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "guestSessionId required");
+    }
+    long guestSessionId = ((Number) raw).longValue();
+    GuestSession s = sessionRepo.findById(guestSessionId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
+    requireSessionSecret(s, httpReq);
+    BillRequest br = billRequestRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "BillRequest not found"));
+    if (!Objects.equals(br.guestSessionId, s.id)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bill request does not belong to session");
+    }
+    if (!"PAID_CONFIRMED".equals(br.status)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Bill request is not confirmed");
+    }
+    br.status = "CLOSED";
+    billRequestRepo.save(br);
+    return new CloseBillRequestResponse(br.id, br.status);
   }
 
 }

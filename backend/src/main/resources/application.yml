@@ -12,6 +12,8 @@ spring:
     enabled: true
 
 app:
+  bill:
+    expireMinutes: 120
   qr:
     hmacSecret: "CHANGE_ME_DEV_SECRET"
     signatureTtlSeconds: 86400

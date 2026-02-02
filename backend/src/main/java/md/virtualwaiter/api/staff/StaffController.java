@@ -26,6 +26,7 @@ import md.virtualwaiter.repo.BranchHallRepo;
 import md.virtualwaiter.repo.HallPlanRepo;
 import md.virtualwaiter.security.QrSignatureService;
 import md.virtualwaiter.service.PartyService;
+import md.virtualwaiter.config.BillProperties;
 import md.virtualwaiter.service.StaffNotificationService;
 import md.virtualwaiter.repo.NotificationEventRepo;
 import md.virtualwaiter.domain.NotificationEvent;
@@ -62,6 +63,7 @@ public class StaffController {
   private final NotificationEventRepo notificationEventRepo;
   private final StaffDeviceTokenRepo staffDeviceTokenRepo;
   private final PartyService partyService;
+  private final BillProperties billProperties;
 
   public StaffController(
     StaffUserRepo staffUserRepo,
@@ -81,7 +83,8 @@ public class StaffController {
     StaffNotificationService notificationService,
     NotificationEventRepo notificationEventRepo,
     StaffDeviceTokenRepo staffDeviceTokenRepo,
-    PartyService partyService
+    PartyService partyService,
+    BillProperties billProperties
   ) {
     this.staffUserRepo = staffUserRepo;
     this.tableRepo = tableRepo;
@@ -101,6 +104,30 @@ public class StaffController {
     this.notificationEventRepo = notificationEventRepo;
     this.staffDeviceTokenRepo = staffDeviceTokenRepo;
     this.partyService = partyService;
+    this.billProperties = billProperties;
+  }
+
+  private boolean expireBillIfNeeded(BillRequest br) {
+    if (br == null) return false;
+    if (!"CREATED".equals(br.status)) return false;
+    int expireMinutes = billProperties == null ? 120 : billProperties.expireMinutes;
+    if (expireMinutes <= 0) return false;
+    Instant cutoff = Instant.now().minusSeconds(expireMinutes * 60L);
+    if (br.createdAt != null && br.createdAt.isBefore(cutoff)) {
+      br.status = "EXPIRED";
+      billRequestRepo.save(br);
+      List<BillRequestItem> items = billRequestItemRepo.findByBillRequestId(br.id);
+      for (BillRequestItem it : items) {
+        OrderItem oi = orderItemRepo.findById(it.orderItemId).orElse(null);
+        if (oi == null) continue;
+        if (Objects.equals(oi.billRequestId, br.id)) {
+          oi.billRequestId = null;
+          orderItemRepo.save(oi);
+        }
+      }
+      return true;
+    }
+    return false;
   }
 
   private StaffUser current(Authentication auth) {
@@ -760,6 +787,7 @@ public class StaffController {
     // For each bill request load items
     List<StaffBillRequestDto> out = new ArrayList<>();
     for (BillRequest br : reqs) {
+      if (expireBillIfNeeded(br)) continue;
       CafeTable t = tables.get(br.tableId);
       if (t == null) continue;
       if (u.branchId != null && !Objects.equals(t.branchId, u.branchId)) continue;

@@ -98,6 +98,112 @@ Widget _slaSummaryRow(int warn, int crit) {
     ],
   );
 }
+
+String _tr(BuildContext context, String key) {
+  final lang = Localizations.localeOf(context).languageCode.toLowerCase();
+  const dict = {
+    'staffLogin': {'ru': 'Вход персонала', 'ro': 'Autentificare personal', 'en': 'Staff Login'},
+    'username': {'ru': 'Логин', 'ro': 'Utilizator', 'en': 'Username'},
+    'password': {'ru': 'Пароль', 'ro': 'Parolă', 'en': 'Password'},
+    'login': {'ru': 'Войти', 'ro': 'Autentificare', 'en': 'Login'},
+    'loading': {'ru': 'Загрузка...', 'ro': 'Se încarcă...', 'en': 'Loading...'},
+    'demoCreds': {'ru': 'Демо: waiter1 / demo123', 'ro': 'Demo: waiter1 / demo123', 'en': 'Demo: waiter1 / demo123'},
+    'loginFailed': {'ru': 'Ошибка входа', 'ro': 'Autentificare eșuată', 'en': 'Login failed'},
+    'orders': {'ru': 'Заказы', 'ro': 'Comenzi', 'en': 'Orders'},
+    'calls': {'ru': 'Вызовы', 'ro': 'Apeluri', 'en': 'Calls'},
+    'bills': {'ru': 'Счета', 'ro': 'Note', 'en': 'Bills'},
+    'kitchen': {'ru': 'Кухня', 'ro': 'Bucătărie', 'en': 'Kitchen'},
+    'hall': {'ru': 'Зал', 'ro': 'Sală', 'en': 'Hall'},
+    'history': {'ru': 'История', 'ro': 'Istoric', 'en': 'History'},
+    'events': {'ru': 'События', 'ro': 'Evenimente', 'en': 'Events'},
+    'refresh': {'ru': 'Обновить', 'ro': 'Reîmprospătează', 'en': 'Refresh'},
+    'sortNewest': {'ru': 'Сорт: новые сверху', 'ro': 'Sortare: cele mai noi', 'en': 'Sort: newest first'},
+    'sortSla': {'ru': 'Сорт: SLA (старые сверху)', 'ro': 'Sortare: SLA (cele mai vechi)', 'en': 'Sort: SLA (oldest first)'},
+    'sortPriority': {'ru': 'Сорт: приоритет → время', 'ro': 'Sortare: prioritate → timp', 'en': 'Sort: priority then time'},
+    'kitchenActive': {'ru': 'Активные (NEW/ACCEPTED/IN_PROGRESS)', 'ro': 'Active (NEW/ACCEPTED/IN_PROGRESS)', 'en': 'Active (NEW/ACCEPTED/IN_PROGRESS)'},
+    'kitchenReady': {'ru': 'Готово', 'ro': 'Gata', 'en': 'Ready'},
+    'kitchenNewOnly': {'ru': 'Только NEW', 'ro': 'Doar NEW', 'en': 'New only'},
+    'confirmPaid': {'ru': 'Подтвердить оплату', 'ro': 'Confirmă plata', 'en': 'Confirm paid'},
+    'cancelBill': {'ru': 'Отменить счёт', 'ro': 'Anulează nota', 'en': 'Cancel bill'},
+    'paymentConfirmed': {'ru': 'Оплата подтверждена', 'ro': 'Plată confirmată', 'en': 'Payment confirmed'},
+    'billCancelled': {'ru': 'Счёт отменён', 'ro': 'Nota anulată', 'en': 'Bill cancelled'},
+    'closeParty': {'ru': 'Закрыть Party', 'ro': 'Închide Party', 'en': 'Close party'},
+    'partyClosed': {'ru': 'Party закрыт', 'ro': 'Party închis', 'en': 'Party closed'},
+    'waiterCalls': {'ru': 'Вызовы официанта', 'ro': 'Apeluri chelner', 'en': 'Waiter Calls'},
+    'billRequests': {'ru': 'Запросы счёта', 'ro': 'Cereri de plată', 'en': 'Bill Requests'},
+    'kitchenQueue': {'ru': 'Очередь кухни', 'ro': 'Coadă bucătărie', 'en': 'Kitchen Queue'},
+    'table': {'ru': 'Стол', 'ro': 'Masă', 'en': 'Table'},
+    'oldest': {'ru': 'Самый старый', 'ro': 'Cel mai vechi', 'en': 'Oldest'},
+    'ordersCount': {'ru': 'Заказы', 'ro': 'Comenzi', 'en': 'Orders'},
+    'callsCount': {'ru': 'Вызовы', 'ro': 'Apeluri', 'en': 'Calls'},
+    'billsCount': {'ru': 'Счета', 'ro': 'Note', 'en': 'Bills'},
+    'unassigned': {'ru': 'Не назначен', 'ro': 'Neatribuit', 'en': 'Unassigned'},
+    'waiter': {'ru': 'Официант', 'ro': 'Chelner', 'en': 'Waiter'},
+    'plans': {'ru': 'Планы', 'ro': 'Planuri', 'en': 'Plans'},
+    'useActive': {'ru': 'Использовать активный', 'ro': 'Folosește activ', 'en': 'Use active'},
+    'legend': {'ru': 'Легенда', 'ro': 'Legendă', 'en': 'Legend'},
+    'active': {'ru': 'Активный', 'ro': 'Activ', 'en': 'Active'},
+    'status': {'ru': 'Статус', 'ro': 'Status', 'en': 'Status'},
+    'statusNEW': {'ru': 'Новый', 'ro': 'Nou', 'en': 'New'},
+    'statusACCEPTED': {'ru': 'Принят', 'ro': 'Acceptat', 'en': 'Accepted'},
+    'statusIN_PROGRESS': {'ru': 'Готовится', 'ro': 'În lucru', 'en': 'In progress'},
+    'statusREADY': {'ru': 'Готово', 'ro': 'Gata', 'en': 'Ready'},
+    'statusSERVED': {'ru': 'Выдано', 'ro': 'Servit', 'en': 'Served'},
+    'statusCLOSED': {'ru': 'Закрыт', 'ro': 'Închis', 'en': 'Closed'},
+    'statusCANCELLED': {'ru': 'Отменён', 'ro': 'Anulat', 'en': 'Cancelled'},
+    'historyTitle': {'ru': 'История', 'ro': 'Istoric', 'en': 'History'},
+    'tableLabel': {'ru': 'Стол', 'ro': 'Masă', 'en': 'Table'},
+    'guestLabel': {'ru': 'Гость', 'ro': 'Oaspete', 'en': 'Guest'},
+    'allGuests': {'ru': 'Все гости', 'ro': 'Toți oaspeții', 'en': 'All guests'},
+    'lastOrder': {'ru': 'последний заказ', 'ro': 'ultima comandă', 'en': 'last order'},
+    'noHistory': {'ru': 'Нет истории по выбранным фильтрам', 'ro': 'Nu există istoric pentru selecție', 'en': 'No history for selection'},
+    'order': {'ru': 'Заказ', 'ro': 'Comandă', 'en': 'Order'},
+    'items': {'ru': 'позиции', 'ro': 'poziții', 'en': 'items'},
+    'closeCallTitle': {'ru': 'Закрыть вызов?', 'ro': 'Închide apelul?', 'en': 'Close call?'},
+    'closeCallBody': {'ru': 'Отметить вызов официанта как закрытый?', 'ro': 'Marcați apelul chelnerului ca închis?', 'en': 'Mark this waiter call as closed?'},
+    'cancel': {'ru': 'Отмена', 'ro': 'Anulează', 'en': 'Cancel'},
+    'close': {'ru': 'Закрыть', 'ro': 'Închide', 'en': 'Close'},
+    'ack': {'ru': 'Принять', 'ro': 'Confirmă', 'en': 'Ack'},
+    'statusUpdated': {'ru': 'Статус обновлён', 'ro': 'Status actualizat', 'en': 'Status updated'},
+    'statusUpdateFailed': {'ru': 'Не удалось обновить статус', 'ro': 'Actualizare status eșuată', 'en': 'Status update failed'},
+    'confirmFailed': {'ru': 'Не удалось подтвердить', 'ro': 'Confirmare eșuată', 'en': 'Confirm failed'},
+    'cancelFailed': {'ru': 'Не удалось отменить', 'ro': 'Anulare eșuată', 'en': 'Cancel failed'},
+    'closePartyFailed': {'ru': 'Не удалось закрыть Party', 'ro': 'Nu s-a putut închide Party', 'en': 'Close party failed'},
+    'loadFailed': {'ru': 'Ошибка загрузки', 'ro': 'Încărcare eșuată', 'en': 'Load failed'},
+    'loadTablesFailed': {'ru': 'Не удалось загрузить столы', 'ro': 'Nu s-au putut încărca mesele', 'en': 'Load tables failed'},
+    'loadOrdersFailed': {'ru': 'Не удалось загрузить заказы', 'ro': 'Nu s-au putut încărca comenzile', 'en': 'Load orders failed'},
+    'loadSessionsFailed': {'ru': 'Не удалось загрузить сессии', 'ro': 'Nu s-au putut încărca sesiunile', 'en': 'Load sessions failed'},
+    'loadHistoryFailed': {'ru': 'Не удалось загрузить историю', 'ro': 'Nu s-a putut încărca istoricul', 'en': 'Load history failed'},
+    'noEvents': {'ru': 'Событий пока нет', 'ro': 'Nu există evenimente', 'en': 'No events yet'},
+    'newEvents': {'ru': 'Новые события', 'ro': 'Evenimente noi', 'en': 'New events'},
+    'push': {'ru': 'Push', 'ro': 'Push', 'en': 'Push'},
+  };
+  final entry = dict[key];
+  if (entry == null) return key;
+  return entry[lang] ?? entry['ru']!;
+}
+
+String _statusLabel(BuildContext context, String status) {
+  final s = status.toUpperCase();
+  switch (s) {
+    case 'NEW':
+      return _tr(context, 'statusNEW');
+    case 'ACCEPTED':
+      return _tr(context, 'statusACCEPTED');
+    case 'IN_PROGRESS':
+      return _tr(context, 'statusIN_PROGRESS');
+    case 'READY':
+      return _tr(context, 'statusREADY');
+    case 'SERVED':
+      return _tr(context, 'statusSERVED');
+    case 'CLOSED':
+      return _tr(context, 'statusCLOSED');
+    case 'CANCELLED':
+      return _tr(context, 'statusCANCELLED');
+    default:
+      return status;
+  }
+}
 class StaffApp extends StatelessWidget {
   const StaffApp({super.key});
 
@@ -136,7 +242,7 @@ class _LoginScreenState extends State<LoginScreen> {
         headers: {'Authorization': 'Basic $auth'},
       );
       if (res.statusCode != 200) {
-        throw Exception('Login failed (${res.statusCode})');
+        throw Exception('${_tr(context, 'loginFailed')} (${res.statusCode})');
       }
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
@@ -152,25 +258,25 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Staff Login')),
+      appBar: AppBar(title: Text(_tr(context, 'staffLogin'))),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            TextField(controller: _user, decoration: const InputDecoration(labelText: 'Username')),
+            TextField(controller: _user, decoration: InputDecoration(labelText: _tr(context, 'username'))),
             const SizedBox(height: 8),
-            TextField(controller: _pass, decoration: const InputDecoration(labelText: 'Password'), obscureText: true),
+            TextField(controller: _pass, decoration: InputDecoration(labelText: _tr(context, 'password')), obscureText: true),
             const SizedBox(height: 16),
             if (_error != null) Text(_error!, style: const TextStyle(color: Colors.red)),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: _loading ? null : _login,
-                child: Text(_loading ? '...' : 'Login'),
+                child: Text(_loading ? _tr(context, 'loading') : _tr(context, 'login')),
               ),
             ),
             const SizedBox(height: 12),
-            const Text('Demo credentials: waiter1 / demo123'),
+            Text(_tr(context, 'demoCreds')),
           ],
         ),
       ),
@@ -243,12 +349,12 @@ class _HomeScreenState extends State<HomeScreen> {
               final calls = events.where((e) => e['type'] == 'WAITER_CALL').length;
               final bills = events.where((e) => e['type'] == 'BILL_REQUEST').length;
               final parts = <String>[];
-              if (orders > 0) parts.add('Orders: $orders');
-              if (calls > 0) parts.add('Calls: $calls');
-              if (bills > 0) parts.add('Bills: $bills');
+              if (orders > 0) parts.add('${_tr(context, 'ordersCount')}: $orders');
+              if (calls > 0) parts.add('${_tr(context, 'callsCount')}: $calls');
+              if (bills > 0) parts.add('${_tr(context, 'billsCount')}: $bills');
               if (parts.isNotEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('New events • ${parts.join("  ")}')),
+                  SnackBar(content: Text('${_tr(context, 'newEvents')} • ${parts.join("  ")}')),
                 );
               }
             }
@@ -339,7 +445,7 @@ class _HomeScreenState extends State<HomeScreen> {
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Push: ${message.data['type'] ?? message.notification?.title ?? 'Notification'}')),
+          SnackBar(content: Text('${_tr(context, 'push')}: ${message.data['type'] ?? message.notification?.title ?? 'Notification'}')),
         );
       }
     });
@@ -381,7 +487,7 @@ class _HomeScreenState extends State<HomeScreen> {
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
               child: Row(
                 children: [
-                  const Text('Hall'),
+                  Text(_tr(context, 'hall')),
                   const SizedBox(width: 8),
                   Expanded(
                     child: DropdownButton<int>(
@@ -423,20 +529,20 @@ class _HomeScreenState extends State<HomeScreen> {
         destinations: [
           NavigationDestination(
             icon: _newOrders > 0 ? Badge(label: Text('$_newOrders'), child: const Icon(Icons.receipt_long)) : const Icon(Icons.receipt_long),
-            label: 'Orders',
+            label: _tr(context, 'orders'),
           ),
           NavigationDestination(
             icon: _newCalls > 0 ? Badge(label: Text('$_newCalls'), child: const Icon(Icons.notifications_active)) : const Icon(Icons.notifications_active),
-            label: 'Calls',
+            label: _tr(context, 'calls'),
           ),
           NavigationDestination(
             icon: _newBills > 0 ? Badge(label: Text('$_newBills'), child: const Icon(Icons.payments)) : const Icon(Icons.payments),
-            label: 'Bills',
+            label: _tr(context, 'bills'),
           ),
-          const NavigationDestination(icon: Icon(Icons.kitchen), label: 'Kitchen'),
-          const NavigationDestination(icon: Icon(Icons.map), label: 'Hall'),
-          const NavigationDestination(icon: Icon(Icons.history), label: 'History'),
-          const NavigationDestination(icon: Icon(Icons.notifications), label: 'Events'),
+          NavigationDestination(icon: const Icon(Icons.kitchen), label: _tr(context, 'kitchen')),
+          NavigationDestination(icon: const Icon(Icons.map), label: _tr(context, 'hall')),
+          NavigationDestination(icon: const Icon(Icons.history), label: _tr(context, 'history')),
+          NavigationDestination(icon: const Icon(Icons.notifications), label: _tr(context, 'events')),
         ],
       ),
     );
@@ -451,9 +557,9 @@ class NotificationsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Events')),
+      appBar: AppBar(title: Text(_tr(context, 'events'))),
       body: events.isEmpty
-          ? const Center(child: Text('No events yet'))
+          ? Center(child: Text(_tr(context, 'noEvents')))
           : ListView.separated(
               itemCount: events.length,
               separatorBuilder: (_, __) => const Divider(height: 1),
@@ -501,7 +607,7 @@ class _OrdersTabState extends State<OrdersTab> {
         Uri.parse('$apiBase/api/staff/orders/active${widget.hallId != null ? "?hallId=${widget.hallId}" : ""}'),
         headers: {'Authorization': 'Basic $_auth'},
       );
-      if (res.statusCode != 200) throw Exception('Load failed (${res.statusCode})');
+      if (res.statusCode != 200) throw Exception('${_tr(context, 'loadFailed')} (${res.statusCode})');
       final body = jsonDecode(res.body);
       final list = body as List<dynamic>;
       setState(() => _orders = list);
@@ -611,7 +717,7 @@ class _OrdersTabState extends State<OrdersTab> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Active Orders'),
+        title: Text(_tr(context, 'orders')),
         actions: [
           IconButton(
             onPressed: () => setState(() => _showFocus = !_showFocus),
@@ -619,9 +725,9 @@ class _OrdersTabState extends State<OrdersTab> {
           ),
           PopupMenuButton<String>(
             onSelected: (v) => setState(() => _sortMode = v),
-            itemBuilder: (ctx) => const [
-              PopupMenuItem(value: 'time_desc', child: Text('Sort: newest first')),
-              PopupMenuItem(value: 'sla_desc', child: Text('Sort: SLA (oldest first)')),
+            itemBuilder: (ctx) => [
+              PopupMenuItem(value: 'time_desc', child: Text(_tr(ctx, 'sortNewest'))),
+              PopupMenuItem(value: 'sla_desc', child: Text(_tr(ctx, 'sortSla'))),
             ],
           ),
           IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
@@ -692,11 +798,11 @@ class _OrdersTabState extends State<OrdersTab> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Text('Table #$tableNo', style: const TextStyle(fontWeight: FontWeight.w700)),
+                                    Text('${_tr(context, 'table')} #$tableNo', style: const TextStyle(fontWeight: FontWeight.w700)),
                                     const SizedBox(height: 6),
-                                    Text('Oldest: $minutes', style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+                                    Text('${_tr(context, 'oldest')}: $minutes', style: TextStyle(color: color, fontWeight: FontWeight.w600)),
                                     const SizedBox(height: 4),
-                                    Text('Orders: $count', style: const TextStyle(color: Colors.black54)),
+                                    Text('${_tr(context, 'ordersCount')}: $count', style: const TextStyle(color: Colors.black54)),
                                   ],
                                 ),
                               );
@@ -714,8 +820,8 @@ class _OrdersTabState extends State<OrdersTab> {
                     final assigned = o['assignedWaiterId'];
                     final age = _ageFromIso(o['createdAt']?.toString());
                     return ListTile(
-                      title: Text('Table #$tableNumber  •  Order #${o['id']}'),
-                      subtitle: Text('${o['status']} • ${items.length} item(s)' + (assigned != null ? ' • waiter #$assigned' : '')),
+                      title: Text('${_tr(context, 'table')} #$tableNumber  •  ${_tr(context, 'orders')} #${o['id']}'),
+                      subtitle: Text('${_statusLabel(context, o['status']?.toString() ?? '')} • ${items.length} ${_tr(context, 'items')}' + (assigned != null ? ' • ${_tr(context, 'waiter')} #$assigned' : '')),
                       trailing: _slaChip(age, slaOrderWarnMin, slaOrderCritMin),
                       onTap: () {
                         Navigator.of(context).push(MaterialPageRoute(
@@ -768,7 +874,7 @@ class _CallsTabState extends State<CallsTab> {
         Uri.parse('$apiBase/api/staff/waiter-calls/active${widget.hallId != null ? "?hallId=${widget.hallId}" : ""}'),
         headers: {'Authorization': 'Basic $_auth'},
       );
-      if (res.statusCode != 200) throw Exception('Load failed (${res.statusCode})');
+      if (res.statusCode != 200) throw Exception('${_tr(context, 'loadFailed')} (${res.statusCode})');
       final body = jsonDecode(res.body);
       setState(() => _calls = body as List<dynamic>);
     } catch (e) {
@@ -776,6 +882,24 @@ class _CallsTabState extends State<CallsTab> {
     } finally {
       setState(() => _loading = false);
     }
+  }
+
+  Future<void> _setCallStatus(int id, String status) async {
+    final res = await http.post(
+      Uri.parse('$apiBase/api/staff/waiter-calls/$id/status'),
+      headers: {'Authorization': 'Basic $_auth', 'Content-Type': 'application/json'},
+      body: jsonEncode({'status': status}),
+    );
+    if (res.statusCode >= 300) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${_tr(context, 'statusUpdateFailed')} (${res.statusCode})')),
+      );
+      return;
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${_tr(context, 'statusUpdated')}: $status')));
+    _load();
   }
 
   @override
@@ -788,7 +912,7 @@ class _CallsTabState extends State<CallsTab> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Waiter Calls'),
+        title: Text(_tr(context, 'waiterCalls')),
         actions: [
           IconButton(
             onPressed: () => setState(() => _showFocus = !_showFocus),
@@ -796,9 +920,9 @@ class _CallsTabState extends State<CallsTab> {
           ),
           PopupMenuButton<String>(
             onSelected: (v) => setState(() => _sortMode = v),
-            itemBuilder: (ctx) => const [
-              PopupMenuItem(value: 'time_desc', child: Text('Sort: newest first')),
-              PopupMenuItem(value: 'sla_desc', child: Text('Sort: SLA (oldest first)')),
+            itemBuilder: (ctx) => [
+              PopupMenuItem(value: 'time_desc', child: Text(_tr(ctx, 'sortNewest'))),
+              PopupMenuItem(value: 'sla_desc', child: Text(_tr(ctx, 'sortSla'))),
             ],
           ),
           IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
@@ -869,11 +993,11 @@ class _CallsTabState extends State<CallsTab> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Text('Table #$tableNo', style: const TextStyle(fontWeight: FontWeight.w700)),
+                                    Text('${_tr(context, 'table')} #$tableNo', style: const TextStyle(fontWeight: FontWeight.w700)),
                                     const SizedBox(height: 6),
-                                    Text('Oldest: $minutes', style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+                                    Text('${_tr(context, 'oldest')}: $minutes', style: TextStyle(color: color, fontWeight: FontWeight.w600)),
                                     const SizedBox(height: 4),
-                                    Text('Calls: $count', style: const TextStyle(color: Colors.black54)),
+                                    Text('${_tr(context, 'callsCount')}: $count', style: const TextStyle(color: Colors.black54)),
                                   ],
                                 ),
                               );
@@ -887,11 +1011,57 @@ class _CallsTabState extends State<CallsTab> {
                           itemBuilder: (ctx, i) {
                             final c = calls[i] as Map<String, dynamic>;
                             final age = _ageFromIso(c['createdAt']?.toString());
+                            final status = (c['status'] ?? '').toString();
+                            final canAck = status == 'NEW';
+                            final canClose = status != 'CLOSED';
                             return ListTile(
-                              title: Text('Table #${c['tableNumber']}'),
-                              subtitle: Text('${c['status']} • ${c['createdAt']}'),
+                              title: Text('${_tr(context, 'table')} #${c['tableNumber']}'),
+                              subtitle: Text('${_statusLabel(context, c['status']?.toString() ?? '')} • ${c['createdAt']}'),
                               leading: const Icon(Icons.notifications_active),
-                              trailing: _slaChip(age, slaCallWarnMin, slaCallCritMin),
+                              trailing: SizedBox(
+                                width: 170,
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    _slaChip(age, slaCallWarnMin, slaCallCritMin),
+                                    const SizedBox(width: 8),
+                                    if (canAck)
+                                      OutlinedButton(
+                                        onPressed: () => _setCallStatus((c['id'] as num).toInt(), 'ACKNOWLEDGED'),
+                                        child: Text(_tr(context, 'ack')),
+                                      ),
+                                    if (canClose)
+                                      Padding(
+                                        padding: const EdgeInsets.only(left: 6),
+                                        child: OutlinedButton(
+                                          onPressed: () async {
+                                            final ok = await showDialog<bool>(
+                                              context: context,
+                                              builder: (_) => AlertDialog(
+                                                title: Text(_tr(context, 'closeCallTitle')),
+                                                content: Text(_tr(context, 'closeCallBody')),
+                                                actions: [
+                                                  TextButton(
+                                                    onPressed: () => Navigator.of(context).pop(false),
+                                                    child: Text(_tr(context, 'cancel')),
+                                                  ),
+                                                  ElevatedButton(
+                                                    onPressed: () => Navigator.of(context).pop(true),
+                                                    child: Text(_tr(context, 'close')),
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+                                            if (ok == true) {
+                                              _setCallStatus((c['id'] as num).toInt(), 'CLOSED');
+                                            }
+                                          },
+                                          child: Text(_tr(context, 'close')),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
                               onTap: () async {
                                 final changed = await Navigator.of(context).push(MaterialPageRoute(
                                   builder: (_) => WaiterCallDetailsScreen(
@@ -949,29 +1119,29 @@ class WaiterCallDetailsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Call #${call['id']}')),
+      appBar: AppBar(title: Text('${_tr(context, 'calls')} #${call['id']}')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Table #${call['tableNumber']}', style: Theme.of(context).textTheme.titleLarge),
+            Text('${_tr(context, 'table')} #${call['tableNumber']}', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 8),
-            Text('Status: ${call['status']}'),
+            Text('${_tr(context, 'status')}: ${call['status']}'),
             const SizedBox(height: 16),
             Row(
               children: [
                 Expanded(
                   child: OutlinedButton(
                     onPressed: () => _setStatus(context, 'ACKNOWLEDGED'),
-                    child: const Text('Acknowledge'),
+                    child: Text(_tr(context, 'ack')),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: OutlinedButton(
                     onPressed: () => _setStatus(context, 'CLOSED'),
-                    child: const Text('Close'),
+                    child: Text(_tr(context, 'close')),
                   ),
                 ),
               ],
@@ -1013,7 +1183,7 @@ class _BillsTabState extends State<BillsTab> {
         Uri.parse('$apiBase/api/staff/bill-requests/active${widget.hallId != null ? "?hallId=${widget.hallId}" : ""}'),
         headers: {'Authorization': 'Basic $_auth'},
       );
-      if (res.statusCode != 200) throw Exception('Load failed (${res.statusCode})');
+      if (res.statusCode != 200) throw Exception('${_tr(context, 'loadFailed')} (${res.statusCode})');
       final body = jsonDecode(res.body);
       setState(() => _bills = body as List<dynamic>);
     } catch (e) {
@@ -1030,11 +1200,13 @@ class _BillsTabState extends State<BillsTab> {
     );
     if (res.statusCode >= 300) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Confirm failed (${res.statusCode})')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${_tr(context, 'confirmFailed')} (${res.statusCode})')),
+      );
       return;
     }
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Payment confirmed')));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_tr(context, 'paymentConfirmed'))));
     _load();
   }
 
@@ -1045,11 +1217,13 @@ class _BillsTabState extends State<BillsTab> {
     );
     if (res.statusCode >= 300) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Cancel failed (${res.statusCode})')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${_tr(context, 'cancelFailed')} (${res.statusCode})')),
+      );
       return;
     }
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Bill cancelled')));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_tr(context, 'billCancelled'))));
     _load();
   }
 
@@ -1063,7 +1237,7 @@ class _BillsTabState extends State<BillsTab> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Bill Requests'),
+        title: Text(_tr(context, 'billRequests')),
         actions: [
           IconButton(
             onPressed: () => setState(() => _showFocus = !_showFocus),
@@ -1071,9 +1245,9 @@ class _BillsTabState extends State<BillsTab> {
           ),
           PopupMenuButton<String>(
             onSelected: (v) => setState(() => _sortMode = v),
-            itemBuilder: (ctx) => const [
-              PopupMenuItem(value: 'time_desc', child: Text('Sort: newest first')),
-              PopupMenuItem(value: 'sla_desc', child: Text('Sort: SLA (oldest first)')),
+            itemBuilder: (ctx) => [
+              PopupMenuItem(value: 'time_desc', child: Text(_tr(ctx, 'sortNewest'))),
+              PopupMenuItem(value: 'sla_desc', child: Text(_tr(ctx, 'sortSla'))),
             ],
           ),
           IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
@@ -1144,11 +1318,11 @@ class _BillsTabState extends State<BillsTab> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Text('Table #$tableNo', style: const TextStyle(fontWeight: FontWeight.w700)),
+                                    Text('${_tr(context, 'table')} #$tableNo', style: const TextStyle(fontWeight: FontWeight.w700)),
                                     const SizedBox(height: 6),
-                                    Text('Oldest: $minutes', style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+                                    Text('${_tr(context, 'oldest')}: $minutes', style: TextStyle(color: color, fontWeight: FontWeight.w600)),
                                     const SizedBox(height: 4),
-                                    Text('Bills: $count', style: const TextStyle(color: Colors.black54)),
+                                    Text('${_tr(context, 'billsCount')}: $count', style: const TextStyle(color: Colors.black54)),
                                   ],
                                 ),
                               );
@@ -1166,7 +1340,7 @@ class _BillsTabState extends State<BillsTab> {
                     final status = b['status']?.toString();
                     final age = _ageFromIso(b['createdAt']?.toString());
                     return ExpansionTile(
-                      title: Text('Table #${b['tableNumber']} • ${b['paymentMethod']}'),
+                      title: Text('${_tr(context, 'table')} #${b['tableNumber']} • ${b['paymentMethod']}'),
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -1184,12 +1358,12 @@ class _BillsTabState extends State<BillsTab> {
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                           child: SizedBox(
                             width: double.infinity,
-                            child: ElevatedButton(
-                              onPressed: () => _confirmPaid(b['billRequestId']),
-                              child: const Text('Confirm paid'),
+                              child: ElevatedButton(
+                                onPressed: () => _confirmPaid(b['billRequestId']),
+                                child: Text(_tr(context, 'confirmPaid')),
+                              ),
                             ),
                           ),
-                        ),
                         if (status == 'CREATED')
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -1197,7 +1371,7 @@ class _BillsTabState extends State<BillsTab> {
                               width: double.infinity,
                               child: OutlinedButton(
                                 onPressed: () => _cancelBill(b['billRequestId']),
-                                child: const Text('Cancel bill'),
+                                child: Text(_tr(context, 'cancelBill')),
                               ),
                             ),
                           ),
@@ -1214,13 +1388,15 @@ class _BillsTabState extends State<BillsTab> {
                                   );
                                   if (res.statusCode >= 300) {
                                     if (!context.mounted) return;
-                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Close party failed (${res.statusCode})')));
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('${_tr(context, 'closePartyFailed')} (${res.statusCode})')),
+                                    );
                                     return;
                                   }
                                   if (!context.mounted) return;
-                                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Party closed')));
+                                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_tr(context, 'partyClosed'))));
                                 },
-                                child: const Text('Close party'),
+                                child: Text(_tr(context, 'closeParty')),
                               ),
                             ),
                           ),
@@ -1267,7 +1443,7 @@ class _KitchenTabState extends State<KitchenTab> {
         Uri.parse('$apiBase/api/staff/orders/kitchen?statusIn=$_statusFilter${widget.hallId != null ? "&hallId=${widget.hallId}" : ""}'),
         headers: {'Authorization': 'Basic $_auth'},
       );
-      if (res.statusCode != 200) throw Exception('Load failed (${res.statusCode})');
+      if (res.statusCode != 200) throw Exception('${_tr(context, 'loadFailed')} (${res.statusCode})');
       final body = jsonDecode(res.body);
       setState(() => _orders = body as List<dynamic>);
     } catch (e) {
@@ -1306,7 +1482,7 @@ class _KitchenTabState extends State<KitchenTab> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Kitchen Queue'),
+        title: Text(_tr(context, 'kitchenQueue')),
         actions: [
           IconButton(
             onPressed: () => setState(() => _showFocus = !_showFocus),
@@ -1317,18 +1493,18 @@ class _KitchenTabState extends State<KitchenTab> {
               setState(() => _statusFilter = v);
               _load();
             },
-            itemBuilder: (ctx) => const [
-              PopupMenuItem(value: 'NEW,ACCEPTED,IN_PROGRESS', child: Text('Active (New/Accepted/In Progress)')),
-              PopupMenuItem(value: 'READY', child: Text('Ready')),
-              PopupMenuItem(value: 'NEW', child: Text('New only')),
+            itemBuilder: (ctx) => [
+              PopupMenuItem(value: 'NEW,ACCEPTED,IN_PROGRESS', child: Text(_tr(ctx, 'kitchenActive'))),
+              PopupMenuItem(value: 'READY', child: Text(_tr(ctx, 'kitchenReady'))),
+              PopupMenuItem(value: 'NEW', child: Text(_tr(ctx, 'kitchenNewOnly'))),
             ],
           ),
           PopupMenuButton<String>(
             onSelected: (v) => setState(() => _sortMode = v),
-            itemBuilder: (ctx) => const [
-              PopupMenuItem(value: 'time_desc', child: Text('Sort: newest first')),
-              PopupMenuItem(value: 'priority_time', child: Text('Sort: priority then time')),
-              PopupMenuItem(value: 'sla_desc', child: Text('Sort: SLA (oldest first)')),
+            itemBuilder: (ctx) => [
+              PopupMenuItem(value: 'time_desc', child: Text(_tr(ctx, 'sortNewest'))),
+              PopupMenuItem(value: 'priority_time', child: Text(_tr(ctx, 'sortPriority'))),
+              PopupMenuItem(value: 'sla_desc', child: Text(_tr(ctx, 'sortSla'))),
             ],
           ),
           IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
@@ -1414,8 +1590,8 @@ class _KitchenTabState extends State<KitchenTab> {
                             final ageMin = (ageSec / 60).floor();
                             final age = Duration(seconds: ageSec);
                             return ListTile(
-                              title: Text('Table #$tableNumber  •  Order #${o['id']}'),
-                              subtitle: Text('${o['status']} • ${items.length} item(s) • ${ageMin}m'),
+                              title: Text('${_tr(context, 'table')} #$tableNumber  •  ${_tr(context, 'orders')} #${o['id']}'),
+                              subtitle: Text('${_statusLabel(context, o['status']?.toString() ?? '')} • ${items.length} ${_tr(context, 'items')} • ${ageMin}m'),
                               trailing: _slaChip(age, slaKitchenWarnMin, slaKitchenCritMin),
                               onTap: () {
                                 Navigator.of(context).push(MaterialPageRoute(
@@ -1536,14 +1712,14 @@ class _FloorPlanTabState extends State<FloorPlanTab> {
         Uri.parse('$apiBase/api/staff/tables${hallId != null ? "?hallId=$hallId" : ""}'),
         headers: {'Authorization': 'Basic $_auth'},
       );
-      if (tablesRes.statusCode != 200) throw Exception('Load tables failed (${tablesRes.statusCode})');
+      if (tablesRes.statusCode != 200) throw Exception('${_tr(context, 'loadTablesFailed')} (${tablesRes.statusCode})');
       final tablesBody = (jsonDecode(tablesRes.body) as List<dynamic>).cast<Map<String, dynamic>>();
 
       final ordersRes = await http.get(
         Uri.parse('$apiBase/api/staff/orders/active'),
         headers: {'Authorization': 'Basic $_auth'},
       );
-      if (ordersRes.statusCode != 200) throw Exception('Load orders failed (${ordersRes.statusCode})');
+      if (ordersRes.statusCode != 200) throw Exception('${_tr(context, 'loadOrdersFailed')} (${ordersRes.statusCode})');
       final ordersBody = (jsonDecode(ordersRes.body) as List<dynamic>).cast<Map<String, dynamic>>();
       final hot = <int>{};
       final heat = <int, double>{};
@@ -1830,7 +2006,7 @@ class _FloorPlanTabState extends State<FloorPlanTab> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Hall'),
+        title: Text(_tr(context, 'hall')),
         actions: [
           IconButton(
             tooltip: _showStatusBadges ? 'Hide status badges' : 'Show status badges',
@@ -1901,24 +2077,24 @@ class _FloorPlanTabState extends State<FloorPlanTab> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('Plans', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                  const SizedBox(width: 8),
-                  Switch(
-                    value: _useActivePlan,
-                    onChanged: (v) {
-                      setState(() {
-                        _useActivePlan = v;
-                      });
-                      _saveUseActivePref(v);
-                      _loadAll(forceLayout: true);
-                    },
-                  ),
-                  const Text('Use active', style: TextStyle(fontSize: 11)),
-                ],
-              ),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(_tr(context, 'plans'), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                                  const SizedBox(width: 8),
+                                  Switch(
+                                    value: _useActivePlan,
+                                    onChanged: (v) {
+                                      setState(() {
+                                        _useActivePlan = v;
+                                      });
+                                      _saveUseActivePref(v);
+                                      _loadAll(forceLayout: true);
+                                    },
+                                  ),
+                                  Text(_tr(context, 'useActive'), style: const TextStyle(fontSize: 11)),
+                                ],
+                              ),
               if (_plans.isNotEmpty) ...[
                 const SizedBox(height: 6),
                 Builder(builder: (context) {
@@ -1933,8 +2109,8 @@ class _FloorPlanTabState extends State<FloorPlanTab> {
                     (p) => (p['id'] as num?)?.toInt() == activePlanId,
                     orElse: () => const {},
                   );
-                  return _activePlanLabel(activePlan, true);
-                }),
+                                  return _activePlanLabel(context, activePlan, true);
+                                }),
                 const SizedBox(height: 8),
                 Row(
                   mainAxisSize: MainAxisSize.min,
@@ -1994,7 +2170,7 @@ class _FloorPlanTabState extends State<FloorPlanTab> {
                                   children: [
                                     Icon(_showLegend ? Icons.expand_less : Icons.expand_more, size: 18),
                                     const SizedBox(width: 6),
-                                    const Text('Legend', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                                    Text(_tr(context, 'legend'), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                                   ],
                                 ),
                               ),
@@ -2112,7 +2288,7 @@ class _FloorPlanTabState extends State<FloorPlanTab> {
                                     Text('#${t['number']}', style: const TextStyle(fontWeight: FontWeight.w700)),
                                     const SizedBox(height: 4),
                                     Text(
-                                      waiterId == null ? 'Unassigned' : 'Waiter #$waiterId',
+                                      waiterId == null ? _tr(context, 'unassigned') : '${_tr(context, 'waiter')} #$waiterId',
                                       style: TextStyle(color: baseColor, fontSize: 11),
                                     ),
                                     if (_showStatusBadges && status.isNotEmpty) ...[
@@ -2174,7 +2350,7 @@ Widget _legendDot(Color color) {
   );
 }
 
-Widget _activePlanLabel(Map<String, dynamic> plan, bool isActive) {
+Widget _activePlanLabel(BuildContext context, Map<String, dynamic> plan, bool isActive) {
   final name = (plan['name'] ?? '').toString();
   if (name.isEmpty) return const SizedBox.shrink();
   return Container(
@@ -2185,7 +2361,7 @@ Widget _activePlanLabel(Map<String, dynamic> plan, bool isActive) {
       border: Border.all(color: isActive ? Colors.black87 : Colors.black12),
     ),
     child: Text(
-      isActive ? '$name • Active' : name,
+      isActive ? '$name • ${_tr(context, 'active')}' : name,
       style: TextStyle(fontSize: 11, color: isActive ? Colors.white : Colors.black87),
     ),
   );
@@ -2250,7 +2426,7 @@ class _HistoryTabState extends State<HistoryTab> {
         Uri.parse('$apiBase/api/staff/tables'),
         headers: {'Authorization': 'Basic $_auth'},
       );
-      if (res.statusCode != 200) throw Exception('Load tables failed (${res.statusCode})');
+      if (res.statusCode != 200) throw Exception('${_tr(context, 'loadTablesFailed')} (${res.statusCode})');
       final body = (jsonDecode(res.body) as List<dynamic>).cast<Map<String, dynamic>>();
       setState(() {
         _tables = body;
@@ -2270,7 +2446,7 @@ class _HistoryTabState extends State<HistoryTab> {
         Uri.parse('$apiBase/api/staff/guest-sessions?tableId=$_selectedTableId'),
         headers: {'Authorization': 'Basic $_auth'},
       );
-      if (res.statusCode != 200) throw Exception('Load sessions failed (${res.statusCode})');
+      if (res.statusCode != 200) throw Exception('${_tr(context, 'loadSessionsFailed')} (${res.statusCode})');
       final body = (jsonDecode(res.body) as List<dynamic>).cast<Map<String, dynamic>>();
       setState(() {
         _sessions = body;
@@ -2296,7 +2472,7 @@ class _HistoryTabState extends State<HistoryTab> {
         Uri.parse('$apiBase/api/staff/orders/history?${params.join("&")}'),
         headers: {'Authorization': 'Basic $_auth'},
       );
-      if (res.statusCode != 200) throw Exception('Load history failed (${res.statusCode})');
+      if (res.statusCode != 200) throw Exception('${_tr(context, 'loadHistoryFailed')} (${res.statusCode})');
       final body = (jsonDecode(res.body) as List<dynamic>).cast<Map<String, dynamic>>();
       setState(() => _orders = body);
     } catch (e) {
@@ -2333,7 +2509,7 @@ class _HistoryTabState extends State<HistoryTab> {
     final groupKeys = groups.keys.toList()..sort((a, b) => b.compareTo(a));
     return Scaffold(
       appBar: AppBar(
-        title: const Text('History'),
+        title: Text(_tr(context, 'historyTitle')),
         actions: [
           IconButton(onPressed: _refreshAll, icon: const Icon(Icons.refresh)),
         ],
@@ -2348,7 +2524,7 @@ class _HistoryTabState extends State<HistoryTab> {
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                       child: Row(
                         children: [
-                          const Text('Table:'),
+                          Text('${_tr(context, 'tableLabel')}:'),
                           const SizedBox(width: 12),
                           Expanded(
                             child: DropdownButton<int?>(
@@ -2357,7 +2533,7 @@ class _HistoryTabState extends State<HistoryTab> {
                               items: _tables
                                   .map((t) => DropdownMenuItem<int?>(
                                         value: (t['id'] as num).toInt(),
-                                        child: Text('Table #${t['number']}'),
+                                        child: Text('${_tr(context, 'table')} #${t['number']}'),
                                       ))
                                   .toList(),
                               onChanged: (v) async {
@@ -2374,18 +2550,18 @@ class _HistoryTabState extends State<HistoryTab> {
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
                       child: Row(
                         children: [
-                          const Text('Guest:'),
+                          Text('${_tr(context, 'guestLabel')}:'),
                           const SizedBox(width: 12),
                           Expanded(
                             child: DropdownButton<int?>(
                               isExpanded: true,
                               value: _selectedGuestSessionId,
                               items: [
-                                const DropdownMenuItem<int?>(value: null, child: Text('All guests')),
+                                DropdownMenuItem<int?>(value: null, child: Text(_tr(context, 'allGuests'))),
                                 ..._sessions.map((s) {
                                   final id = (s['id'] as num).toInt();
                                   final lastOrderAt = s['lastOrderAt']?.toString();
-                                  final label = lastOrderAt == null ? 'Guest #$id' : 'Guest #$id • last order';
+                                  final label = lastOrderAt == null ? '${_tr(context, 'guestLabel')} #$id' : '${_tr(context, 'guestLabel')} #$id • ${_tr(context, 'lastOrder')}';
                                   return DropdownMenuItem<int?>(value: id, child: Text(label));
                                 }),
                               ],
@@ -2400,7 +2576,7 @@ class _HistoryTabState extends State<HistoryTab> {
                     ),
                     Expanded(
                       child: _orders.isEmpty
-                          ? const Center(child: Text('No history for selection'))
+                          ? Center(child: Text(_tr(context, 'noHistory')))
                           : ListView.separated(
                               itemCount: groupKeys.length,
                               separatorBuilder: (_, __) => const Divider(height: 1),
@@ -2408,12 +2584,12 @@ class _HistoryTabState extends State<HistoryTab> {
                                 final gs = groupKeys[i];
                                 final list = groups[gs] ?? const [];
                                 return ExpansionTile(
-                                  title: Text('Guest #$gs • ${list.length} order(s)'),
+                                  title: Text('${_tr(context, 'guestLabel')} #$gs • ${list.length} ${_tr(context, 'orders')}'),
                                   children: list.map((o) {
                                     final items = (o['items'] as List<dynamic>? ?? const []).cast<Map<String, dynamic>>();
                                     return ListTile(
-                                      title: Text('Order #${o['id']} • ${o['status']}'),
-                                      subtitle: Text('${o['createdAt']} • ${items.length} item(s)'),
+                                      title: Text('${_tr(context, 'order')} #${o['id']} • ${_statusLabel(context, o['status']?.toString() ?? '')}'),
+                                      subtitle: Text('${o['createdAt']} • ${items.length} ${_tr(context, 'items')}'),
                                       onTap: () {
                                         Navigator.of(context).push(MaterialPageRoute(
                                           builder: (_) => OrderDetailsScreen(
@@ -2461,26 +2637,30 @@ class OrderDetailsScreen extends StatelessWidget {
     );
     if (res.statusCode >= 300) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Status update failed (${res.statusCode})')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${_tr(context, 'statusUpdateFailed')} (${res.statusCode})')),
+      );
       return;
     }
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Status -> $status')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${_tr(context, 'statusUpdated')}: ${_statusLabel(context, status)}')),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final items = (order['items'] as List<dynamic>? ?? const []).cast<Map<String, dynamic>>();
     return Scaffold(
-      appBar: AppBar(title: Text('Order #${order['id']}')),
+      appBar: AppBar(title: Text('${_tr(context, 'order')} #${order['id']}')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Table #${order['tableNumber']}', style: Theme.of(context).textTheme.titleLarge),
+            Text('${_tr(context, 'table')} #${order['tableNumber']}', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 8),
-            Text('Status: ${order['status']}'),
+            Text('${_tr(context, 'status')}: ${_statusLabel(context, order['status']?.toString() ?? '')}'),
             const SizedBox(height: 16),
             Expanded(
               child: ListView.builder(
@@ -2499,12 +2679,12 @@ class OrderDetailsScreen extends StatelessWidget {
                   .map((s) => Expanded(
                         child: Padding(
                           padding: const EdgeInsets.only(right: 8),
-                          child: OutlinedButton(
-                            onPressed: () => _setStatus(context, s),
-                            child: Text(s),
+                            child: OutlinedButton(
+                              onPressed: () => _setStatus(context, s),
+                              child: Text(_statusLabel(context, s)),
+                            ),
                           ),
-                        ),
-                      ))
+                        ))
                   .toList(),
             ),
           ],

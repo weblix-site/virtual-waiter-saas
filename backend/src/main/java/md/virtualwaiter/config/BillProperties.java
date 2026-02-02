@@ -6,4 +6,5 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class BillProperties {
   public boolean allowPayOtherGuestsItems = false;
   public boolean allowPayWholeTable = false;
+  public int expireMinutes = 120;
 }

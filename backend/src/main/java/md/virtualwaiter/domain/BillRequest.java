@@ -27,7 +27,7 @@ public class BillRequest {
   @Column(name = "payment_method", nullable = false)
   public String paymentMethod;
 
-  /** CREATED | PAID_CONFIRMED | CANCELLED */
+  /** CREATED | PAID_CONFIRMED | CANCELLED | CLOSED | EXPIRED */
   @Column(nullable = false)
   public String status = "CREATED";
 

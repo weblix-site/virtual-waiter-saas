@@ -80,6 +80,18 @@ const dict: Record<string, Record<Lang, string>> = {
   pinCreateFailed: { ru: "Не удалось создать PIN", ro: "Nu s-a putut crea PIN", en: "Failed to create PIN" },
   pinJoinFailed: { ru: "Не удалось присоединиться по PIN", ro: "Nu s-a putut conecta la PIN", en: "Failed to join PIN" },
   partyCloseFailed: { ru: "Не удалось закрыть Party", ro: "Nu s-a putut închide Party", en: "Failed to close Party" },
+  billStatusCreated: { ru: "Ожидает", ro: "În așteptare", en: "Pending" },
+  billStatusPaid: { ru: "Оплачено", ro: "Plătit", en: "Paid" },
+  billStatusCancelled: { ru: "Отменён", ro: "Anulat", en: "Cancelled" },
+  billStatusClosed: { ru: "Закрыт", ro: "Închis", en: "Closed" },
+  billStatusExpired: { ru: "Истёк", ro: "Expirat", en: "Expired" },
+  billStatusUnknown: { ru: "Неизвестно", ro: "Necunoscut", en: "Unknown" },
+  billClose: { ru: "Закрыть счёт", ro: "Închide nota", en: "Close bill" },
+  billCancel: { ru: "Отменить счёт", ro: "Anulează nota", en: "Cancel bill" },
+  billRefresh: { ru: "Обновить", ro: "Reîmprospătează", en: "Refresh" },
+  billClosed: { ru: "Счёт закрыт", ro: "Nota închisă", en: "Bill closed" },
+  billCancelled: { ru: "Счёт отменён", ro: "Nota anulată", en: "Bill cancelled" },
+  billExpiredNote: { ru: "Срок ожидания истёк — запросите счёт снова.", ro: "Timpul a expirat — cereți din nou nota.", en: "Expired — please request the bill again." },
 };
 
 export function t(lang: Lang, key: keyof typeof dict) {

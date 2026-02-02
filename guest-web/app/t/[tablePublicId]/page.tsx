@@ -150,6 +150,17 @@ export default function TablePage({ params, searchParams }: any) {
           const bo: BillOptionsResponse = await boRes.json();
           if (!cancelled) setBillOptions(bo);
         }
+
+        const lastBillRes = await fetch(`${API_BASE}/api/public/bill-request/latest?guestSessionId=${ss.guestSessionId}`, {
+          headers: { ...sessionHeaders() },
+        });
+        if (lastBillRes.ok) {
+          const last = await lastBillRes.json();
+          if (!cancelled) {
+            setBillRequestId(last.billRequestId);
+            setBillStatus(last.status);
+          }
+        }
       } catch (e: any) {
         if (cancelled) return;
         setError(e?.message ?? t(lang, "errorGeneric"));
@@ -558,7 +569,28 @@ export default function TablePage({ params, searchParams }: any) {
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body?.message ?? `Cancel failed (${res.status})`);
       setBillStatus(body.status);
-      alert(body.status === "CANCELLED" ? (lang === "en" ? "Bill cancelled" : lang === "ro" ? "Nota anulată" : "Счёт отменён") : t(lang, "billRequested"));
+      alert(body.status === "CANCELLED" ? t(lang, "billCancelled") : t(lang, "billRequested"));
+    } catch (e: any) {
+      setBillError(e?.message ?? t(lang, "billRequestFailed"));
+    } finally {
+      setBillLoading(false);
+    }
+  }
+
+  async function closeBillRequest() {
+    if (!session || !billRequestId) return;
+    setBillError(null);
+    setBillLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/public/bill-request/${billRequestId}/close`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...sessionHeaders() },
+        body: JSON.stringify({ guestSessionId: session.guestSessionId }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.message ?? `Close failed (${res.status})`);
+      setBillStatus(body.status);
+      alert(t(lang, "billClosed"));
     } catch (e: any) {
       setBillError(e?.message ?? t(lang, "billRequestFailed"));
     } finally {
@@ -996,19 +1028,40 @@ export default function TablePage({ params, searchParams }: any) {
           )}
 
           {billError && <div style={{ color: "#b11e46", marginTop: 10 }}>{billError}</div>}
-          {billRequestId && (
+        {billRequestId && (
             <div style={{ marginTop: 12, paddingTop: 8, borderTop: "1px dashed #eee" }}>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                <strong>{t(lang, "status")}:</strong> <span>{billStatus ?? "?"}</span>
+                <strong>{t(lang, "status")}:</strong>{" "}
+                <span>
+                  {billStatus === "CREATED"
+                    ? t(lang, "billStatusCreated")
+                    : billStatus === "PAID_CONFIRMED"
+                      ? t(lang, "billStatusPaid")
+                      : billStatus === "CANCELLED"
+                        ? t(lang, "billStatusCancelled")
+                        : billStatus === "CLOSED"
+                          ? t(lang, "billStatusClosed")
+                          : billStatus === "EXPIRED"
+                            ? t(lang, "billStatusExpired")
+                            : t(lang, "billStatusUnknown")}
+                </span>
                 <button onClick={refreshBillStatus} disabled={billRefreshLoading} style={{ padding: "6px 10px" }}>
-                  {billRefreshLoading ? t(lang, "loading") : (lang === "en" ? "Refresh" : lang === "ro" ? "Reîmprospătează" : "Обновить")}
+                  {billRefreshLoading ? t(lang, "loading") : t(lang, "billRefresh")}
                 </button>
                 {billStatus === "CREATED" && (
                   <button onClick={cancelBillRequest} disabled={billLoading} style={{ padding: "6px 10px" }}>
-                    {lang === "en" ? "Cancel bill" : lang === "ro" ? "Anulează nota" : "Отменить счёт"}
+                    {t(lang, "billCancel")}
+                  </button>
+                )}
+                {billStatus === "PAID_CONFIRMED" && (
+                  <button onClick={closeBillRequest} disabled={billLoading} style={{ padding: "6px 10px" }}>
+                    {t(lang, "billClose")}
                   </button>
                 )}
               </div>
+              {billStatus === "EXPIRED" && (
+                <div style={{ marginTop: 8, color: "#b11e46" }}>{t(lang, "billExpiredNote")}</div>
+              )}
             </div>
           )}
         </div>
