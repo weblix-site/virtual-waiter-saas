@@ -60,10 +60,18 @@ public class PublicController {
   private final RateLimitService rateLimitService;
   private final int otpLimitMax;
   private final int otpLimitWindowSeconds;
+  private final int otpVerifyLimitMax;
+  private final int otpVerifyLimitWindowSeconds;
   private final int orderLimitMax;
   private final int orderLimitWindowSeconds;
   private final int partyLimitMax;
   private final int partyLimitWindowSeconds;
+  private final int waiterCallLimitMax;
+  private final int waiterCallLimitWindowSeconds;
+  private final int sessionStartLimitMax;
+  private final int sessionStartLimitWindowSeconds;
+  private final int menuLimitMax;
+  private final int menuLimitWindowSeconds;
   private final BillProperties billProperties;
 
   public PublicController(
@@ -89,10 +97,18 @@ public class PublicController {
     BillProperties billProperties,
     @Value("${app.rateLimit.otp.maxRequests:5}") int otpLimitMax,
     @Value("${app.rateLimit.otp.windowSeconds:300}") int otpLimitWindowSeconds,
+    @Value("${app.rateLimit.otpVerify.maxRequests:8}") int otpVerifyLimitMax,
+    @Value("${app.rateLimit.otpVerify.windowSeconds:300}") int otpVerifyLimitWindowSeconds,
     @Value("${app.rateLimit.order.maxRequests:10}") int orderLimitMax,
     @Value("${app.rateLimit.order.windowSeconds:60}") int orderLimitWindowSeconds,
     @Value("${app.rateLimit.party.maxRequests:10}") int partyLimitMax,
-    @Value("${app.rateLimit.party.windowSeconds:60}") int partyLimitWindowSeconds
+    @Value("${app.rateLimit.party.windowSeconds:60}") int partyLimitWindowSeconds,
+    @Value("${app.rateLimit.waiterCall.maxRequests:10}") int waiterCallLimitMax,
+    @Value("${app.rateLimit.waiterCall.windowSeconds:60}") int waiterCallLimitWindowSeconds,
+    @Value("${app.rateLimit.sessionStart.maxRequests:30}") int sessionStartLimitMax,
+    @Value("${app.rateLimit.sessionStart.windowSeconds:60}") int sessionStartLimitWindowSeconds,
+    @Value("${app.rateLimit.menu.maxRequests:60}") int menuLimitMax,
+    @Value("${app.rateLimit.menu.windowSeconds:60}") int menuLimitWindowSeconds
   ) {
     this.tableRepo = tableRepo;
     this.sessionRepo = sessionRepo;
@@ -115,10 +131,18 @@ public class PublicController {
     this.rateLimitService = rateLimitService;
     this.otpLimitMax = otpLimitMax;
     this.otpLimitWindowSeconds = otpLimitWindowSeconds;
+    this.otpVerifyLimitMax = otpVerifyLimitMax;
+    this.otpVerifyLimitWindowSeconds = otpVerifyLimitWindowSeconds;
     this.orderLimitMax = orderLimitMax;
     this.orderLimitWindowSeconds = orderLimitWindowSeconds;
     this.partyLimitMax = partyLimitMax;
     this.partyLimitWindowSeconds = partyLimitWindowSeconds;
+    this.waiterCallLimitMax = waiterCallLimitMax;
+    this.waiterCallLimitWindowSeconds = waiterCallLimitWindowSeconds;
+    this.sessionStartLimitMax = sessionStartLimitMax;
+    this.sessionStartLimitWindowSeconds = sessionStartLimitWindowSeconds;
+    this.menuLimitMax = menuLimitMax;
+    this.menuLimitWindowSeconds = menuLimitWindowSeconds;
     this.billProperties = billProperties;
   }
 
@@ -150,6 +174,10 @@ public class PublicController {
 
   @PostMapping("/session/start")
   public StartSessionResponse startSession(@Valid @RequestBody StartSessionRequest req, jakarta.servlet.http.HttpServletRequest httpReq) {
+    String clientIp = getClientIp(httpReq);
+    if (!rateLimitService.allow("sessionStart:" + clientIp, sessionStartLimitMax, sessionStartLimitWindowSeconds)) {
+      throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Too many session starts from IP");
+    }
     if (!qrSig.verifyTablePublicId(req.tablePublicId(), req.sig(), req.ts())) {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Invalid QR signature");
     }
@@ -163,7 +191,7 @@ public class PublicController {
     s.locale = normalizeLocale(req.locale());
     s.expiresAt = Instant.now().plus(12, ChronoUnit.HOURS);
     s.sessionSecret = java.util.UUID.randomUUID().toString().replace("-", "");
-    s.createdByIp = getClientIp(httpReq);
+    s.createdByIp = clientIp;
     s.createdByUa = getUserAgent(httpReq);
     s = sessionRepo.save(s);
 
@@ -323,8 +351,13 @@ public class PublicController {
     @RequestParam("tablePublicId") String tablePublicId,
     @RequestParam("sig") String sig,
     @RequestParam("ts") Long ts,
-    @RequestParam(value = "locale", required = false) String locale
+    @RequestParam(value = "locale", required = false) String locale,
+    jakarta.servlet.http.HttpServletRequest httpReq
   ) {
+    String clientIp = getClientIp(httpReq);
+    if (!rateLimitService.allow("menu:" + clientIp, menuLimitMax, menuLimitWindowSeconds)) {
+      throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Too many menu requests from IP");
+    }
     if (!qrSig.verifyTablePublicId(tablePublicId, sig, ts)) {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Invalid QR signature");
     }
@@ -671,6 +704,10 @@ public class PublicController {
     GuestSession s = sessionRepo.findById(req.guestSessionId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
     requireSessionSecret(s, httpReq);
+    String clientIp = getClientIp(httpReq);
+    if (!rateLimitService.allow("otpVerify:" + clientIp, otpVerifyLimitMax, otpVerifyLimitWindowSeconds)) {
+      throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Too many OTP verify attempts from IP");
+    }
     otpService.verifyOtp(req.guestSessionId, req.challengeId, req.code);
     return new VerifyOtpResponse(true);
   }
@@ -685,6 +722,10 @@ public class PublicController {
     GuestSession s = sessionRepo.findById(req.guestSessionId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
     requireSessionSecret(s, httpReq);
+    String clientIp = getClientIp(httpReq);
+    if (!rateLimitService.allow("waiterCall:" + clientIp, waiterCallLimitMax, waiterCallLimitWindowSeconds)) {
+      throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Too many waiter calls from IP");
+    }
     if (s.expiresAt.isBefore(Instant.now())) {
       throw new ResponseStatusException(HttpStatus.GONE, "Session expired");
     }

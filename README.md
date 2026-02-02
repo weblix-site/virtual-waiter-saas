@@ -106,3 +106,13 @@ Key endpoints (admin):
 Staff:
 - `GET /api/staff/halls`
 - `GET /api/staff/branch-layout?hallId=...`
+
+## Rate limits (per IP)
+Defaults in `backend/src/main/resources/application.yml`:
+- `app.rateLimit.otp.maxRequests`: 5 / `app.rateLimit.otp.windowSeconds`: 300
+- `app.rateLimit.otpVerify.maxRequests`: 8 / `app.rateLimit.otpVerify.windowSeconds`: 300
+- `app.rateLimit.order.maxRequests`: 10 / `app.rateLimit.order.windowSeconds`: 60
+- `app.rateLimit.party.maxRequests`: 10 / `app.rateLimit.party.windowSeconds`: 60
+- `app.rateLimit.waiterCall.maxRequests`: 10 / `app.rateLimit.waiterCall.windowSeconds`: 60
+- `app.rateLimit.sessionStart.maxRequests`: 30 / `app.rateLimit.sessionStart.windowSeconds`: 60
+- `app.rateLimit.menu.maxRequests`: 60 / `app.rateLimit.menu.windowSeconds`: 60

@@ -83,8 +83,14 @@ Expected:
 ### A7. Rate limits (OTP/Order/Party)
 Steps:
 1. Repeatedly call `/api/public/otp/send` beyond limit.
+2. Repeatedly call `/api/public/orders` beyond limit.
+3. Repeatedly call `/api/public/party/create` or `/api/public/party/join` beyond limit.
+4. Repeatedly call `/api/public/otp/verify` beyond limit.
+5. Repeatedly call `/api/public/waiter-call` beyond limit.
+6. Repeatedly call `/api/public/session/start` beyond limit.
+7. Repeatedly call `/api/public/menu` beyond limit.
 Expected:
-- 429 after limit reached.
+- 429 after limit reached for each endpoint.
 
 ---
 
@@ -285,6 +291,13 @@ Steps:
 Expected:
 - Signed URL includes `ts` and valid
 
+### D4.1 Zones JSON validation
+Steps:
+1. Save zonesJson with invalid schema (non-array or bad color).
+2. Save zonesJson with out-of-range x/y/w/h or w/h <= 0.
+Expected:
+- 400 with validation error
+
 ### D5. Staff CRUD
 Steps:
 1. Create waiter
@@ -323,9 +336,11 @@ Expected:
 Steps:
 1. Filter by action/entity/actor/date.
 2. Next page.
+2.1 Prev page.
 3. CSV export.
 Expected:
 - Correct filtering and pagination
+- Limit affects page size
 
 ---
 

@@ -24,6 +24,9 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.*;
+import java.util.regex.Pattern;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @RestController
 @RequestMapping("/api/admin")
@@ -173,11 +176,59 @@ public class AdminController {
   }
 
   private static final int MAX_ZONES_JSON_LEN = 20000;
+  private static final int MAX_ZONES_COUNT = 200;
+  private static final Pattern COLOR_HEX = Pattern.compile("^#?[0-9a-fA-F]{6}$");
 
   private void validateZonesJson(String zonesJson) {
     if (zonesJson == null) return;
     if (zonesJson.length() > MAX_ZONES_JSON_LEN) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "zonesJson too large");
+    }
+    String trimmed = zonesJson.trim();
+    if (trimmed.isEmpty()) return;
+    try {
+      ObjectMapper mapper = new ObjectMapper();
+      JsonNode root = mapper.readTree(trimmed);
+      if (!root.isArray()) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "zonesJson must be array");
+      }
+      if (root.size() > MAX_ZONES_COUNT) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "zonesJson too many zones");
+      }
+      for (JsonNode node : root) {
+        if (!node.isObject()) {
+          throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "zonesJson invalid zone");
+        }
+        JsonNode id = node.get("id");
+        if (id != null && id.isTextual() && id.asText().length() > 64) {
+          throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "zonesJson zone id too long");
+        }
+        JsonNode name = node.get("name");
+        if (name != null && name.isTextual() && name.asText().length() > 64) {
+          throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "zonesJson zone name too long");
+        }
+        Double x = node.has("x") ? node.get("x").asDouble() : null;
+        Double y = node.has("y") ? node.get("y").asDouble() : null;
+        Double w = node.has("w") ? node.get("w").asDouble() : null;
+        Double h = node.has("h") ? node.get("h").asDouble() : null;
+        if (w != null && w <= 0) {
+          throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "zonesJson width must be > 0");
+        }
+        if (h != null && h <= 0) {
+          throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "zonesJson height must be > 0");
+        }
+        validateLayoutBounds(x, y, w, h);
+        JsonNode color = node.get("color");
+        if (color != null && color.isTextual() && !color.asText().isBlank()) {
+          if (!COLOR_HEX.matcher(color.asText().trim()).matches()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "zonesJson color invalid");
+          }
+        }
+      }
+    } catch (ResponseStatusException e) {
+      throw e;
+    } catch (Exception e) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "zonesJson invalid");
     }
   }
 
@@ -1782,6 +1833,7 @@ public class AdminController {
     @RequestParam(value = "to", required = false) String to,
     @RequestParam(value = "beforeId", required = false) Long beforeId,
     @RequestParam(value = "afterId", required = false) Long afterId,
+    @RequestParam(value = "limit", required = false) Integer limit,
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
@@ -1791,6 +1843,7 @@ public class AdminController {
     String actorVal = actorUsername == null || actorUsername.isBlank() ? null : actorUsername.trim();
     Instant fromTs = parseInstantOrDateOrNull(from, true);
     Instant toTs = parseInstantOrDateOrNull(to, false);
+    int lim = limit == null ? 200 : Math.max(1, Math.min(limit, 500));
     List<AuditLog> logs = auditLogRepo.findFiltered(
       bid,
       actionVal,
@@ -1800,7 +1853,7 @@ public class AdminController {
       toTs,
       beforeId,
       afterId,
-      PageRequest.of(0, 200)
+      PageRequest.of(0, lim)
     );
     List<AuditLogDto> out = new ArrayList<>();
     for (AuditLog a : logs) {
@@ -1830,6 +1883,7 @@ public class AdminController {
     @RequestParam(value = "to", required = false) String to,
     @RequestParam(value = "beforeId", required = false) Long beforeId,
     @RequestParam(value = "afterId", required = false) Long afterId,
+    @RequestParam(value = "limit", required = false) Integer limit,
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
@@ -1839,6 +1893,7 @@ public class AdminController {
     String actorVal = actorUsername == null || actorUsername.isBlank() ? null : actorUsername.trim();
     Instant fromTs = parseInstantOrDateOrNull(from, true);
     Instant toTs = parseInstantOrDateOrNull(to, false);
+    int lim = limit == null ? 1000 : Math.max(1, Math.min(limit, 5000));
     List<AuditLog> logs = auditLogRepo.findFiltered(
       bid,
       actionVal,
@@ -1848,7 +1903,7 @@ public class AdminController {
       toTs,
       beforeId,
       afterId,
-      PageRequest.of(0, 200)
+      PageRequest.of(0, lim)
     );
     StringBuilder sb = new StringBuilder();
     sb.append("id,created_at,actor_user_id,actor_username,actor_role,branch_id,action,entity_type,entity_id,details_json\n");

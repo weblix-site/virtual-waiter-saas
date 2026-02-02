@@ -31,11 +31,23 @@ app:
     otp:
       maxRequests: 5
       windowSeconds: 300
+    otpVerify:
+      maxRequests: 8
+      windowSeconds: 300
     order:
       maxRequests: 10
       windowSeconds: 60
     party:
       maxRequests: 10
+      windowSeconds: 60
+    waiterCall:
+      maxRequests: 10
+      windowSeconds: 60
+    sessionStart:
+      maxRequests: 30
+      windowSeconds: 60
+    menu:
+      maxRequests: 60
       windowSeconds: 60
 
   tips:

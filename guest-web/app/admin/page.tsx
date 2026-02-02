@@ -284,6 +284,7 @@ export default function AdminPage() {
   const [auditActor, setAuditActor] = useState("");
   const [auditFrom, setAuditFrom] = useState("");
   const [auditTo, setAuditTo] = useState("");
+  const [auditLimit, setAuditLimit] = useState(200);
   const [parties, setParties] = useState<PartyDto[]>([]);
   const [partyStatusFilter, setPartyStatusFilter] = useState("ACTIVE");
   const [expandedPartyId, setExpandedPartyId] = useState<number | null>(null);
@@ -368,6 +369,7 @@ export default function AdminPage() {
     const staffTextSaved = localStorage.getItem("admin_staff_search");
     const staffRoleSaved = localStorage.getItem("admin_staff_role");
     const staffActiveSaved = localStorage.getItem("admin_staff_active");
+    const auditLimitSaved = localStorage.getItem("admin_audit_limit");
     if (u && p) {
       setUsername(u);
       setPassword(p);
@@ -388,6 +390,10 @@ export default function AdminPage() {
     if (staffTextSaved) setStaffFilterText(staffTextSaved);
     if (staffRoleSaved) setStaffFilterRole(staffRoleSaved);
     if (staffActiveSaved) setStaffFilterActive(staffActiveSaved);
+    if (auditLimitSaved) {
+      const n = Number(auditLimitSaved);
+      if (!Number.isNaN(n) && n > 0) setAuditLimit(n);
+    }
   }, []);
 
   const authHeader = useMemo(() => {
@@ -727,6 +733,12 @@ export default function AdminPage() {
     localStorage.setItem("admin_staff_role", staffFilterRole);
     localStorage.setItem("admin_staff_active", staffFilterActive);
   }, [staffFilterText, staffFilterRole, staffFilterActive]);
+
+  useEffect(() => {
+    if (auditLimit > 0) {
+      localStorage.setItem("admin_audit_limit", String(auditLimit));
+    }
+  }, [auditLimit]);
 
   useEffect(() => {
     let count = 0;
@@ -1351,6 +1363,7 @@ export default function AdminPage() {
     if (afterIdVal !== "") qs.set("afterId", String(afterIdVal));
     if (fromVal) qs.set("from", fromVal);
     if (toVal) qs.set("to", toVal);
+    if (auditLimit) qs.set("limit", String(auditLimit));
     return qs;
   }
 
@@ -1406,6 +1419,15 @@ export default function AdminPage() {
     setAuditBeforeId(lastId);
     setAuditAfterId("");
     await loadAuditLogs({ beforeId: lastId, afterId: "" });
+  }
+
+  async function loadAuditPrevPage() {
+    if (auditLogs.length === 0) return;
+    const firstId = auditLogs[0]?.id;
+    if (!firstId) return;
+    setAuditAfterId(firstId);
+    setAuditBeforeId("");
+    await loadAuditLogs({ afterId: firstId, beforeId: "" });
   }
 
   if (!authReady) {
@@ -1799,9 +1821,11 @@ export default function AdminPage() {
           <label>To <input type="date" value={auditTo} onChange={(e) => setAuditTo(e.target.value)} /></label>
           <label>Before ID <input type="number" value={auditBeforeId} onChange={(e) => setAuditBeforeId(e.target.value ? Number(e.target.value) : "")} /></label>
           <label>After ID <input type="number" value={auditAfterId} onChange={(e) => setAuditAfterId(e.target.value ? Number(e.target.value) : "")} /></label>
+          <label>Limit <input type="number" min={1} max={500} value={auditLimit} onChange={(e) => setAuditLimit(Number(e.target.value))} style={{ width: 90 }} /></label>
           <button onClick={loadAuditLogs} disabled={auditLoading}>{auditLoading ? "Loading..." : "Load"}</button>
           <button onClick={downloadAuditCsv} disabled={auditLoading}>CSV</button>
           <button onClick={() => { setAuditAfterId(""); setAuditBeforeId(""); loadAuditLogs(); }} disabled={auditLoading}>Latest</button>
+          <button onClick={loadAuditPrevPage} disabled={auditLoading || auditLogs.length === 0}>Prev page</button>
           <button onClick={loadAuditNextPage} disabled={auditLoading || auditLogs.length === 0}>Next page</button>
           <button onClick={clearAuditFilters} disabled={auditLoading}>Clear</button>
         </div>
