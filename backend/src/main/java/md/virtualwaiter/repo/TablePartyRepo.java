@@ -16,4 +16,5 @@ public interface TablePartyRepo extends JpaRepository<TableParty, Long> {
   Optional<TableParty> findActiveByTableId(Long tableId, Instant now);
 
   java.util.List<TableParty> findByStatus(String status);
+  java.util.List<TableParty> findTop200ByTableIdInAndStatusOrderByCreatedAtDesc(java.util.List<Long> tableIds, String status);
 }

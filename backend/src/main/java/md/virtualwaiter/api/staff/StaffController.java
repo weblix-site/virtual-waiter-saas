@@ -420,7 +420,7 @@ public class StaffController {
     String r = role == null ? "" : role.toUpperCase(Locale.ROOT);
     if ("ADMIN".equals(r)) return isAllowedTransition(current, next);
     if ("KITCHEN".equals(r)) {
-      return isAllowedTransition(current, next) && Set.of("ACCEPTED", "IN_PROGRESS", "READY").contains(next);
+      return isAllowedTransition(current, next) && Set.of("ACCEPTED", "IN_PROGRESS", "READY", "SERVED").contains(next);
     }
     if ("WAITER".equals(r)) {
       return isAllowedTransition(current, next) && Set.of("ACCEPTED", "READY", "SERVED", "CLOSED", "CANCELLED").contains(next);

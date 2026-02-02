@@ -434,6 +434,7 @@ class _OrdersTabState extends State<OrdersTab> {
   String? _error;
   List<dynamic> _orders = const [];
   String _sortMode = 'time_desc';
+  bool _showFocus = true;
 
   String get _auth => base64Encode(utf8.encode('${widget.username}:${widget.password}'));
 
@@ -469,6 +470,10 @@ class _OrdersTabState extends State<OrdersTab> {
       appBar: AppBar(
         title: const Text('Active Orders'),
         actions: [
+          IconButton(
+            onPressed: () => setState(() => _showFocus = !_showFocus),
+            icon: Icon(_showFocus ? Icons.visibility : Icons.visibility_off),
+          ),
           PopupMenuButton<String>(
             onSelected: (v) => setState(() => _sortMode = v),
             itemBuilder: (ctx) => const [
@@ -495,17 +500,66 @@ class _OrdersTabState extends State<OrdersTab> {
                   });
                   int warn = 0;
                   int crit = 0;
+                  final Map<int, Duration> maxAgeByTable = {};
+                  final Map<int, int> countByTable = {};
                   for (final o in orders) {
                     final age = _ageFromIso(o['createdAt']?.toString());
+                    final tableNumber = (o['tableNumber'] ?? 0) as int;
+                    final prev = maxAgeByTable[tableNumber];
+                    if (prev == null || age > prev) {
+                      maxAgeByTable[tableNumber] = age;
+                    }
+                    countByTable[tableNumber] = (countByTable[tableNumber] ?? 0) + 1;
                     if (age.inMinutes >= slaOrderCritMin) crit++;
                     else if (age.inMinutes >= slaOrderWarnMin) warn++;
                   }
+                  final focusTables = maxAgeByTable.entries.toList()
+                    ..sort((a, b) => b.value.inSeconds.compareTo(a.value.inSeconds));
+                  final topFocus = focusTables.take(3).toList();
                   return Column(
                     children: [
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
                         child: _slaSummaryRow(warn, crit),
                       ),
+                      if (_showFocus && topFocus.isNotEmpty)
+                        SizedBox(
+                          height: 96,
+                          child: ListView.separated(
+                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                            scrollDirection: Axis.horizontal,
+                            itemCount: topFocus.length,
+                            separatorBuilder: (_, __) => const SizedBox(width: 10),
+                            itemBuilder: (ctx, i) {
+                              final entry = topFocus[i];
+                              final tableNo = entry.key;
+                              final age = entry.value;
+                              final count = countByTable[tableNo] ?? 0;
+                              final color = _slaColor(age, slaOrderWarnMin, slaOrderCritMin);
+                              final minutes = age.inMinutes < 1 ? '<1m' : '${age.inMinutes}m';
+                              return Container(
+                                width: 180,
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: color.withOpacity(0.08),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: color.withOpacity(0.4)),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text('Table #$tableNo', style: const TextStyle(fontWeight: FontWeight.w700)),
+                                    const SizedBox(height: 6),
+                                    Text('Oldest: $minutes', style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+                                    const SizedBox(height: 4),
+                                    Text('Orders: $count', style: const TextStyle(color: Colors.black54)),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        ),
                       Expanded(
                         child: ListView.separated(
                           itemCount: orders.length,
@@ -556,6 +610,7 @@ class _CallsTabState extends State<CallsTab> {
   String? _error;
   List<dynamic> _calls = const [];
   String _sortMode = 'time_desc';
+  bool _showFocus = true;
 
   String get _auth => base64Encode(utf8.encode('${widget.username}:${widget.password}'));
 
@@ -591,6 +646,10 @@ class _CallsTabState extends State<CallsTab> {
       appBar: AppBar(
         title: const Text('Waiter Calls'),
         actions: [
+          IconButton(
+            onPressed: () => setState(() => _showFocus = !_showFocus),
+            icon: Icon(_showFocus ? Icons.visibility : Icons.visibility_off),
+          ),
           PopupMenuButton<String>(
             onSelected: (v) => setState(() => _sortMode = v),
             itemBuilder: (ctx) => const [
@@ -617,17 +676,66 @@ class _CallsTabState extends State<CallsTab> {
                   });
                   int warn = 0;
                   int crit = 0;
+                  final Map<int, Duration> maxAgeByTable = {};
+                  final Map<int, int> countByTable = {};
                   for (final c in calls) {
                     final age = _ageFromIso(c['createdAt']?.toString());
+                    final tableNumber = (c['tableNumber'] ?? 0) as int;
+                    final prev = maxAgeByTable[tableNumber];
+                    if (prev == null || age > prev) {
+                      maxAgeByTable[tableNumber] = age;
+                    }
+                    countByTable[tableNumber] = (countByTable[tableNumber] ?? 0) + 1;
                     if (age.inMinutes >= slaCallCritMin) crit++;
                     else if (age.inMinutes >= slaCallWarnMin) warn++;
                   }
+                  final focusTables = maxAgeByTable.entries.toList()
+                    ..sort((a, b) => b.value.inSeconds.compareTo(a.value.inSeconds));
+                  final topFocus = focusTables.take(3).toList();
                   return Column(
                     children: [
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
                         child: _slaSummaryRow(warn, crit),
                       ),
+                      if (_showFocus && topFocus.isNotEmpty)
+                        SizedBox(
+                          height: 96,
+                          child: ListView.separated(
+                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                            scrollDirection: Axis.horizontal,
+                            itemCount: topFocus.length,
+                            separatorBuilder: (_, __) => const SizedBox(width: 10),
+                            itemBuilder: (ctx, i) {
+                              final entry = topFocus[i];
+                              final tableNo = entry.key;
+                              final age = entry.value;
+                              final count = countByTable[tableNo] ?? 0;
+                              final color = _slaColor(age, slaCallWarnMin, slaCallCritMin);
+                              final minutes = age.inMinutes < 1 ? '<1m' : '${age.inMinutes}m';
+                              return Container(
+                                width: 180,
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: color.withOpacity(0.08),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: color.withOpacity(0.4)),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text('Table #$tableNo', style: const TextStyle(fontWeight: FontWeight.w700)),
+                                    const SizedBox(height: 6),
+                                    Text('Oldest: $minutes', style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+                                    const SizedBox(height: 4),
+                                    Text('Calls: $count', style: const TextStyle(color: Colors.black54)),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        ),
                       Expanded(
                         child: ListView.separated(
                           itemCount: calls.length,
@@ -746,6 +854,7 @@ class _BillsTabState extends State<BillsTab> {
   String? _error;
   List<dynamic> _bills = const [];
   String _sortMode = 'time_desc';
+  bool _showFocus = true;
 
   String get _auth => base64Encode(utf8.encode('${widget.username}:${widget.password}'));
 
@@ -811,6 +920,10 @@ class _BillsTabState extends State<BillsTab> {
       appBar: AppBar(
         title: const Text('Bill Requests'),
         actions: [
+          IconButton(
+            onPressed: () => setState(() => _showFocus = !_showFocus),
+            icon: Icon(_showFocus ? Icons.visibility : Icons.visibility_off),
+          ),
           PopupMenuButton<String>(
             onSelected: (v) => setState(() => _sortMode = v),
             itemBuilder: (ctx) => const [
@@ -837,17 +950,66 @@ class _BillsTabState extends State<BillsTab> {
                   });
                   int warn = 0;
                   int crit = 0;
+                  final Map<int, Duration> maxAgeByTable = {};
+                  final Map<int, int> countByTable = {};
                   for (final b in bills) {
                     final age = _ageFromIso(b['createdAt']?.toString());
+                    final tableNumber = (b['tableNumber'] ?? 0) as int;
+                    final prev = maxAgeByTable[tableNumber];
+                    if (prev == null || age > prev) {
+                      maxAgeByTable[tableNumber] = age;
+                    }
+                    countByTable[tableNumber] = (countByTable[tableNumber] ?? 0) + 1;
                     if (age.inMinutes >= slaBillCritMin) crit++;
                     else if (age.inMinutes >= slaBillWarnMin) warn++;
                   }
+                  final focusTables = maxAgeByTable.entries.toList()
+                    ..sort((a, b) => b.value.inSeconds.compareTo(a.value.inSeconds));
+                  final topFocus = focusTables.take(3).toList();
                   return Column(
                     children: [
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
                         child: _slaSummaryRow(warn, crit),
                       ),
+                      if (_showFocus && topFocus.isNotEmpty)
+                        SizedBox(
+                          height: 96,
+                          child: ListView.separated(
+                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                            scrollDirection: Axis.horizontal,
+                            itemCount: topFocus.length,
+                            separatorBuilder: (_, __) => const SizedBox(width: 10),
+                            itemBuilder: (ctx, i) {
+                              final entry = topFocus[i];
+                              final tableNo = entry.key;
+                              final age = entry.value;
+                              final count = countByTable[tableNo] ?? 0;
+                              final color = _slaColor(age, slaBillWarnMin, slaBillCritMin);
+                              final minutes = age.inMinutes < 1 ? '<1m' : '${age.inMinutes}m';
+                              return Container(
+                                width: 180,
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: color.withOpacity(0.08),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: color.withOpacity(0.4)),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text('Table #$tableNo', style: const TextStyle(fontWeight: FontWeight.w700)),
+                                    const SizedBox(height: 6),
+                                    Text('Oldest: $minutes', style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+                                    const SizedBox(height: 4),
+                                    Text('Bills: $count', style: const TextStyle(color: Colors.black54)),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        ),
                       Expanded(
                         child: ListView.separated(
                           itemCount: bills.length,
@@ -945,6 +1107,7 @@ class _KitchenTabState extends State<KitchenTab> {
   List<dynamic> _orders = const [];
   String _statusFilter = 'NEW,ACCEPTED,IN_PROGRESS';
   String _sortMode = 'time_desc';
+  bool _showFocus = true;
 
   String get _auth => base64Encode(utf8.encode('${widget.username}:${widget.password}'));
 
@@ -999,6 +1162,10 @@ class _KitchenTabState extends State<KitchenTab> {
       appBar: AppBar(
         title: const Text('Kitchen Queue'),
         actions: [
+          IconButton(
+            onPressed: () => setState(() => _showFocus = !_showFocus),
+            icon: Icon(_showFocus ? Icons.visibility : Icons.visibility_off),
+          ),
           PopupMenuButton<String>(
             onSelected: (v) {
               setState(() => _statusFilter = v);
@@ -1028,17 +1195,67 @@ class _KitchenTabState extends State<KitchenTab> {
               : Builder(builder: (context) {
                   int warn = 0;
                   int crit = 0;
+                  final Map<int, Duration> maxAgeByTable = {};
+                  final Map<int, int> countByTable = {};
                   for (final o in orders) {
                     final ageSec = (o['ageSeconds'] ?? 0) as int;
+                    final tableNumber = (o['tableNumber'] ?? 0) as int;
+                    final age = Duration(seconds: ageSec);
+                    final prev = maxAgeByTable[tableNumber];
+                    if (prev == null || age > prev) {
+                      maxAgeByTable[tableNumber] = age;
+                    }
+                    countByTable[tableNumber] = (countByTable[tableNumber] ?? 0) + 1;
                     if (ageSec >= slaKitchenCritMin * 60) crit++;
                     else if (ageSec >= slaKitchenWarnMin * 60) warn++;
                   }
+                  final focusTables = maxAgeByTable.entries.toList()
+                    ..sort((a, b) => b.value.inSeconds.compareTo(a.value.inSeconds));
+                  final topFocus = focusTables.take(3).toList();
                   return Column(
                     children: [
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
                         child: _slaSummaryRow(warn, crit),
                       ),
+                      if (_showFocus && topFocus.isNotEmpty)
+                        SizedBox(
+                          height: 96,
+                          child: ListView.separated(
+                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                            scrollDirection: Axis.horizontal,
+                            itemCount: topFocus.length,
+                            separatorBuilder: (_, __) => const SizedBox(width: 10),
+                            itemBuilder: (ctx, i) {
+                              final entry = topFocus[i];
+                              final tableNo = entry.key;
+                              final age = entry.value;
+                              final count = countByTable[tableNo] ?? 0;
+                              final color = _slaColor(age, slaKitchenWarnMin, slaKitchenCritMin);
+                              final minutes = age.inMinutes < 1 ? '<1m' : '${age.inMinutes}m';
+                              return Container(
+                                width: 180,
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: color.withOpacity(0.08),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: color.withOpacity(0.4)),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text('Table #$tableNo', style: const TextStyle(fontWeight: FontWeight.w700)),
+                                    const SizedBox(height: 6),
+                                    Text('Oldest: $minutes', style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+                                    const SizedBox(height: 4),
+                                    Text('Kitchen: $count', style: const TextStyle(color: Colors.black54)),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        ),
                       Expanded(
                         child: ListView.separated(
                           itemCount: orders.length,
@@ -1060,7 +1277,7 @@ class _KitchenTabState extends State<KitchenTab> {
                                     order: o,
                                     username: widget.username,
                                     password: widget.password,
-                                    actions: const ['ACCEPTED', 'IN_PROGRESS', 'READY'],
+                                    actions: const ['ACCEPTED', 'IN_PROGRESS', 'READY', 'SERVED'],
                                   ),
                                 ));
                               },

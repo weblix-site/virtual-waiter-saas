@@ -19,6 +19,7 @@ import md.virtualwaiter.otp.OtpService;
 import md.virtualwaiter.service.BranchSettingsService;
 import md.virtualwaiter.service.PartyService;
 import md.virtualwaiter.service.NotificationEventService;
+import md.virtualwaiter.service.RateLimitService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -31,6 +32,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Locale;
 import java.util.*;
+import org.springframework.beans.factory.annotation.Value;
 
 @RestController
 @RequestMapping("/api/public")
@@ -54,6 +56,13 @@ public class PublicController {
   private final BranchSettingsService settingsService;
   private final NotificationEventService notificationEventService;
   private final PartyService partyService;
+  private final RateLimitService rateLimitService;
+  private final int otpLimitMax;
+  private final int otpLimitWindowSeconds;
+  private final int orderLimitMax;
+  private final int orderLimitWindowSeconds;
+  private final int partyLimitMax;
+  private final int partyLimitWindowSeconds;
 
   public PublicController(
     CafeTableRepo tableRepo,
@@ -73,7 +82,14 @@ public class PublicController {
     OtpService otpService,
     BranchSettingsService settingsService,
     NotificationEventService notificationEventService,
-    PartyService partyService
+    PartyService partyService,
+    RateLimitService rateLimitService,
+    @Value("${app.rateLimit.otp.maxRequests:5}") int otpLimitMax,
+    @Value("${app.rateLimit.otp.windowSeconds:300}") int otpLimitWindowSeconds,
+    @Value("${app.rateLimit.order.maxRequests:10}") int orderLimitMax,
+    @Value("${app.rateLimit.order.windowSeconds:60}") int orderLimitWindowSeconds,
+    @Value("${app.rateLimit.party.maxRequests:10}") int partyLimitMax,
+    @Value("${app.rateLimit.party.windowSeconds:60}") int partyLimitWindowSeconds
   ) {
     this.tableRepo = tableRepo;
     this.sessionRepo = sessionRepo;
@@ -93,6 +109,13 @@ public class PublicController {
     this.settingsService = settingsService;
     this.notificationEventService = notificationEventService;
     this.partyService = partyService;
+    this.rateLimitService = rateLimitService;
+    this.otpLimitMax = otpLimitMax;
+    this.otpLimitWindowSeconds = otpLimitWindowSeconds;
+    this.orderLimitMax = orderLimitMax;
+    this.orderLimitWindowSeconds = orderLimitWindowSeconds;
+    this.partyLimitMax = partyLimitMax;
+    this.partyLimitWindowSeconds = partyLimitWindowSeconds;
   }
 
   public record StartSessionRequest(@NotBlank String tablePublicId, @NotBlank String sig, @NotNull Long ts, @NotBlank String locale) {}
@@ -343,6 +366,10 @@ public class PublicController {
     GuestSession s = sessionRepo.findById(req.guestSessionId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
     requireSessionSecret(s, httpReq);
+    String clientIp = getClientIp(httpReq);
+    if (!rateLimitService.allow("order:" + clientIp, orderLimitMax, orderLimitWindowSeconds)) {
+      throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Too many orders from IP");
+    }
     if (s.expiresAt.isBefore(Instant.now())) {
       throw new ResponseStatusException(HttpStatus.GONE, "Session expired");
     }
@@ -464,6 +491,10 @@ public class PublicController {
     GuestSession s = sessionRepo.findById(req.guestSessionId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
     requireSessionSecret(s, httpReq);
+    String clientIp = getClientIp(httpReq);
+    if (!rateLimitService.allow("party:" + clientIp, partyLimitMax, partyLimitWindowSeconds)) {
+      throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Too many party requests from IP");
+    }
     if (s.expiresAt.isBefore(Instant.now())) {
       throw new ResponseStatusException(HttpStatus.GONE, "Session expired");
     }
@@ -521,6 +552,10 @@ public class PublicController {
     GuestSession s = sessionRepo.findById(req.guestSessionId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
     requireSessionSecret(s, httpReq);
+    String clientIp = getClientIp(httpReq);
+    if (!rateLimitService.allow("party:" + clientIp, partyLimitMax, partyLimitWindowSeconds)) {
+      throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Too many party requests from IP");
+    }
     if (s.expiresAt.isBefore(Instant.now())) {
       throw new ResponseStatusException(HttpStatus.GONE, "Session expired");
     }
@@ -593,6 +628,10 @@ public class PublicController {
     GuestSession s = sessionRepo.findById(req.guestSessionId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
     requireSessionSecret(s, httpReq);
+    String clientIp = getClientIp(httpReq);
+    if (!rateLimitService.allow("otp:" + clientIp, otpLimitMax, otpLimitWindowSeconds)) {
+      throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Too many OTP requests from IP");
+    }
     var r = otpService.sendOtp(req.guestSessionId, req.phoneE164, normalizeLocale(req.locale));
     return new SendOtpResponse(r.challengeId(), r.ttlSeconds(), r.devCode());
   }

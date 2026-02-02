@@ -19,6 +19,8 @@ public interface AuditLogRepo extends JpaRepository<AuditLog, Long> {
       and (:action is null or a.action = :action)
       and (:entityType is null or a.entityType = :entityType)
       and (:actorUsername is null or a.actorUsername = :actorUsername)
+      and (:fromTs is null or a.createdAt >= :fromTs)
+      and (:toTs is null or a.createdAt <= :toTs)
       and (:beforeId is null or a.id < :beforeId)
       and (:afterId is null or a.id > :afterId)
     order by a.id desc
@@ -28,6 +30,8 @@ public interface AuditLogRepo extends JpaRepository<AuditLog, Long> {
     @Param("action") String action,
     @Param("entityType") String entityType,
     @Param("actorUsername") String actorUsername,
+    @Param("fromTs") java.time.Instant fromTs,
+    @Param("toTs") java.time.Instant toTs,
     @Param("beforeId") Long beforeId,
     @Param("afterId") Long afterId,
     Pageable pageable

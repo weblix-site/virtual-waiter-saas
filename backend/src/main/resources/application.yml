@@ -25,6 +25,16 @@ app:
     resendCooldownSeconds: 60
     length: 4
     devEchoCode: true
+  rateLimit:
+    otp:
+      maxRequests: 5
+      windowSeconds: 300
+    order:
+      maxRequests: 10
+      windowSeconds: 60
+    party:
+      maxRequests: 10
+      windowSeconds: 60
 
   tips:
     enabled: false

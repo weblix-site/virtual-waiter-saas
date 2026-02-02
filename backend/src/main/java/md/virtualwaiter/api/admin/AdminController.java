@@ -43,6 +43,8 @@ public class AdminController {
   private final MenuItemModifierGroupRepo menuItemModifierGroupRepo;
   private final AuditService auditService;
   private final AuditLogRepo auditLogRepo;
+  private final TablePartyRepo partyRepo;
+  private final GuestSessionRepo guestSessionRepo;
 
   public AdminController(
     StaffUserRepo staffUserRepo,
@@ -59,7 +61,9 @@ public class AdminController {
     ModifierOptionRepo modifierOptionRepo,
     MenuItemModifierGroupRepo menuItemModifierGroupRepo,
     AuditService auditService,
-    AuditLogRepo auditLogRepo
+    AuditLogRepo auditLogRepo,
+    TablePartyRepo partyRepo,
+    GuestSessionRepo guestSessionRepo
   ) {
     this.staffUserRepo = staffUserRepo;
     this.categoryRepo = categoryRepo;
@@ -76,6 +80,8 @@ public class AdminController {
     this.menuItemModifierGroupRepo = menuItemModifierGroupRepo;
     this.auditService = auditService;
     this.auditLogRepo = auditLogRepo;
+    this.partyRepo = partyRepo;
+    this.guestSessionRepo = guestSessionRepo;
   }
 
   private StaffUser current(Authentication auth) {
@@ -126,6 +132,63 @@ public class AdminController {
   public MeResponse me(Authentication auth) {
     StaffUser u = requireAdmin(auth);
     return new MeResponse(u.id, u.username, u.role, u.branchId);
+  }
+
+  public record AdminPartyDto(
+    long id,
+    long tableId,
+    int tableNumber,
+    String pin,
+    String status,
+    String createdAt,
+    String expiresAt,
+    String closedAt,
+    List<Long> guestSessionIds
+  ) {}
+
+  @GetMapping("/parties")
+  public List<AdminPartyDto> listParties(
+    @RequestParam(value = "status", required = false) String status,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    List<CafeTable> tables = tableRepo.findByBranchId(bid);
+    if (tables.isEmpty()) return List.of();
+    List<Long> tableIds = tables.stream().map(t -> t.id).toList();
+    Map<Long, Integer> tableNumberById = new HashMap<>();
+    for (CafeTable t : tables) {
+      tableNumberById.put(t.id, t.number);
+    }
+
+    String st = status == null || status.isBlank() ? "ACTIVE" : status.trim().toUpperCase(Locale.ROOT);
+    List<TableParty> parties = partyRepo.findTop200ByTableIdInAndStatusOrderByCreatedAtDesc(tableIds, st);
+    if (parties.isEmpty()) return List.of();
+
+    List<Long> partyIds = parties.stream().map(p -> p.id).toList();
+    List<GuestSession> sessions = guestSessionRepo.findByPartyIdIn(partyIds);
+    Map<Long, List<Long>> sessionIdsByParty = new HashMap<>();
+    for (GuestSession s : sessions) {
+      if (s.partyId == null) continue;
+      sessionIdsByParty.computeIfAbsent(s.partyId, k -> new ArrayList<>()).add(s.id);
+    }
+
+    List<AdminPartyDto> out = new ArrayList<>();
+    for (TableParty p : parties) {
+      out.add(new AdminPartyDto(
+        p.id,
+        p.tableId,
+        tableNumberById.getOrDefault(p.tableId, 0),
+        p.pin,
+        p.status,
+        p.createdAt == null ? null : p.createdAt.toString(),
+        p.expiresAt == null ? null : p.expiresAt.toString(),
+        p.closedAt == null ? null : p.closedAt.toString(),
+        sessionIdsByParty.getOrDefault(p.id, List.of())
+      ));
+    }
+    return out;
   }
 
   // --- Branch settings ---
@@ -1071,6 +1134,18 @@ public class AdminController {
     }
   }
 
+  private static Instant parseInstantOrDateOrNull(String v, boolean isStart) {
+    if (v == null || v.isBlank()) return null;
+    String s = v.trim();
+    try {
+      return Instant.parse(s);
+    } catch (Exception ignored) {
+      LocalDate d = LocalDate.parse(s);
+      return isStart ? d.atStartOfDay().toInstant(ZoneOffset.UTC)
+        : d.plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC).minusSeconds(1);
+    }
+  }
+
   // --- Audit logs ---
   public record AuditLogDto(
     long id,
@@ -1091,6 +1166,8 @@ public class AdminController {
     @RequestParam(value = "action", required = false) String action,
     @RequestParam(value = "entityType", required = false) String entityType,
     @RequestParam(value = "actorUsername", required = false) String actorUsername,
+    @RequestParam(value = "from", required = false) String from,
+    @RequestParam(value = "to", required = false) String to,
     @RequestParam(value = "beforeId", required = false) Long beforeId,
     @RequestParam(value = "afterId", required = false) Long afterId,
     Authentication auth
@@ -1100,11 +1177,15 @@ public class AdminController {
     String actionVal = action == null || action.isBlank() ? null : action.trim();
     String entityTypeVal = entityType == null || entityType.isBlank() ? null : entityType.trim();
     String actorVal = actorUsername == null || actorUsername.isBlank() ? null : actorUsername.trim();
+    Instant fromTs = parseInstantOrDateOrNull(from, true);
+    Instant toTs = parseInstantOrDateOrNull(to, false);
     List<AuditLog> logs = auditLogRepo.findFiltered(
       bid,
       actionVal,
       entityTypeVal,
       actorVal,
+      fromTs,
+      toTs,
       beforeId,
       afterId,
       PageRequest.of(0, 200)
@@ -1133,6 +1214,8 @@ public class AdminController {
     @RequestParam(value = "action", required = false) String action,
     @RequestParam(value = "entityType", required = false) String entityType,
     @RequestParam(value = "actorUsername", required = false) String actorUsername,
+    @RequestParam(value = "from", required = false) String from,
+    @RequestParam(value = "to", required = false) String to,
     @RequestParam(value = "beforeId", required = false) Long beforeId,
     @RequestParam(value = "afterId", required = false) Long afterId,
     Authentication auth
@@ -1142,11 +1225,15 @@ public class AdminController {
     String actionVal = action == null || action.isBlank() ? null : action.trim();
     String entityTypeVal = entityType == null || entityType.isBlank() ? null : entityType.trim();
     String actorVal = actorUsername == null || actorUsername.isBlank() ? null : actorUsername.trim();
+    Instant fromTs = parseInstantOrDateOrNull(from, true);
+    Instant toTs = parseInstantOrDateOrNull(to, false);
     List<AuditLog> logs = auditLogRepo.findFiltered(
       bid,
       actionVal,
       entityTypeVal,
       actorVal,
+      fromTs,
+      toTs,
       beforeId,
       afterId,
       PageRequest.of(0, 200)

@@ -144,6 +144,18 @@ type AuditLog = {
   detailsJson?: string | null;
 };
 
+type PartyDto = {
+  id: number;
+  tableId: number;
+  tableNumber: number;
+  pin: string;
+  status: string;
+  createdAt: string;
+  expiresAt: string;
+  closedAt?: string | null;
+  guestSessionIds: number[];
+};
+
 function money(priceCents: number, currency = "MDL") {
   return `${(priceCents / 100).toFixed(2)} ${currency}`;
 }
@@ -179,6 +191,10 @@ export default function AdminPage() {
   const [auditAction, setAuditAction] = useState("");
   const [auditEntityType, setAuditEntityType] = useState("");
   const [auditActor, setAuditActor] = useState("");
+  const [auditFrom, setAuditFrom] = useState("");
+  const [auditTo, setAuditTo] = useState("");
+  const [parties, setParties] = useState<PartyDto[]>([]);
+  const [partyStatusFilter, setPartyStatusFilter] = useState("ACTIVE");
 
   const [newCatNameRu, setNewCatNameRu] = useState("");
   const [newCatSort, setNewCatSort] = useState(0);
@@ -205,6 +221,7 @@ export default function AdminPage() {
   const [newItemCurrency, setNewItemCurrency] = useState("MDL");
   const [newItemActive, setNewItemActive] = useState(true);
   const [newItemStopList, setNewItemStopList] = useState(false);
+  const [menuSearch, setMenuSearch] = useState("");
 
   const [editingCategoryId, setEditingCategoryId] = useState<number | null>(null);
   const [editCatNameRu, setEditCatNameRu] = useState("");
@@ -268,13 +285,14 @@ export default function AdminPage() {
     if (!authReady) return;
     setError(null);
     try {
-      const [catsRes, itemsRes, tablesRes, staffRes, settingsRes, modGroupsRes] = await Promise.all([
+      const [catsRes, itemsRes, tablesRes, staffRes, settingsRes, modGroupsRes, partiesRes] = await Promise.all([
         api("/api/admin/menu/categories"),
         api("/api/admin/menu/items"),
         api("/api/admin/tables"),
         api("/api/admin/staff"),
         api("/api/admin/branch-settings"),
         api("/api/admin/modifier-groups"),
+        api(`/api/admin/parties?status=${encodeURIComponent(partyStatusFilter)}`),
       ]);
       setCategories(await catsRes.json());
       setItems(await itemsRes.json());
@@ -282,6 +300,7 @@ export default function AdminPage() {
       setStaff(await staffRes.json());
       setSettings(await settingsRes.json());
       setModGroups(await modGroupsRes.json());
+      setParties(await partiesRes.json());
     } catch (e: any) {
       setError(e?.message ?? "Load error");
     }
@@ -290,7 +309,7 @@ export default function AdminPage() {
   useEffect(() => {
     loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authReady]);
+  }, [authReady, partyStatusFilter]);
 
   async function login() {
     setError(null);
@@ -655,15 +674,36 @@ export default function AdminPage() {
     loadAll();
   }
 
-  async function loadAuditLogs() {
+  function buildAuditQuery(overrides?: {
+    beforeId?: number | "";
+    afterId?: number | "";
+    from?: string;
+    to?: string;
+  }) {
+    const qs = new URLSearchParams();
+    if (auditAction.trim()) qs.set("action", auditAction.trim());
+    if (auditEntityType.trim()) qs.set("entityType", auditEntityType.trim());
+    if (auditActor.trim()) qs.set("actorUsername", auditActor.trim());
+    const beforeIdVal = overrides?.beforeId ?? auditBeforeId;
+    const afterIdVal = overrides?.afterId ?? auditAfterId;
+    const fromVal = overrides?.from ?? auditFrom;
+    const toVal = overrides?.to ?? auditTo;
+    if (beforeIdVal !== "") qs.set("beforeId", String(beforeIdVal));
+    if (afterIdVal !== "") qs.set("afterId", String(afterIdVal));
+    if (fromVal) qs.set("from", fromVal);
+    if (toVal) qs.set("to", toVal);
+    return qs;
+  }
+
+  async function loadAuditLogs(overrides?: {
+    beforeId?: number | "";
+    afterId?: number | "";
+    from?: string;
+    to?: string;
+  }) {
     setAuditLoading(true);
     try {
-      const qs = new URLSearchParams();
-      if (auditAction.trim()) qs.set("action", auditAction.trim());
-      if (auditEntityType.trim()) qs.set("entityType", auditEntityType.trim());
-      if (auditActor.trim()) qs.set("actorUsername", auditActor.trim());
-      if (auditBeforeId !== "") qs.set("beforeId", String(auditBeforeId));
-      if (auditAfterId !== "") qs.set("afterId", String(auditAfterId));
+      const qs = buildAuditQuery(overrides);
       const res = await api(`/api/admin/audit-logs?${qs.toString()}`);
       const body = await res.json();
       setAuditLogs(body);
@@ -675,12 +715,7 @@ export default function AdminPage() {
   }
 
   async function downloadAuditCsv() {
-    const qs = new URLSearchParams();
-    if (auditAction.trim()) qs.set("action", auditAction.trim());
-    if (auditEntityType.trim()) qs.set("entityType", auditEntityType.trim());
-    if (auditActor.trim()) qs.set("actorUsername", auditActor.trim());
-    if (auditBeforeId !== "") qs.set("beforeId", String(auditBeforeId));
-    if (auditAfterId !== "") qs.set("afterId", String(auditAfterId));
+    const qs = buildAuditQuery();
     const res = await api(`/api/admin/audit-logs.csv?${qs.toString()}`, {
       headers: { Authorization: authHeader },
     });
@@ -701,6 +736,17 @@ export default function AdminPage() {
     setAuditActor("");
     setAuditBeforeId("");
     setAuditAfterId("");
+    setAuditFrom("");
+    setAuditTo("");
+  }
+
+  async function loadAuditNextPage() {
+    if (auditLogs.length === 0) return;
+    const lastId = auditLogs[auditLogs.length - 1]?.id;
+    if (!lastId) return;
+    setAuditBeforeId(lastId);
+    setAuditAfterId("");
+    await loadAuditLogs({ beforeId: lastId, afterId: "" });
   }
 
   if (!authReady) {
@@ -745,6 +791,54 @@ export default function AdminPage() {
           </div>
         )}
         <button onClick={saveSettings} style={{ marginTop: 12, padding: "8px 12px" }}>Save settings</button>
+      </section>
+
+      <section style={{ marginTop: 24 }}>
+        <h2>Parties</h2>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <label>
+            Status
+            <select value={partyStatusFilter} onChange={(e) => setPartyStatusFilter(e.target.value)}>
+              <option value="ACTIVE">ACTIVE</option>
+              <option value="CLOSED">CLOSED</option>
+            </select>
+          </label>
+          <button onClick={loadAll}>Refresh</button>
+        </div>
+        {parties.length === 0 ? (
+          <div style={{ marginTop: 8, color: "#666" }}>No parties</div>
+        ) : (
+          <div style={{ marginTop: 10 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>ID</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Table</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>PIN</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Status</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Participants</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Created</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Expires</th>
+                </tr>
+              </thead>
+              <tbody>
+                {parties.map((p) => (
+                  <tr key={p.id}>
+                    <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{p.id}</td>
+                    <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>#{p.tableNumber}</td>
+                    <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{p.pin}</td>
+                    <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{p.status}</td>
+                    <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>
+                      {p.guestSessionIds.length === 0 ? "-" : p.guestSessionIds.join(", ")}
+                    </td>
+                    <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{p.createdAt}</td>
+                    <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{p.expiresAt}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       <section style={{ marginTop: 24 }}>
@@ -882,11 +976,14 @@ export default function AdminPage() {
             <input list="audit-entities" value={auditEntityType} onChange={(e) => setAuditEntityType(e.target.value)} placeholder="MenuItem/StaffUser" />
           </label>
           <label>Actor <input value={auditActor} onChange={(e) => setAuditActor(e.target.value)} placeholder="username" /></label>
+          <label>From <input type="date" value={auditFrom} onChange={(e) => setAuditFrom(e.target.value)} /></label>
+          <label>To <input type="date" value={auditTo} onChange={(e) => setAuditTo(e.target.value)} /></label>
           <label>Before ID <input type="number" value={auditBeforeId} onChange={(e) => setAuditBeforeId(e.target.value ? Number(e.target.value) : "")} /></label>
           <label>After ID <input type="number" value={auditAfterId} onChange={(e) => setAuditAfterId(e.target.value ? Number(e.target.value) : "")} /></label>
           <button onClick={loadAuditLogs} disabled={auditLoading}>{auditLoading ? "Loading..." : "Load"}</button>
           <button onClick={downloadAuditCsv} disabled={auditLoading}>CSV</button>
           <button onClick={() => { setAuditAfterId(""); setAuditBeforeId(""); loadAuditLogs(); }} disabled={auditLoading}>Latest</button>
+          <button onClick={loadAuditNextPage} disabled={auditLoading || auditLogs.length === 0}>Next page</button>
           <button onClick={clearAuditFilters} disabled={auditLoading}>Clear</button>
         </div>
         <datalist id="audit-actions">
@@ -978,6 +1075,14 @@ export default function AdminPage() {
 
       <section style={{ marginTop: 24 }}>
         <h2>Menu Items</h2>
+        <div style={{ marginBottom: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <input
+            placeholder="Search (RU/RO/EN)"
+            value={menuSearch}
+            onChange={(e) => setMenuSearch(e.target.value)}
+          />
+          <button onClick={() => setMenuSearch("")}>Clear</button>
+        </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <select value={newItemCatId} onChange={(e) => setNewItemCatId(e.target.value ? Number(e.target.value) : "")}>
             <option value="">Category</option>
@@ -1046,7 +1151,16 @@ export default function AdminPage() {
           </div>
         )}
         <div style={{ marginTop: 10 }}>
-          {items.map((it) => (
+          {items
+            .filter((it) => {
+              const q = menuSearch.trim().toLowerCase();
+              if (!q) return true;
+              const nRu = (it.nameRu ?? "").toLowerCase();
+              const nRo = (it.nameRo ?? "").toLowerCase();
+              const nEn = (it.nameEn ?? "").toLowerCase();
+              return nRu.includes(q) || nRo.includes(q) || nEn.includes(q);
+            })
+            .map((it) => (
             <div key={it.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "6px 0", borderBottom: "1px solid #eee" }}>
               <strong>{it.nameRu}</strong>
               <span>{money(it.priceCents, it.currency)}</span>
