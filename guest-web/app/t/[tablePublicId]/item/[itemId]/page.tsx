@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { t, type Lang } from "@/app/i18n";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8080";
@@ -61,7 +62,7 @@ export default function ItemPage({ params, searchParams }: any) {
     return () => {
       cancelled = true;
     };
-  }, [tablePublicId, itemId, sig, lang]);
+  }, [tablePublicId, itemId, sig, lang, ts]);
 
   if (loading) return <main style={{ padding: 20 }}>{t(lang, "loading")}</main>;
   if (error) return <main style={{ padding: 20 }}><h2>{t(lang, "error")}</h2><pre>{error}</pre></main>;
@@ -75,10 +76,13 @@ export default function ItemPage({ params, searchParams }: any) {
 
       {item.photos && item.photos.length > 0 ? (
         <div style={{ marginBottom: 12 }}>
-          <img
+          <Image
             src={item.photos[Math.min(activePhoto, item.photos.length - 1)]}
             alt={item.name}
+            width={900}
+            height={540}
             style={{ width: "100%", maxHeight: 360, objectFit: "cover", borderRadius: 12, marginBottom: 8 }}
+            unoptimized
           />
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {item.photos.map((p, i) => (
@@ -87,7 +91,14 @@ export default function ItemPage({ params, searchParams }: any) {
                 onClick={() => setActivePhoto(i)}
                 style={{ border: activePhoto === i ? "2px solid #333" : "1px solid #ddd", padding: 0, borderRadius: 8 }}
               >
-                <img src={p} alt={item.name} style={{ width: 96, height: 72, objectFit: "cover", borderRadius: 6 }} />
+                <Image
+                  src={p}
+                  alt={item.name}
+                  width={96}
+                  height={72}
+                  style={{ width: 96, height: 72, objectFit: "cover", borderRadius: 6 }}
+                  unoptimized
+                />
               </button>
             ))}
           </div>

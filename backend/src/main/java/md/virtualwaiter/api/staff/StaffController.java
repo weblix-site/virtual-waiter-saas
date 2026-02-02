@@ -579,7 +579,7 @@ public class StaffController {
       if (v.isEmpty()) continue;
       try {
         orderIds.add(Long.parseLong(v));
-      } catch (_) {}
+      } catch (Exception ignored) {}
     }
     if (orderIds.isEmpty()) return List.of();
 

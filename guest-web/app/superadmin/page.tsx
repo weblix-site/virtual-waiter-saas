@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8080";
 
@@ -233,6 +233,7 @@ export default function SuperAdminPage() {
   const [sessionExpired, setSessionExpired] = useState(false);
   const redirectingRef = useRef(false);
   const [lang, setLang] = useState<Lang>("ru");
+  const translate = t;
 
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -253,6 +254,8 @@ export default function SuperAdminPage() {
   const [hallId, setHallId] = useState<number | "">("");
   const [newHallName, setNewHallName] = useState("");
   const [newHallSort, setNewHallSort] = useState(0);
+  const [newPlanName, setNewPlanName] = useState("");
+  const [newPlanSort, setNewPlanSort] = useState(0);
   const [selectedTableId, setSelectedTableId] = useState<number | null>(null);
   const [planEditMode, setPlanEditMode] = useState(true);
   const [planPreview, setPlanPreview] = useState(false);
@@ -359,7 +362,7 @@ export default function SuperAdminPage() {
   };
 
   const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
-  const snap = (v: number, step = 2) => (snapEnabled ? Math.round(v / step) * step : v);
+  const snap = useCallback((v: number, step = 2) => (snapEnabled ? Math.round(v / step) * step : v), [snapEnabled]);
   const isInteractive = planEditMode && !planPreview;
 
   const layoutDefaults = (idx: number) => {
@@ -525,7 +528,7 @@ export default function SuperAdminPage() {
       window.removeEventListener("pointermove", handleMove);
       window.removeEventListener("pointerup", handleUp);
     };
-  }, [planZoom, snapEnabled]);
+  }, [planZoom, snap]);
 
   async function login() {
     setError(null);
@@ -1068,7 +1071,7 @@ export default function SuperAdminPage() {
           <select value={tenantId} onChange={(e) => setTenantId(e.target.value ? Number(e.target.value) : "")}>
             <option value="">{t(lang, "selectTenant")}</option>
             {tenants.map((t) => (
-              <option key={t.id} value={t.id}>{t.name} {t.isActive ? "" : t(lang, "inactiveSuffix")}</option>
+              <option key={t.id} value={t.id}>{t.name} {t.isActive ? "" : translate(lang, "inactiveSuffix")}</option>
             ))}
           </select>
           <input placeholder={t(lang, "newTenantName")} value={newTenantName} onChange={(e) => setNewTenantName(e.target.value)} />
@@ -1078,9 +1081,9 @@ export default function SuperAdminPage() {
           {tenants.map((t) => (
             <div key={t.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "4px 0" }}>
               <strong>{t.name}</strong>
-              <span>{t.isActive ? t(lang, "active") : t(lang, "inactive")}</span>
-              <button onClick={() => toggleTenant(t)}>{t.isActive ? t(lang, "disable") : t(lang, "enable")}</button>
-              <button onClick={() => deleteTenant(t.id)}>{t(lang, "delete")}</button>
+              <span>{t.isActive ? translate(lang, "active") : translate(lang, "inactive")}</span>
+              <button onClick={() => toggleTenant(t)}>{t.isActive ? translate(lang, "disable") : translate(lang, "enable")}</button>
+              <button onClick={() => deleteTenant(t.id)}>{translate(lang, "delete")}</button>
             </div>
           ))}
         </div>
@@ -1386,6 +1389,7 @@ export default function SuperAdminPage() {
                     });
                     plan = await res.json();
                   }
+                  if (!plan) return;
                   await api(`/api/admin/halls/${hallId}`, { method: "PATCH", body: JSON.stringify({ activePlanId: plan.id }) });
                   setHallPlanId(plan.id);
                   loadTables();
@@ -1653,7 +1657,7 @@ export default function SuperAdminPage() {
                     >
                       <div style={{ fontWeight: 700, fontSize: 16 }}>#{t.number}</div>
                       <div style={{ fontSize: 12, color }}>
-                        {t.assignedWaiterId ? `${t(lang, "waiterLabel")} #${t.assignedWaiterId}` : t(lang, "unassigned")}
+                        {t.assignedWaiterId ? `${translate(lang, "waiterLabel")} #${t.assignedWaiterId}` : translate(lang, "unassigned")}
                       </div>
                       {layout.layoutZone ? (
                         <div style={{ fontSize: 11, color: "#666" }}>{layout.layoutZone}</div>

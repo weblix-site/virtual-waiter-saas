@@ -604,6 +604,7 @@ public class PublicController {
     CafeTable table = tableRepo.findById(s.tableId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
     BranchSettingsService.Resolved settings = settingsService.resolveForBranch(table.branchId);
+    TableParty activeParty = partyService.getActivePartyOrNull(s, table.id, Instant.now());
     if (settings.requireOtpForFirstOrder() && !s.isVerified) {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "OTP required before joining a party");
     }
@@ -665,6 +666,7 @@ public class PublicController {
     CafeTable table = tableRepo.findById(s.tableId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
     BranchSettingsService.Resolved settings = settingsService.resolveForBranch(table.branchId);
+    TableParty activeParty = partyService.getActivePartyOrNull(s, table.id, Instant.now());
     if (settings.requireOtpForFirstOrder() && !s.isVerified) {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "OTP required before joining a party");
     }
@@ -1133,6 +1135,7 @@ public class PublicController {
     CafeTable table = tableRepo.findById(s.tableId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
     BranchSettingsService.Resolved settings = settingsService.resolveForBranch(table.branchId);
+    TableParty activeParty = partyService.getActivePartyOrNull(s, table.id, Instant.now());
 
     String mode = req.mode == null ? "" : req.mode.trim().toUpperCase(Locale.ROOT);
     String pay = req.paymentMethod == null ? "" : req.paymentMethod.trim().toUpperCase(Locale.ROOT);

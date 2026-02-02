@@ -1,7 +1,7 @@
 package md.virtualwaiter.service;
 
 import md.virtualwaiter.config.BillProperties;
-import md.virtualwaiter.config.OtpProperties;
+import md.virtualwaiter.otp.OtpProperties;
 import md.virtualwaiter.config.TipsProperties;
 import md.virtualwaiter.domain.BranchSettings;
 import md.virtualwaiter.repo.BranchSettingsRepo;

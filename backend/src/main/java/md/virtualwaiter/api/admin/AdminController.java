@@ -824,7 +824,7 @@ public class AdminController {
     if (req.payTerminalEnabled != null) s.payTerminalEnabled = req.payTerminalEnabled;
     if (req.currencyCode != null && !req.currencyCode.isBlank()) {
       String code = req.currencyCode.trim().toUpperCase(Locale.ROOT);
-      Currency cur = currencyRepo.findById(code)
+      md.virtualwaiter.domain.Currency cur = currencyRepo.findById(code)
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown currency"));
       if (!cur.isActive) {
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Currency is inactive");
@@ -863,7 +863,8 @@ public class AdminController {
       r.tipsPercentages(),
       r.payCashEnabled(),
       r.payTerminalEnabled(),
-      r.currencyCode()
+      r.currencyCode(),
+      r.defaultLang()
     );
   }
 
@@ -879,9 +880,9 @@ public class AdminController {
   ) {
     StaffUser u = requireAdmin(auth);
     boolean include = includeInactive != null && includeInactive && isSuperAdmin(u);
-    List<Currency> list = include ? currencyRepo.findAllByOrderByCodeAsc() : currencyRepo.findByIsActiveTrueOrderByCodeAsc();
+    List<md.virtualwaiter.domain.Currency> list = include ? currencyRepo.findAllByOrderByCodeAsc() : currencyRepo.findByIsActiveTrueOrderByCodeAsc();
     List<CurrencyDto> out = new ArrayList<>();
-    for (Currency c : list) {
+    for (md.virtualwaiter.domain.Currency c : list) {
       out.add(new CurrencyDto(c.code, c.name, c.symbol, c.isActive));
     }
     return out;
@@ -891,7 +892,7 @@ public class AdminController {
   public CurrencyDto createCurrency(@Valid @RequestBody CreateCurrencyRequest req, Authentication auth) {
     StaffUser u = requireAdmin(auth);
     requireSuperAdmin(u);
-    Currency c = new Currency();
+    md.virtualwaiter.domain.Currency c = new md.virtualwaiter.domain.Currency();
     c.code = req.code.trim().toUpperCase(Locale.ROOT);
     c.name = req.name.trim();
     c.symbol = req.symbol;
@@ -906,7 +907,7 @@ public class AdminController {
     StaffUser u = requireAdmin(auth);
     requireSuperAdmin(u);
     String k = code.trim().toUpperCase(Locale.ROOT);
-    Currency c = currencyRepo.findById(k)
+    md.virtualwaiter.domain.Currency c = currencyRepo.findById(k)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Currency not found"));
     if (req.name != null && !req.name.isBlank()) c.name = req.name.trim();
     if (req.symbol != null) c.symbol = req.symbol;
@@ -1093,7 +1094,7 @@ public class AdminController {
     it.priceCents = req.priceCents;
     if (req.currency != null && !req.currency.isBlank()) {
       String code = req.currency.trim().toUpperCase(Locale.ROOT);
-      Currency cur = currencyRepo.findById(code)
+      md.virtualwaiter.domain.Currency cur = currencyRepo.findById(code)
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown currency"));
       if (!cur.isActive) {
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Currency is inactive");
@@ -1169,7 +1170,7 @@ public class AdminController {
     if (req.priceCents != null) it.priceCents = req.priceCents;
     if (req.currency != null && !req.currency.isBlank()) {
       String code = req.currency.trim().toUpperCase(Locale.ROOT);
-      Currency cur = currencyRepo.findById(code)
+      md.virtualwaiter.domain.Currency cur = currencyRepo.findById(code)
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown currency"));
       if (!cur.isActive) {
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Currency is inactive");

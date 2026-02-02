@@ -151,7 +151,7 @@ public final class Messages {
   public static Resolved resolve(String raw) {
     if (raw == null) return null;
     String trimmed = raw.trim();
-    if (trimmed.isEmpty()) return raw;
+    if (trimmed.isEmpty()) return null;
 
     // Exact matches
     String exactKey = EXACT.get(trimmed);

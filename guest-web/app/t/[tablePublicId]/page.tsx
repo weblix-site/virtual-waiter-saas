@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { t, type Lang } from "@/app/i18n";
 
 async function readApiError(res: Response, fallback: string): Promise<string> {
@@ -144,82 +145,6 @@ export default function TablePage({ params, searchParams }: any) {
   const [waiterCallActive, setWaiterCallActive] = useState(false);
   const [waiterCallStatus, setWaiterCallStatus] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      setLoading(true);
-      setError(null);
-      try {
-        const ssRes = await fetch(`${API_BASE}/api/public/session/start`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tablePublicId, sig, ts: Number(ts), locale: requestLocale }),
-        });
-        if (!ssRes.ok) {
-          throw new Error(await readApiError(ssRes, `${t(lang, "sessionStartFailed")} (${ssRes.status})`));
-        }
-        const ss: StartSessionResponse = await ssRes.json();
-        if (cancelled) return;
-        setSession(ss);
-        if (!hasUrlLang && (ss.locale === "ru" || ss.locale === "ro" || ss.locale === "en") && ss.locale !== lang) {
-          const nextLang = ss.locale;
-          setLang(nextLang);
-          try {
-            const params = new URLSearchParams(searchParams || {});
-            params.set("lang", nextLang);
-            const nextUrl = `/t/${tablePublicId}?${params.toString()}`;
-            if (typeof window !== "undefined") {
-              window.history.replaceState({}, "", nextUrl);
-            }
-          } catch (_) {}
-        }
-
-        const menuLocale = (!hasUrlLang && (ss.locale === "ru" || ss.locale === "ro" || ss.locale === "en")) ? ss.locale : (hasUrlLang ? (rawLang as Lang) : "ru");
-        const mRes = await fetch(`${API_BASE}/api/public/menu?tablePublicId=${encodeURIComponent(tablePublicId)}&sig=${encodeURIComponent(sig)}&ts=${encodeURIComponent(ts)}&locale=${menuLocale}`);
-        if (!mRes.ok) {
-          throw new Error(await readApiError(mRes, `${t(lang, "menuLoadFailed")} (${mRes.status})`));
-        }
-        const m: MenuResponse = await mRes.json();
-        if (cancelled) return;
-        setMenu(m);
-
-        await refreshBillOptions();
-
-        const wcRes = await fetch(`${API_BASE}/api/public/waiter-call/latest?guestSessionId=${ss.guestSessionId}`, {
-          headers: { ...sessionHeaders() },
-        });
-        if (wcRes.ok && !cancelled) {
-          const wc = await wcRes.json();
-          setWaiterCallActive(true);
-          setWaiterCallStatus(wc.status ?? "NEW");
-        } else if (!cancelled) {
-          setWaiterCallActive(false);
-          setWaiterCallStatus(null);
-        }
-
-        const lastBillRes = await fetch(`${API_BASE}/api/public/bill-request/latest?guestSessionId=${ss.guestSessionId}`, {
-          headers: { ...sessionHeaders() },
-        });
-        if (lastBillRes.ok) {
-          const last = await lastBillRes.json();
-          if (!cancelled) {
-            setBillRequestId(last.billRequestId);
-            setBillStatus(last.status);
-          }
-        }
-      } catch (e: any) {
-        if (cancelled) return;
-        setError(e?.message ?? t(lang, "errorGeneric"));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [tablePublicId, requestLocale, sig, ts]);
-
   const cartTotalCents = useMemo(() => cart.reduce((sum, l) => sum + l.item.priceCents * l.qty, 0), [cart]);
   const myChargesCents = useMemo(() => (billOptions?.myItems ?? []).reduce((sum, it) => sum + it.lineTotalCents, 0), [billOptions]);
   const tableChargesCents = useMemo(() => (billOptions?.tableItems ?? []).reduce((sum, it) => sum + it.lineTotalCents, 0), [billOptions]);
@@ -311,7 +236,7 @@ export default function TablePage({ params, searchParams }: any) {
     return true;
   }
 
-  function missingRequiredGroups(itemId: number, selectedIds: number[]) {
+  const missingRequiredGroups = useCallback((itemId: number, selectedIds: number[]) => {
     const mods = modifiersByItem[itemId];
     if (!mods || mods.groups.length === 0) return [] as string[];
     const missing: string[] = [];
@@ -322,17 +247,19 @@ export default function TablePage({ params, searchParams }: any) {
       if (count < min) missing.push(g.name);
     }
     return missing;
-  }
+  }, [modifiersByItem]);
 
   const cartHasMissingModifiers = useMemo(() => {
     return cart.some((l) => missingRequiredGroups(l.item.id, l.modifierOptionIds ?? []).length > 0);
-  }, [cart, modifiersByItem]);
+  }, [cart, missingRequiredGroups]);
 
-  function sessionHeaders() {
-    return session?.sessionSecret ? { "X-Session-Secret": session.sessionSecret } : {};
-  }
+  const sessionHeaders = useCallback((): Record<string, string> => {
+    const headers: Record<string, string> = {};
+    if (session?.sessionSecret) headers["X-Session-Secret"] = session.sessionSecret;
+    return headers;
+  }, [session?.sessionSecret]);
 
-  async function refreshBillOptions() {
+  const refreshBillOptions = useCallback(async () => {
     if (!session) return;
     setBillOptionsLoading(true);
     try {
@@ -348,9 +275,9 @@ export default function TablePage({ params, searchParams }: any) {
     } finally {
       setBillOptionsLoading(false);
     }
-  }
+  }, [lang, session, sessionHeaders]);
 
-  async function loadOrdersHistory() {
+  const loadOrdersHistory = useCallback(async () => {
     if (!session) return;
     setOrdersLoading(true);
     try {
@@ -365,9 +292,9 @@ export default function TablePage({ params, searchParams }: any) {
     } finally {
       setOrdersLoading(false);
     }
-  }
+  }, [lang, session, sessionHeaders]);
 
-  async function refreshOrderStatus() {
+  const refreshOrderStatus = useCallback(async () => {
     if (!session || !orderId) return;
     setOrderRefreshLoading(true);
     try {
@@ -382,9 +309,9 @@ export default function TablePage({ params, searchParams }: any) {
     } finally {
       setOrderRefreshLoading(false);
     }
-  }
+  }, [lang, orderId, session, sessionHeaders]);
 
-  async function refreshBillStatus() {
+  const refreshBillStatus = useCallback(async () => {
     if (!session || !billRequestId) return;
     setBillRefreshLoading(true);
     try {
@@ -399,7 +326,83 @@ export default function TablePage({ params, searchParams }: any) {
     } finally {
       setBillRefreshLoading(false);
     }
-  }
+  }, [billRequestId, lang, session, sessionHeaders]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        const ssRes = await fetch(`${API_BASE}/api/public/session/start`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tablePublicId, sig, ts: Number(ts), locale: requestLocale }),
+        });
+        if (!ssRes.ok) {
+          throw new Error(await readApiError(ssRes, `${t(lang, "sessionStartFailed")} (${ssRes.status})`));
+        }
+        const ss: StartSessionResponse = await ssRes.json();
+        if (cancelled) return;
+        setSession(ss);
+        if (!hasUrlLang && (ss.locale === "ru" || ss.locale === "ro" || ss.locale === "en") && ss.locale !== lang) {
+          const nextLang = ss.locale;
+          setLang(nextLang);
+          try {
+            const params = new URLSearchParams(searchParams || {});
+            params.set("lang", nextLang);
+            const nextUrl = `/t/${tablePublicId}?${params.toString()}`;
+            if (typeof window !== "undefined") {
+              window.history.replaceState({}, "", nextUrl);
+            }
+          } catch (_) {}
+        }
+
+        const menuLocale = (!hasUrlLang && (ss.locale === "ru" || ss.locale === "ro" || ss.locale === "en")) ? ss.locale : (hasUrlLang ? (rawLang as Lang) : "ru");
+        const mRes = await fetch(`${API_BASE}/api/public/menu?tablePublicId=${encodeURIComponent(tablePublicId)}&sig=${encodeURIComponent(sig)}&ts=${encodeURIComponent(ts)}&locale=${menuLocale}`);
+        if (!mRes.ok) {
+          throw new Error(await readApiError(mRes, `${t(lang, "menuLoadFailed")} (${mRes.status})`));
+        }
+        const m: MenuResponse = await mRes.json();
+        if (cancelled) return;
+        setMenu(m);
+
+        await refreshBillOptions();
+
+        const wcRes = await fetch(`${API_BASE}/api/public/waiter-call/latest?guestSessionId=${ss.guestSessionId}`, {
+          headers: { ...sessionHeaders() },
+        });
+        if (wcRes.ok && !cancelled) {
+          const wc = await wcRes.json();
+          setWaiterCallActive(true);
+          setWaiterCallStatus(wc.status ?? "NEW");
+        } else if (!cancelled) {
+          setWaiterCallActive(false);
+          setWaiterCallStatus(null);
+        }
+
+        const lastBillRes = await fetch(`${API_BASE}/api/public/bill-request/latest?guestSessionId=${ss.guestSessionId}`, {
+          headers: { ...sessionHeaders() },
+        });
+        if (lastBillRes.ok) {
+          const last = await lastBillRes.json();
+          if (!cancelled) {
+            setBillRequestId(last.billRequestId);
+            setBillStatus(last.status);
+          }
+        }
+      } catch (e: any) {
+        if (cancelled) return;
+        setError(e?.message ?? t(lang, "errorGeneric"));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [tablePublicId, requestLocale, sig, ts, hasUrlLang, lang, rawLang, refreshBillOptions, searchParams, sessionHeaders]);
 
   useEffect(() => {
     if (!billRequestId || !session) return;
@@ -407,7 +410,7 @@ export default function TablePage({ params, searchParams }: any) {
       refreshBillStatus();
     }, 10000);
     return () => clearInterval(id);
-  }, [billRequestId, session]);
+  }, [billRequestId, refreshBillStatus, session]);
 
   useEffect(() => {
     if (!orderId || !session) return;
@@ -415,7 +418,7 @@ export default function TablePage({ params, searchParams }: any) {
       refreshOrderStatus();
     }, 10000);
     return () => clearInterval(id);
-  }, [orderId, session]);
+  }, [orderId, refreshOrderStatus, session]);
 
   useEffect(() => {
     if (!session) return;
@@ -424,7 +427,7 @@ export default function TablePage({ params, searchParams }: any) {
       loadOrdersHistory();
     }, 15000);
     return () => clearInterval(id);
-  }, [session]);
+  }, [session, loadOrdersHistory]);
 
   function orderStatusLabel(status: string) {
     const s = (status || "").toUpperCase();
@@ -608,7 +611,7 @@ export default function TablePage({ params, searchParams }: any) {
       stopped = true;
       window.clearInterval(id);
     };
-  }, [session]);
+  }, [session, sessionHeaders]);
   async function createPin() {
     if (!session) return;
     try {
@@ -822,10 +825,13 @@ export default function TablePage({ params, searchParams }: any) {
           {session?.waiterName && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
               {session.waiterPhotoUrl && (
-                <img
+                <Image
                   src={session.waiterPhotoUrl}
                   alt={session.waiterName}
+                  width={32}
+                  height={32}
                   style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover" }}
+                  unoptimized
                 />
               )}
               <span style={{ color: "#444", fontSize: 14 }}>
@@ -960,10 +966,13 @@ export default function TablePage({ params, searchParams }: any) {
             {cat.items.map((it) => (
               <div key={it.id} style={{ border: "1px solid #eee", borderRadius: 10, padding: 12 }}>
                 {it.photos?.[0] && (
-                  <img
+                  <Image
                     src={it.photos[0]}
                     alt={it.name}
+                    width={520}
+                    height={280}
                     style={{ width: "100%", height: 140, objectFit: "cover", borderRadius: 8, marginBottom: 8 }}
+                    unoptimized
                   />
                 )}
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>

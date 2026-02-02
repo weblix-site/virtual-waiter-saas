@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import Image from "next/image";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8080";
 
@@ -217,7 +218,6 @@ const dict: Record<string, Record<Lang, string>> = {
   allHalls: { ru: "Все залы", ro: "Toate sălile", en: "All halls" },
   allAssignments: { ru: "Все назначения", ro: "Toate asignările", en: "All assignments" },
   assigned: { ru: "Назначено", ro: "Atribuit", en: "Assigned" },
-  unassigned: { ru: "Не назначено", ro: "Neatribuit", en: "Unassigned" },
   bulkHall: { ru: "Массово зал", ro: "Sală în masă", en: "Bulk hall" },
   assignFilteredToHall: { ru: "Назначить отфильтрованные в зал", ro: "Atribuie filtratele în sală", en: "Assign filtered to hall" },
   noHall: { ru: "Без зала", ro: "Fără sală", en: "No hall" },
@@ -514,6 +514,13 @@ type HallPlanTemplateDto = {
   createdAt: string;
   updatedAt: string;
 };
+type HallPlanVersionDto = {
+  id: number;
+  name: string;
+  action?: string | null;
+  createdAt?: string | null;
+  createdByStaffId?: number | null;
+};
 
 function money(priceCents: number, currency = "MDL") {
   return `${(priceCents / 100).toFixed(2)} ${currency}`;
@@ -527,6 +534,7 @@ export default function AdminPage() {
   const [sessionExpired, setSessionExpired] = useState(false);
   const redirectingRef = useRef(false);
   const [lang, setLang] = useState<Lang>("ru");
+  const translate = t;
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<MenuItem[]>([]);
@@ -771,7 +779,7 @@ export default function AdminPage() {
   };
 
   const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
-  const snap = (v: number, step = 2) => (snapEnabled ? Math.round(v / step) * step : v);
+  const snap = useCallback((v: number, step = 2) => (snapEnabled ? Math.round(v / step) * step : v), [snapEnabled]);
   const isInteractive = planEditMode && !planPreview;
 
   const layoutDefaults = (idx: number) => {
@@ -939,7 +947,7 @@ export default function AdminPage() {
       window.removeEventListener("pointermove", handleMove);
       window.removeEventListener("pointerup", handleUp);
     };
-  }, [planZoom, snapEnabled]);
+  }, [planZoom, snap]);
 
   useEffect(() => {
     if (!authReady || !hallId) return;
@@ -1259,7 +1267,7 @@ export default function AdminPage() {
     loadAll();
   }
 
-  async function editItem(it: MenuItem) {
+  async function startEditItem(it: MenuItem) {
     setEditingItemId(it.id);
     setEditItem({ ...it });
   }
@@ -1395,13 +1403,13 @@ export default function AdminPage() {
       .catch(() => {});
   }
 
-  async function applyTemplate(t: HallPlanTemplateDto) {
+  async function applyTemplate(tpl: HallPlanTemplateDto) {
     if (!hallId) return;
     const ok = window.confirm(t(lang, "confirmApplyTemplate"));
     if (!ok) return;
     let payload: any = null;
     try {
-      payload = JSON.parse(t.payloadJson);
+      payload = JSON.parse(tpl.payloadJson);
     } catch (_) {}
     if (!payload) return;
     const res = await api(`/api/admin/halls/${hallId}/plans/import`, {
@@ -2076,7 +2084,7 @@ export default function AdminPage() {
                       expiresAtMs - Date.now() <= partyExpiringMinutes * 60 * 1000 &&
                       expiresAtMs > Date.now();
                     return (
-                      <React.Fragment key={p.id}>
+                      <Fragment key={p.id}>
                         <tr
                           onClick={() => setExpandedPartyId(expanded ? null : p.id)}
                           style={{
@@ -2149,7 +2157,7 @@ export default function AdminPage() {
                             </td>
                           </tr>
                         )}
-                      </React.Fragment>
+                      </Fragment>
                     );
                   })}
               </tbody>
@@ -2323,7 +2331,7 @@ export default function AdminPage() {
           <label>{t(lang, "beforeId")} <input type="number" value={auditBeforeId} onChange={(e) => setAuditBeforeId(e.target.value ? Number(e.target.value) : "")} /></label>
           <label>{t(lang, "afterId")} <input type="number" value={auditAfterId} onChange={(e) => setAuditAfterId(e.target.value ? Number(e.target.value) : "")} /></label>
           <label>{t(lang, "limit")} <input type="number" min={1} max={500} value={auditLimit} onChange={(e) => setAuditLimit(Number(e.target.value))} style={{ width: 90 }} /></label>
-          <button onClick={loadAuditLogs} disabled={auditLoading}>{auditLoading ? t(lang, "loading") : t(lang, "load")}</button>
+          <button onClick={() => loadAuditLogs()} disabled={auditLoading}>{auditLoading ? t(lang, "loading") : t(lang, "load")}</button>
           <button onClick={downloadAuditCsv} disabled={auditLoading}>CSV</button>
           <button onClick={() => { setAuditAfterId(""); setAuditBeforeId(""); loadAuditLogs(); }} disabled={auditLoading}>{t(lang, "latest")}</button>
           <button onClick={loadAuditPrevPage} disabled={auditLoading || auditLogs.length === 0}>{t(lang, "prevPage")}</button>
@@ -2553,7 +2561,7 @@ export default function AdminPage() {
               <span>{money(it.priceCents, it.currency)}</span>
               <span>{it.isActive ? t(lang, "active") : t(lang, "inactive")}</span>
               <span>{it.isStopList ? t(lang, "stopList") : ""}</span>
-              <button onClick={() => editItem(it)}>{t(lang, "edit")}</button>
+              <button onClick={() => startEditItem(it)}>{t(lang, "edit")}</button>
               <button onClick={() => toggleItem(it)}>{it.isActive ? t(lang, "disable") : t(lang, "enable")}</button>
               <button onClick={() => toggleStopList(it)}>{it.isStopList ? t(lang, "enable") : t(lang, "stopList")}</button>
             </div>
@@ -2788,6 +2796,7 @@ export default function AdminPage() {
                     });
                     plan = await res.json();
                   }
+                  if (!plan) return;
                   await api(`/api/admin/halls/${hallId}`, { method: "PATCH", body: JSON.stringify({ activePlanId: plan.id }) });
                   setHallPlanId(plan.id);
                   loadAll();
@@ -3079,7 +3088,7 @@ export default function AdminPage() {
                     >
                       <div style={{ fontWeight: 700, fontSize: 16 }}>#{t.number}</div>
                       <div style={{ fontSize: 12, color }}>
-                        {t.assignedWaiterId ? `${t(lang, "waiterLabel")} #${t.assignedWaiterId}` : t(lang, "unassigned")}
+                        {t.assignedWaiterId ? `${translate(lang, "waiterLabel")} #${t.assignedWaiterId}` : translate(lang, "unassigned")}
                       </div>
                       {layout.layoutZone ? (
                         <div style={{ fontSize: 11, color: "#666" }}>{layout.layoutZone}</div>
@@ -3432,13 +3441,13 @@ export default function AdminPage() {
             })
             .map((t) => (
             <div key={t.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "6px 0", borderBottom: "1px solid #eee" }}>
-              <strong>{t(lang, "tableSelected")}{t.number}</strong>
+              <strong>{translate(lang, "tableSelected")}{t.number}</strong>
               <span>{t.publicId}</span>
               <select
                 value={t.hallId ?? ""}
                 onChange={(e) => assignHall(t.id, e.target.value ? Number(e.target.value) : null)}
               >
-                <option value="">{t(lang, "noHall")}</option>
+                <option value="">{translate(lang, "noHall")}</option>
                 {halls.map((h) => (
                   <option key={h.id} value={h.id}>{h.name}</option>
                 ))}
@@ -3447,31 +3456,34 @@ export default function AdminPage() {
                 value={t.assignedWaiterId ?? ""}
                 onChange={(e) => assignWaiter(t.id, e.target.value ? Number(e.target.value) : null)}
               >
-                <option value="">{t(lang, "noWaiter")}</option>
+                <option value="">{translate(lang, "noWaiter")}</option>
                 {staff.filter((s) => s.role === "WAITER").map((s) => (
                   <option key={s.id} value={s.id}>{s.username}</option>
                 ))}
               </select>
               {t.assignedWaiterId && (
-                <button onClick={() => assignWaiter(t.id, null)}>{t(lang, "clearWaiter")}</button>
+                <button onClick={() => assignWaiter(t.id, null)}>{translate(lang, "clearWaiter")}</button>
               )}
-              <button onClick={() => getSignedUrl(t.publicId)}>{t(lang, "qrUrl")}</button>
-              <button onClick={() => showQr(t.id, t.publicId)}>{t(lang, "showQr")}</button>
-              <button onClick={() => showQr(t.id, t.publicId)}>{t(lang, "refreshQr")}</button>
+              <button onClick={() => getSignedUrl(t.publicId)}>{translate(lang, "qrUrl")}</button>
+              <button onClick={() => showQr(t.id, t.publicId)}>{translate(lang, "showQr")}</button>
+              <button onClick={() => showQr(t.id, t.publicId)}>{translate(lang, "refreshQr")}</button>
               {qrByTable[t.id] && (
                 <a
                   href={`https://api.qrserver.com/v1/create-qr-code/?size=512x512&data=${encodeURIComponent(qrByTable[t.id])}`}
                   download={`table_${t.number}.png`}
                   style={{ marginLeft: 8 }}
                 >
-                  {t(lang, "downloadQr")}
+                  {translate(lang, "downloadQr")}
                 </a>
               )}
               {qrByTable[t.id] && (
-                <img
+                <Image
                   src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(qrByTable[t.id])}`}
                   alt="QR"
+                  width={160}
+                  height={160}
                   style={{ marginLeft: 8, border: "1px solid #eee" }}
+                  unoptimized
                 />
               )}
             </div>
