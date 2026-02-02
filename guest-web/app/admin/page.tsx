@@ -2655,9 +2655,20 @@ export default function AdminPage() {
                   </button>
                   <button
                     onClick={async () => {
-                      await api(`/api/admin/halls/${hallId}`, { method: "DELETE" });
-                      setHallId("");
-                      loadAll();
+                      const ok = window.confirm("Delete hall? This will remove all plans/templates for the hall.");
+                      if (!ok) return;
+                      try {
+                        await api(`/api/admin/halls/${hallId}`, { method: "DELETE" });
+                        setHallId("");
+                        loadAll();
+                      } catch (e: any) {
+                        const msg = e?.message ?? "";
+                        if (msg.includes("409")) {
+                          alert("Cannot delete hall: there are tables assigned. Move tables to another hall first.");
+                        } else {
+                          alert(msg || "Failed to delete hall");
+                        }
+                      }
                     }}
                   >
                     Delete

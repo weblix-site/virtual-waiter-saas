@@ -298,6 +298,15 @@ Steps:
 Expected:
 - 400 with validation error
 
+### D4.2 Hall delete policy
+Steps:
+1. Create hall and assign at least one table to it.
+2. Try to delete the hall.
+3. Remove/reattach tables to another hall (or unset hall), then delete the hall again.
+Expected:
+- 409 when hall has tables
+- Deletion succeeds when no tables remain; related plans/templates removed
+
 ### D5. Staff CRUD
 Steps:
 1. Create waiter
@@ -369,6 +378,13 @@ Steps:
 1. Use admin of branch A to access branch B data.
 Expected:
 - 403
+
+### F1.1 Staff branch-layout planId guard
+Steps:
+1. Use staff from branch A and request `/api/staff/branch-layout?planId=<plan from branch B>`.
+2. Use staff from branch A and request `/api/staff/branch-layout?planId=<plan from branch A>&hallId=<hall from branch B>`.
+Expected:
+- 403 (wrong branch) or 404
 
 ### F2. Invalid session secret
 Steps:

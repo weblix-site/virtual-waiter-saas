@@ -8,4 +8,5 @@ import java.util.Optional;
 public interface CafeTableRepo extends JpaRepository<CafeTable, Long> {
   Optional<CafeTable> findByPublicId(String publicId);
   List<CafeTable> findByBranchId(Long branchId);
+  long countByHallId(Long hallId);
 }

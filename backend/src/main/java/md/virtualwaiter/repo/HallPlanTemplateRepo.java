@@ -8,4 +8,5 @@ import java.util.List;
 public interface HallPlanTemplateRepo extends JpaRepository<HallPlanTemplate, Long> {
   List<HallPlanTemplate> findByBranchIdAndHallIdOrderByUpdatedAtDesc(Long branchId, Long hallId);
   HallPlanTemplate findTopByBranchIdAndHallIdAndNameIgnoreCase(Long branchId, Long hallId, String name);
+  void deleteByHallId(Long hallId);
 }

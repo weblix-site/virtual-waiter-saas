@@ -341,6 +341,12 @@ public class AdminController {
     BranchHall h = hallRepo.findById(id)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hall not found"));
     requireBranchAccess(u, h.branchId);
+    long tableCount = tableRepo.countByHallId(h.id);
+    if (tableCount > 0) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "Hall has tables assigned");
+    }
+    hallPlanTemplateRepo.deleteByHallId(h.id);
+    hallPlanRepo.deleteByHallId(h.id);
     hallRepo.delete(h);
     auditService.log(u, "DELETE", "BranchHall", h.id, null);
   }

@@ -224,6 +224,11 @@ public class StaffController {
         throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong branch");
       }
       if (hallId != null && !Objects.equals(hallId, h.id)) {
+        BranchHall requestedHall = hallRepo.findById(hallId)
+          .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hall not found"));
+        if (!Objects.equals(requestedHall.branchId, u.branchId)) {
+          throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong branch");
+        }
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Plan does not belong to hall");
       }
       return new BranchLayoutResponse(p.layoutBgUrl, p.layoutZonesJson);
