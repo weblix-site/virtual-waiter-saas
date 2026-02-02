@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:audioplayers/audioplayers.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -190,6 +191,8 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _index = 0;
   Timer? _timer;
+  List<Map<String, dynamic>> _halls = const [];
+  int? _hallId;
   DateTime _sinceOrders = DateTime.now();
   DateTime _sinceCalls = DateTime.now();
   DateTime _sinceBills = DateTime.now();
@@ -266,6 +269,23 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (_) {}
   }
 
+  Future<void> _loadHalls() async {
+    try {
+      final res = await http.get(
+        Uri.parse('$apiBase/api/staff/halls'),
+        headers: {'Authorization': 'Basic $_auth'},
+      );
+      if (res.statusCode != 200) return;
+      final body = (jsonDecode(res.body) as List<dynamic>).cast<Map<String, dynamic>>();
+      setState(() {
+        _halls = body;
+        if (_hallId == null && body.isNotEmpty) {
+          _hallId = (body.first['id'] as num).toInt();
+        }
+      });
+    } catch (_) {}
+  }
+
   Future<void> _registerDevice() async {
     await _registerFcmToken();
     if (_deviceToken == null) {
@@ -307,6 +327,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _timer = Timer.periodic(const Duration(seconds: 15), (_) => _poll());
     _poll();
     _registerDevice();
+    _loadHalls();
   }
 
   void _listenToFcm() {
@@ -344,16 +365,43 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final tabs = [
-      OrdersTab(username: widget.username, password: widget.password),
-      CallsTab(username: widget.username, password: widget.password),
-      BillsTab(username: widget.username, password: widget.password),
-      KitchenTab(username: widget.username, password: widget.password),
+      OrdersTab(username: widget.username, password: widget.password, hallId: _hallId),
+      CallsTab(username: widget.username, password: widget.password, hallId: _hallId),
+      BillsTab(username: widget.username, password: widget.password, hallId: _hallId),
+      KitchenTab(username: widget.username, password: widget.password, hallId: _hallId),
       FloorPlanTab(username: widget.username, password: widget.password),
       HistoryTab(username: widget.username, password: widget.password),
       NotificationsTab(events: _events),
     ];
     return Scaffold(
-      body: tabs[_index],
+      body: Column(
+        children: [
+          if (_halls.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              child: Row(
+                children: [
+                  const Text('Hall'),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: DropdownButton<int>(
+                      isExpanded: true,
+                      value: _hallId,
+                      items: _halls
+                          .map((h) => DropdownMenuItem<int>(
+                                value: (h['id'] as num).toInt(),
+                                child: Text(h['name']?.toString() ?? 'Hall'),
+                              ))
+                          .toList(),
+                      onChanged: (v) => setState(() => _hallId = v),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          Expanded(child: tabs[_index]),
+        ],
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) {
@@ -424,8 +472,9 @@ class NotificationsTab extends StatelessWidget {
 class OrdersTab extends StatefulWidget {
   final String username;
   final String password;
+  final int? hallId;
 
-  const OrdersTab({super.key, required this.username, required this.password});
+  const OrdersTab({super.key, required this.username, required this.password, this.hallId});
 
   @override
   State<OrdersTab> createState() => _OrdersTabState();
@@ -437,6 +486,8 @@ class _OrdersTabState extends State<OrdersTab> {
   List<dynamic> _orders = const [];
   String _sortMode = 'time_desc';
   bool _showFocus = true;
+  Timer? _pollTimer;
+  DateTime _since = DateTime.now().toUtc();
 
   String get _auth => base64Encode(utf8.encode('${widget.username}:${widget.password}'));
 
@@ -447,12 +498,14 @@ class _OrdersTabState extends State<OrdersTab> {
     });
     try {
       final res = await http.get(
-        Uri.parse('$apiBase/api/staff/orders/active'),
+        Uri.parse('$apiBase/api/staff/orders/active${widget.hallId != null ? "?hallId=${widget.hallId}" : ""}'),
         headers: {'Authorization': 'Basic $_auth'},
       );
       if (res.statusCode != 200) throw Exception('Load failed (${res.statusCode})');
       final body = jsonDecode(res.body);
-      setState(() => _orders = body as List<dynamic>);
+      final list = body as List<dynamic>;
+      setState(() => _orders = list);
+      _updateSinceFromOrders(list);
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
@@ -460,10 +513,98 @@ class _OrdersTabState extends State<OrdersTab> {
     }
   }
 
+  void _updateSinceFromOrders(List<dynamic> orders) {
+    DateTime? maxDt;
+    for (final o in orders) {
+      final dt = _parseIso(o['createdAt']?.toString());
+      if (dt == null) continue;
+      if (maxDt == null || dt.isAfter(maxDt)) {
+        maxDt = dt;
+      }
+    }
+    if (maxDt != null) {
+      _since = maxDt.toUtc();
+    }
+  }
+
+  Future<void> _pollNew() async {
+    try {
+      final sinceStr = _since.toUtc().toIso8601String();
+      final hall = widget.hallId != null ? "&hallId=${widget.hallId}" : "";
+      final res = await http.get(
+        Uri.parse('$apiBase/api/staff/orders/active/updates?since=$sinceStr$hall'),
+        headers: {'Authorization': 'Basic $_auth'},
+      );
+      if (res.statusCode != 200) return;
+      final body = jsonDecode(res.body) as List<dynamic>;
+      if (body.isEmpty) return;
+      final Map<int, Map<String, dynamic>> byId = {
+        for (final o in _orders) (o['id'] as num).toInt(): (o as Map<String, dynamic>)
+      };
+      for (final o in body) {
+        final id = (o['id'] as num).toInt();
+        byId[id] = o as Map<String, dynamic>;
+      }
+      final merged = byId.values.toList();
+      setState(() => _orders = merged);
+      _updateSinceFromOrders(body);
+    } catch (_) {}
+  }
+
+  Future<void> _pollStatus() async {
+    try {
+      if (_orders.isEmpty) return;
+      final ids = _orders.take(200).map((o) => (o['id'] as num).toInt()).join(',');
+      final hall = widget.hallId != null ? "&hallId=${widget.hallId}" : "";
+      final res = await http.get(
+        Uri.parse('$apiBase/api/staff/orders/active/status?ids=$ids$hall'),
+        headers: {'Authorization': 'Basic $_auth'},
+      );
+      if (res.statusCode != 200) return;
+      final body = jsonDecode(res.body) as List<dynamic>;
+      if (body.isEmpty) return;
+      final Map<int, Map<String, dynamic>> byId = {
+        for (final o in _orders) (o['id'] as num).toInt(): (o as Map<String, dynamic>)
+      };
+      for (final s in body) {
+        final id = (s['id'] as num).toInt();
+        final status = s['status']?.toString() ?? '';
+        final existing = byId[id];
+        if (existing != null) {
+          existing['status'] = status;
+        }
+      }
+      byId.removeWhere((_, v) {
+        final status = v['status']?.toString().toUpperCase() ?? '';
+        return status == 'CLOSED' || status == 'CANCELLED';
+      });
+      setState(() => _orders = byId.values.toList());
+    } catch (_) {}
+  }
+
   @override
   void initState() {
     super.initState();
     _load();
+    _pollTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      _pollNew();
+      _pollStatus();
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant OrdersTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.hallId != widget.hallId) {
+      _since = DateTime.now().toUtc();
+      _load();
+    }
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -600,8 +741,9 @@ class _OrdersTabState extends State<OrdersTab> {
 class CallsTab extends StatefulWidget {
   final String username;
   final String password;
+  final int? hallId;
 
-  const CallsTab({super.key, required this.username, required this.password});
+  const CallsTab({super.key, required this.username, required this.password, this.hallId});
 
   @override
   State<CallsTab> createState() => _CallsTabState();
@@ -623,7 +765,7 @@ class _CallsTabState extends State<CallsTab> {
     });
     try {
       final res = await http.get(
-        Uri.parse('$apiBase/api/staff/waiter-calls/active'),
+        Uri.parse('$apiBase/api/staff/waiter-calls/active${widget.hallId != null ? "?hallId=${widget.hallId}" : ""}'),
         headers: {'Authorization': 'Basic $_auth'},
       );
       if (res.statusCode != 200) throw Exception('Load failed (${res.statusCode})');
@@ -844,8 +986,9 @@ class WaiterCallDetailsScreen extends StatelessWidget {
 class BillsTab extends StatefulWidget {
   final String username;
   final String password;
+  final int? hallId;
 
-  const BillsTab({super.key, required this.username, required this.password});
+  const BillsTab({super.key, required this.username, required this.password, this.hallId});
 
   @override
   State<BillsTab> createState() => _BillsTabState();
@@ -867,7 +1010,7 @@ class _BillsTabState extends State<BillsTab> {
     });
     try {
       final res = await http.get(
-        Uri.parse('$apiBase/api/staff/bill-requests/active'),
+        Uri.parse('$apiBase/api/staff/bill-requests/active${widget.hallId != null ? "?hallId=${widget.hallId}" : ""}'),
         headers: {'Authorization': 'Basic $_auth'},
       );
       if (res.statusCode != 200) throw Exception('Load failed (${res.statusCode})');
@@ -1096,8 +1239,9 @@ class _BillsTabState extends State<BillsTab> {
 class KitchenTab extends StatefulWidget {
   final String username;
   final String password;
+  final int? hallId;
 
-  const KitchenTab({super.key, required this.username, required this.password});
+  const KitchenTab({super.key, required this.username, required this.password, this.hallId});
 
   @override
   State<KitchenTab> createState() => _KitchenTabState();
@@ -1120,7 +1264,7 @@ class _KitchenTabState extends State<KitchenTab> {
     });
     try {
       final res = await http.get(
-        Uri.parse('$apiBase/api/staff/orders/kitchen?statusIn=$_statusFilter'),
+        Uri.parse('$apiBase/api/staff/orders/kitchen?statusIn=$_statusFilter${widget.hallId != null ? "&hallId=${widget.hallId}" : ""}'),
         headers: {'Authorization': 'Basic $_auth'},
       );
       if (res.statusCode != 200) throw Exception('Load failed (${res.statusCode})');
@@ -1325,17 +1469,27 @@ class _FloorPlanTabState extends State<FloorPlanTab> {
   String? _error;
   List<Map<String, dynamic>> _tables = const [];
   Set<int> _hotTableIds = {};
+  Map<int, double> _heatByTableId = {};
+  Map<int, String> _statusByTableId = {};
+  bool _showStatusBadges = true;
+  bool _showLegend = true;
+  bool _useActivePlan = true;
+  static const String _useActivePrefKey = 'staff_floor_use_active_plan';
+  static const String _legendPrefKey = 'staff_floor_legend_visible';
   String _bgUrl = '';
   List<Map<String, dynamic>> _zones = const [];
   List<Map<String, dynamic>> _halls = const [];
   int? _hallId;
+  List<Map<String, dynamic>> _plans = const [];
+  int? _planId;
   Timer? _pollTimer;
   Timer? _blinkTimer;
   bool _blinkOn = true;
+  final Map<String, Map<String, dynamic>> _layoutCache = {};
 
   String get _auth => base64Encode(utf8.encode('${widget.username}:${widget.password}'));
 
-  Future<void> _load() async {
+  Future<void> _loadAll({bool forceLayout = false, bool forceHalls = false}) async {
     setState(() {
       _loading = true;
       _error = null;
@@ -1343,15 +1497,39 @@ class _FloorPlanTabState extends State<FloorPlanTab> {
     try {
       List<Map<String, dynamic>> hallsBody = _halls;
       int? hallId = _hallId;
-      final hallsRes = await http.get(
-        Uri.parse('$apiBase/api/staff/halls'),
-        headers: {'Authorization': 'Basic $_auth'},
-      );
-      if (hallsRes.statusCode == 200) {
-        hallsBody = (jsonDecode(hallsRes.body) as List<dynamic>).cast<Map<String, dynamic>>();
-        if (hallId == null && hallsBody.isNotEmpty) {
-          hallId = (hallsBody.first['id'] as num).toInt();
+      if (forceHalls || hallsBody.isEmpty) {
+        final hallsRes = await http.get(
+          Uri.parse('$apiBase/api/staff/halls'),
+          headers: {'Authorization': 'Basic $_auth'},
+        );
+        if (hallsRes.statusCode == 200) {
+          hallsBody = (jsonDecode(hallsRes.body) as List<dynamic>).cast<Map<String, dynamic>>();
+          if (hallId == null && hallsBody.isNotEmpty) {
+            hallId = (hallsBody.first['id'] as num).toInt();
+          }
         }
+      }
+
+      List<Map<String, dynamic>> plansBody = _plans;
+      int? planId = _planId;
+      if (hallId != null) {
+        final plansRes = await http.get(
+          Uri.parse('$apiBase/api/staff/halls/$hallId/plans'),
+          headers: {'Authorization': 'Basic $_auth'},
+        );
+        if (plansRes.statusCode == 200) {
+          plansBody = (jsonDecode(plansRes.body) as List<dynamic>).cast<Map<String, dynamic>>();
+          if ((planId == null || _useActivePlan) && plansBody.isNotEmpty) {
+            final activePlan = hallsBody.firstWhere(
+              (h) => (h['id'] as num?)?.toInt() == hallId,
+              orElse: () => const {},
+            );
+            planId = (activePlan['activePlanId'] as num?)?.toInt();
+          }
+        }
+      }
+      if (_useActivePlan) {
+        _planId = planId;
       }
 
       final tablesRes = await http.get(
@@ -1362,44 +1540,87 @@ class _FloorPlanTabState extends State<FloorPlanTab> {
       final tablesBody = (jsonDecode(tablesRes.body) as List<dynamic>).cast<Map<String, dynamic>>();
 
       final ordersRes = await http.get(
-        Uri.parse('$apiBase/api/staff/orders/active?statusIn=NEW'),
+        Uri.parse('$apiBase/api/staff/orders/active'),
         headers: {'Authorization': 'Basic $_auth'},
       );
       if (ordersRes.statusCode != 200) throw Exception('Load orders failed (${ordersRes.statusCode})');
       final ordersBody = (jsonDecode(ordersRes.body) as List<dynamic>).cast<Map<String, dynamic>>();
       final hot = <int>{};
+      final heat = <int, double>{};
+      final statusByTable = <int, String>{};
       for (final o in ordersBody) {
         final tableId = (o['tableId'] as num?)?.toInt();
-        if (tableId != null) hot.add(tableId);
+        final status = (o['status'] ?? '').toString().toUpperCase();
+        if (tableId != null) {
+          if (status == 'NEW') {
+            hot.add(tableId);
+            final ageMin = _ageFromIso(o['createdAt']?.toString()).inMinutes.toDouble();
+            final intensity = (ageMin / slaOrderCritMin).clamp(0, 1);
+            final prev = heat[tableId] ?? 0;
+            if (intensity > prev) heat[tableId] = intensity;
+          }
+          final prevStatus = statusByTable[tableId];
+          if (prevStatus == null || _statusPriority(status) > _statusPriority(prevStatus)) {
+            statusByTable[tableId] = status;
+          }
+        }
       }
 
-      final layoutRes = await http.get(
-        Uri.parse('$apiBase/api/staff/branch-layout${hallId != null ? "?hallId=$hallId" : ""}'),
-        headers: {'Authorization': 'Basic $_auth'},
-      );
-      String bgUrl = '';
-      List<Map<String, dynamic>> zones = const [];
-      if (layoutRes.statusCode == 200) {
-        final layout = jsonDecode(layoutRes.body);
-        bgUrl = (layout['backgroundUrl'] ?? '').toString();
-        final zonesJson = layout['zonesJson'];
-        if (zonesJson != null && zonesJson.toString().isNotEmpty) {
-          try {
-            final parsed = jsonDecode(zonesJson.toString());
-            if (parsed is List) {
-              zones = parsed.cast<Map<String, dynamic>>();
+      String bgUrl = _bgUrl;
+      List<Map<String, dynamic>> zones = _zones;
+      if (hallId != null) {
+        final cacheKey = '$hallId:${_useActivePlan ? "active" : (planId ?? "active")}';
+        final cached = _layoutCache[cacheKey];
+        if (cached != null && !forceLayout) {
+          bgUrl = (cached['bgUrl'] ?? '').toString();
+          zones = (cached['zones'] as List<Map<String, dynamic>>?) ?? const [];
+        } else {
+          final layoutRes = await http.get(
+            Uri.parse('$apiBase/api/staff/branch-layout?hallId=$hallId${(!_useActivePlan && planId != null) ? "&planId=$planId" : ""}'),
+            headers: {'Authorization': 'Basic $_auth'},
+          );
+          if (layoutRes.statusCode == 200) {
+            final layout = jsonDecode(layoutRes.body);
+            bgUrl = (layout['backgroundUrl'] ?? '').toString();
+            final zonesJson = layout['zonesJson'];
+            if (zonesJson != null && zonesJson.toString().isNotEmpty) {
+              try {
+                final parsed = jsonDecode(zonesJson.toString());
+                if (parsed is List) {
+                  zones = parsed.cast<Map<String, dynamic>>();
+                } else {
+                  zones = const [];
+                }
+              } catch (_) {
+                zones = const [];
+              }
+            } else {
+              zones = const [];
             }
-          } catch (_) {}
+            _layoutCache[cacheKey] = {
+              'bgUrl': bgUrl,
+              'zones': zones,
+              'ts': DateTime.now().toIso8601String(),
+            };
+          }
         }
       }
 
       setState(() {
         _tables = tablesBody;
         _hotTableIds = hot;
+        _heatByTableId = heat;
+        _statusByTableId = statusByTable;
         _bgUrl = bgUrl;
         _zones = zones;
         _halls = hallsBody;
         _hallId = hallId;
+        _plans = plansBody;
+        if (_useActivePlan) {
+          _planId = planId;
+        } else {
+          _planId = planId;
+        }
       });
     } catch (e) {
       setState(() => _error = e.toString());
@@ -1408,14 +1629,138 @@ class _FloorPlanTabState extends State<FloorPlanTab> {
     }
   }
 
+  Future<void> _loadDynamic() async {
+    try {
+      int? hallId = _hallId;
+      if (hallId == null && _halls.isNotEmpty) {
+        hallId = (_halls.first['id'] as num).toInt();
+      }
+      final tablesRes = await http.get(
+        Uri.parse('$apiBase/api/staff/tables${hallId != null ? "?hallId=$hallId" : ""}'),
+        headers: {'Authorization': 'Basic $_auth'},
+      );
+      if (tablesRes.statusCode != 200) return;
+      final tablesBody = (jsonDecode(tablesRes.body) as List<dynamic>).cast<Map<String, dynamic>>();
+
+      final ordersRes = await http.get(
+        Uri.parse('$apiBase/api/staff/orders/active'),
+        headers: {'Authorization': 'Basic $_auth'},
+      );
+      if (ordersRes.statusCode != 200) return;
+      final ordersBody = (jsonDecode(ordersRes.body) as List<dynamic>).cast<Map<String, dynamic>>();
+      final hot = <int>{};
+      final heat = <int, double>{};
+      final statusByTable = <int, String>{};
+      for (final o in ordersBody) {
+        final tableId = (o['tableId'] as num?)?.toInt();
+        final status = (o['status'] ?? '').toString().toUpperCase();
+        if (tableId != null) {
+          if (status == 'NEW') {
+            hot.add(tableId);
+            final ageMin = _ageFromIso(o['createdAt']?.toString()).inMinutes.toDouble();
+            final intensity = (ageMin / slaOrderCritMin).clamp(0, 1);
+            final prev = heat[tableId] ?? 0;
+            if (intensity > prev) heat[tableId] = intensity;
+          }
+          final prevStatus = statusByTable[tableId];
+          if (prevStatus == null || _statusPriority(status) > _statusPriority(prevStatus)) {
+            statusByTable[tableId] = status;
+          }
+        }
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _tables = tablesBody;
+        _hotTableIds = hot;
+        _heatByTableId = heat;
+        _statusByTableId = statusByTable;
+        _hallId = hallId;
+      });
+    } catch (_) {}
+  }
+
   @override
   void initState() {
     super.initState();
-    _load();
-    _pollTimer = Timer.periodic(const Duration(seconds: 15), (_) => _load());
+    _loadLegendPref();
+    _loadPlanPrefs();
+    _loadAll(forceLayout: true, forceHalls: true);
+    _pollTimer = Timer.periodic(const Duration(seconds: 15), (_) => _loadDynamic());
     _blinkTimer = Timer.periodic(const Duration(milliseconds: 600), (_) {
       if (mounted) setState(() => _blinkOn = !_blinkOn);
     });
+  }
+
+  Future<void> _loadLegendPref() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final v = prefs.getBool(_legendPrefKey);
+      if (v != null && mounted) {
+        setState(() => _showLegend = v);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _loadPlanPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final useActive = prefs.getBool(_useActivePrefKey);
+      if (useActive != null && mounted) {
+        setState(() => _useActivePlan = useActive);
+      }
+      if (_hallId != null) {
+        final planId = prefs.getInt('staff_floor_plan_${_hallId}');
+        if (planId != null && mounted) {
+          setState(() => _planId = planId);
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _savePlanPref(int? planId) async {
+    if (_hallId == null) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (planId == null) {
+        await prefs.remove('staff_floor_plan_${_hallId}');
+      } else {
+        await prefs.setInt('staff_floor_plan_${_hallId}', planId);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _saveUseActivePref(bool value) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_useActivePrefKey, value);
+    } catch (_) {}
+  }
+
+  void _selectPlan(int? planId) {
+    setState(() => _planId = planId);
+    _savePlanPref(planId);
+    _loadAll(forceLayout: true);
+  }
+
+  void _cyclePlan(int dir) {
+    if (_useActivePlan || _plans.isEmpty) return;
+    final ids = _plans
+        .map((p) => (p['id'] as num?)?.toInt())
+        .whereType<int>()
+        .toList();
+    if (ids.isEmpty) return;
+    final current = _planId ?? ids.first;
+    final idx = ids.indexOf(current);
+    final nextIdx = idx == -1 ? 0 : (idx + dir + ids.length) % ids.length;
+    _selectPlan(ids[nextIdx]);
+  }
+
+  Future<void> _saveLegendPref(bool value) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_legendPrefKey, value);
+    } catch (_) {}
   }
 
   @override
@@ -1439,6 +1784,36 @@ class _FloorPlanTabState extends State<FloorPlanTab> {
     return palette[id % palette.length];
   }
 
+  int _statusPriority(String status) {
+    switch (status) {
+      case 'READY':
+        return 4;
+      case 'IN_PROGRESS':
+        return 3;
+      case 'ACCEPTED':
+        return 2;
+      case 'NEW':
+        return 1;
+      default:
+        return 0;
+    }
+  }
+
+  Color _statusColor(String status) {
+    switch (status) {
+      case 'READY':
+        return Colors.green.shade600;
+      case 'IN_PROGRESS':
+        return Colors.orange.shade600;
+      case 'ACCEPTED':
+        return Colors.amber.shade700;
+      case 'NEW':
+        return Colors.blue.shade600;
+      default:
+        return Colors.grey.shade400;
+    }
+  }
+
   Map<String, num> _defaultLayout(int index) {
     final cols = 6;
     final col = index % cols;
@@ -1457,6 +1832,11 @@ class _FloorPlanTabState extends State<FloorPlanTab> {
       appBar: AppBar(
         title: const Text('Hall'),
         actions: [
+          IconButton(
+            tooltip: _showStatusBadges ? 'Hide status badges' : 'Show status badges',
+            onPressed: () => setState(() => _showStatusBadges = !_showStatusBadges),
+            icon: Icon(_showStatusBadges ? Icons.visibility : Icons.visibility_off),
+          ),
           if (_halls.isNotEmpty)
             DropdownButtonHideUnderline(
               child: DropdownButton<int>(
@@ -1468,12 +1848,16 @@ class _FloorPlanTabState extends State<FloorPlanTab> {
                         ))
                     .toList(),
                 onChanged: (v) {
-                  setState(() => _hallId = v);
-                  _load();
+                  setState(() {
+                    _hallId = v;
+                    _planId = null;
+                  });
+                  _loadPlanPrefs();
+                  _loadAll(forceLayout: true, forceHalls: true);
                 },
               ),
             ),
-          IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
+          IconButton(onPressed: () => _loadAll(forceLayout: true, forceHalls: true), icon: const Icon(Icons.refresh)),
         ],
       ),
       body: _loading
@@ -1494,6 +1878,80 @@ class _FloorPlanTabState extends State<FloorPlanTab> {
                           ),
                         ),
                       ),
+      Positioned(
+        right: 12,
+        top: 12,
+        child: GestureDetector(
+          onHorizontalDragEnd: (details) {
+            if (details.primaryVelocity == null) return;
+            if (details.primaryVelocity! < -100) {
+              _cyclePlan(1);
+            } else if (details.primaryVelocity! > 100) {
+              _cyclePlan(-1);
+            }
+          },
+          child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.9),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.black12),
+            boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 3))],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Plans', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                  const SizedBox(width: 8),
+                  Switch(
+                    value: _useActivePlan,
+                    onChanged: (v) {
+                      setState(() {
+                        _useActivePlan = v;
+                      });
+                      _saveUseActivePref(v);
+                      _loadAll(forceLayout: true);
+                    },
+                  ),
+                  const Text('Use active', style: TextStyle(fontSize: 11)),
+                ],
+              ),
+              if (_plans.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Builder(builder: (context) {
+                  final state = context.findAncestorStateOfType<_FloorPlanTabState>();
+                  if (state == null) return const SizedBox.shrink();
+                  final hall = state._halls.firstWhere(
+                    (h) => (h['id'] as num?)?.toInt() == state._hallId,
+                    orElse: () => const {},
+                  );
+                  final activePlanId = (hall['activePlanId'] as num?)?.toInt();
+                  final activePlan = state._plans.firstWhere(
+                    (p) => (p['id'] as num?)?.toInt() == activePlanId,
+                    orElse: () => const {},
+                  );
+                  return _activePlanLabel(activePlan, true);
+                }),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _planChip('Day'),
+                    const SizedBox(width: 6),
+                    _planChip('Evening'),
+                    const SizedBox(width: 6),
+                    _planChip('Banquet'),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+        ),
+      ),
                       if (_bgUrl.isNotEmpty)
                         Positioned.fill(
                           child: Opacity(
@@ -1507,6 +1965,64 @@ class _FloorPlanTabState extends State<FloorPlanTab> {
                       Positioned.fill(
                         child: CustomPaint(
                           painter: _GridPainter(),
+                        ),
+                      ),
+                      Positioned(
+                        left: 12,
+                        top: 12,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.9),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.black12),
+                            boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 3))],
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              InkWell(
+                                onTap: () {
+                                  final next = !_showLegend;
+                                  setState(() => _showLegend = next);
+                                  _saveLegendPref(next);
+                                },
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(_showLegend ? Icons.expand_less : Icons.expand_more, size: 18),
+                                    const SizedBox(width: 6),
+                                    const Text('Legend', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                                  ],
+                                ),
+                              ),
+                              if (_showLegend) ...[
+                                const SizedBox(height: 8),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    _legendDot(Colors.blue.shade600),
+                                    const SizedBox(width: 6),
+                                    const Text('NEW', style: TextStyle(fontSize: 11)),
+                                    const SizedBox(width: 10),
+                                    _legendDot(Colors.amber.shade700),
+                                    const SizedBox(width: 6),
+                                    const Text('ACCEPTED', style: TextStyle(fontSize: 11)),
+                                    const SizedBox(width: 10),
+                                    _legendDot(Colors.orange.shade600),
+                                    const SizedBox(width: 6),
+                                    const Text('IN_PROGRESS', style: TextStyle(fontSize: 11)),
+                                    const SizedBox(width: 10),
+                                    _legendDot(Colors.green.shade600),
+                                    const SizedBox(width: 6),
+                                    const Text('READY', style: TextStyle(fontSize: 11)),
+                                  ],
+                                ),
+                              ],
+                            ],
+                          ),
                         ),
                       ),
                       ..._zones.map((z) {
@@ -1556,6 +2072,11 @@ class _FloorPlanTabState extends State<FloorPlanTab> {
                         final isHot = _hotTableIds.contains(tableId);
                         final baseColor = _waiterColor(waiterId);
                         final glow = isHot && _blinkOn;
+                        final heat = _heatByTableId[tableId] ?? 0;
+                        final heatColor = Color.lerp(Colors.transparent, Colors.redAccent, heat)!;
+                        final status = (_statusByTableId[tableId] ?? '').toUpperCase();
+                        final statusColor = _statusColor(status);
+                        final borderColor = status.isNotEmpty ? statusColor.withOpacity(0.75) : baseColor.withOpacity(0.7);
 
                         final left = (xPct / 100) * width;
                         final top = (yPct / 100) * height;
@@ -1572,9 +2093,9 @@ class _FloorPlanTabState extends State<FloorPlanTab> {
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 300),
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.95),
+                                color: Color.lerp(Colors.white, heatColor.withOpacity(0.25), heat) ?? Colors.white.withOpacity(0.95),
                                 borderRadius: BorderRadius.circular(shape == 'ROUND' ? 999 : 14),
-                                border: Border.all(color: glow ? Colors.redAccent : baseColor.withOpacity(0.7), width: glow ? 2.5 : 1.2),
+                                border: Border.all(color: glow ? Colors.redAccent : borderColor, width: glow ? 2.5 : 1.4),
                                 boxShadow: [
                                   BoxShadow(
                                     color: glow ? Colors.redAccent.withOpacity(0.35) : Colors.black12,
@@ -1594,6 +2115,21 @@ class _FloorPlanTabState extends State<FloorPlanTab> {
                                       waiterId == null ? 'Unassigned' : 'Waiter #$waiterId',
                                       style: TextStyle(color: baseColor, fontSize: 11),
                                     ),
+                                    if (_showStatusBadges && status.isNotEmpty) ...[
+                                      const SizedBox(height: 2),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: statusColor.withOpacity(0.12),
+                                          borderRadius: BorderRadius.circular(999),
+                                          border: Border.all(color: statusColor, width: 1),
+                                        ),
+                                        child: Text(
+                                          status,
+                                          style: TextStyle(color: statusColor, fontSize: 9, fontWeight: FontWeight.w700),
+                                        ),
+                                      ),
+                                    ],
                                   ],
                                 ),
                               ),
@@ -1625,6 +2161,66 @@ class _GridPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+Widget _legendDot(Color color) {
+  return Container(
+    width: 10,
+    height: 10,
+    decoration: BoxDecoration(
+      color: color,
+      shape: BoxShape.circle,
+    ),
+  );
+}
+
+Widget _activePlanLabel(Map<String, dynamic> plan, bool isActive) {
+  final name = (plan['name'] ?? '').toString();
+  if (name.isEmpty) return const SizedBox.shrink();
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+    decoration: BoxDecoration(
+      color: isActive ? Colors.black87 : Colors.white,
+      borderRadius: BorderRadius.circular(999),
+      border: Border.all(color: isActive ? Colors.black87 : Colors.black12),
+    ),
+    child: Text(
+      isActive ? '$name • Active' : name,
+      style: TextStyle(fontSize: 11, color: isActive ? Colors.white : Colors.black87),
+    ),
+  );
+}
+
+Widget _planChip(String name) {
+  return Builder(builder: (context) {
+    final state = context.findAncestorStateOfType<_FloorPlanTabState>();
+    if (state == null) return const SizedBox.shrink();
+    final plan = state._plans.firstWhere(
+      (p) => (p['name'] ?? '').toString().trim().toLowerCase() == name.toLowerCase(),
+      orElse: () => const {},
+    );
+    final planId = (plan['id'] as num?)?.toInt();
+    final isActive = planId != null && planId == state._planId;
+    return InkWell(
+      onTap: (planId == null || state._useActivePlan)
+          ? null
+          : () {
+              state._selectPlan(planId);
+            },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: isActive ? Colors.black87 : (state._useActivePlan ? Colors.grey.shade200 : Colors.white),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: isActive ? Colors.black87 : Colors.black12),
+        ),
+        child: Text(
+          name,
+          style: TextStyle(fontSize: 11, color: isActive ? Colors.white : Colors.black87),
+        ),
+      ),
+    );
+  });
 }
 
 class HistoryTab extends StatefulWidget {

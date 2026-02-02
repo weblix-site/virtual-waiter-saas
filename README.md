@@ -19,6 +19,7 @@ This repo is a **starting implementation** of the Technical Spec (ТЗ) for the 
 
 - **Staff App (Flutter)**
   - Basic login (Basic Auth), list active orders, order details, update status
+  - Hall view (floor plan) with table highlights for new orders
 
 ## Quick start (local)
 
@@ -89,3 +90,19 @@ curl -u waiter1:demo123 "http://localhost:8080/api/staff/tables/TBL_DEMO_0001/si
 
 Then open the returned `url` in the browser.
 
+## Floor plan (Halls & Plans)
+Admins can create **halls** and multiple **plans** per hall, then set an active plan.
+
+Key endpoints (admin):
+- `GET /api/admin/halls`
+- `POST /api/admin/halls`
+- `GET /api/admin/halls/{id}`
+- `PATCH /api/admin/halls/{id}` (set `activePlanId`)
+- `GET /api/admin/halls/{hallId}/plans`
+- `POST /api/admin/halls/{hallId}/plans`
+- `PATCH /api/admin/hall-plans/{id}`
+- `POST /api/admin/hall-plans/{id}/duplicate`
+
+Staff:
+- `GET /api/staff/halls`
+- `GET /api/staff/branch-layout?hallId=...`

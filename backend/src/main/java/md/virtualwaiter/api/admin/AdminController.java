@@ -135,6 +135,36 @@ public class AdminController {
     return u.branchId;
   }
 
+  private void validateLayoutBounds(Double x, Double y, Double w, Double h) {
+    if (x != null && (x.isNaN() || x < 0 || x > 100)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "layoutX out of range");
+    }
+    if (y != null && (y.isNaN() || y < 0 || y > 100)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "layoutY out of range");
+    }
+    if (w != null && (w.isNaN() || w < 0 || w > 100)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "layoutW out of range");
+    }
+    if (h != null && (h.isNaN() || h < 0 || h > 100)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "layoutH out of range");
+    }
+    if (x != null && w != null && x + w > 100.0001) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "layoutX + layoutW must be <= 100");
+    }
+    if (y != null && h != null && y + h > 100.0001) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "layoutY + layoutH must be <= 100");
+    }
+  }
+
+  private static final int MAX_ZONES_JSON_LEN = 20000;
+
+  private void validateZonesJson(String zonesJson) {
+    if (zonesJson == null) return;
+    if (zonesJson.length() > MAX_ZONES_JSON_LEN) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "zonesJson too large");
+    }
+  }
+
   public record MeResponse(long id, String username, String role, Long branchId) {}
 
   @GetMapping("/me")
@@ -168,6 +198,7 @@ public class AdminController {
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
     requireBranchAccess(u, b.id);
     if (req != null) {
+      validateZonesJson(req.zonesJson);
       b.layoutBgUrl = req.backgroundUrl;
       b.layoutZonesJson = req.zonesJson;
     }
@@ -229,6 +260,7 @@ public class AdminController {
     if (req.isActive != null) h.isActive = req.isActive;
     if (req.sortOrder != null) h.sortOrder = req.sortOrder;
     if (req.backgroundUrl != null) h.layoutBgUrl = req.backgroundUrl;
+    if (req.zonesJson != null) validateZonesJson(req.zonesJson);
     if (req.zonesJson != null) h.layoutZonesJson = req.zonesJson;
     if (req.activePlanId != null) h.activePlanId = req.activePlanId;
     h = hallRepo.save(h);
@@ -250,6 +282,10 @@ public class AdminController {
   public record HallPlanDto(long id, long hallId, String name, boolean isActive, int sortOrder, String backgroundUrl, String zonesJson) {}
   public record CreateHallPlanRequest(@NotBlank String name, Integer sortOrder) {}
   public record UpdateHallPlanRequest(String name, Boolean isActive, Integer sortOrder, String backgroundUrl, String zonesJson) {}
+  public record DuplicateHallPlanRequest(String name) {}
+  public record PlanExportTable(String publicId, int number, Double layoutX, Double layoutY, Double layoutW, Double layoutH, String layoutShape, Integer layoutRotation, String layoutZone) {}
+  public record PlanExportResponse(String name, long hallId, String backgroundUrl, String zonesJson, List<PlanExportTable> tables) {}
+  public record PlanImportRequest(String name, String backgroundUrl, String zonesJson, List<PlanExportTable> tables, Boolean applyLayouts) {}
 
   @GetMapping("/halls/{hallId}/plans")
   public List<HallPlanDto> listHallPlans(@PathVariable long hallId, Authentication auth) {
@@ -296,9 +332,92 @@ public class AdminController {
     if (req.isActive != null) p.isActive = req.isActive;
     if (req.sortOrder != null) p.sortOrder = req.sortOrder;
     if (req.backgroundUrl != null) p.layoutBgUrl = req.backgroundUrl;
+    if (req.zonesJson != null) validateZonesJson(req.zonesJson);
     if (req.zonesJson != null) p.layoutZonesJson = req.zonesJson;
     p = hallPlanRepo.save(p);
     auditService.log(u, "UPDATE", "HallPlan", p.id, null);
+    return new HallPlanDto(p.id, p.hallId, p.name, p.isActive, p.sortOrder, p.layoutBgUrl, p.layoutZonesJson);
+  }
+
+  @GetMapping("/hall-plans/{id}/export")
+  public PlanExportResponse exportHallPlan(@PathVariable long id, Authentication auth) {
+    StaffUser u = requireAdmin(auth);
+    HallPlan p = hallPlanRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Plan not found"));
+    BranchHall h = hallRepo.findById(p.hallId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hall not found"));
+    requireBranchAccess(u, h.branchId);
+    List<CafeTable> tables = tableRepo.findByBranchId(h.branchId).stream()
+      .filter(t -> Objects.equals(t.hallId, h.id))
+      .toList();
+    List<PlanExportTable> out = new ArrayList<>();
+    for (CafeTable t : tables) {
+      out.add(new PlanExportTable(
+        t.publicId,
+        t.number,
+        t.layoutX,
+        t.layoutY,
+        t.layoutW,
+        t.layoutH,
+        t.layoutShape,
+        t.layoutRotation,
+        t.layoutZone
+      ));
+    }
+    return new PlanExportResponse(p.name, h.id, p.layoutBgUrl, p.layoutZonesJson, out);
+  }
+
+  @PostMapping("/halls/{hallId}/plans/import")
+  public HallPlanDto importHallPlan(@PathVariable long hallId, @RequestBody PlanImportRequest req, Authentication auth) {
+    StaffUser u = requireAdmin(auth);
+    BranchHall h = hallRepo.findById(hallId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hall not found"));
+    requireBranchAccess(u, h.branchId);
+    if (req == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Body required");
+    String name = (req.name == null || req.name.isBlank()) ? "Imported" : req.name.trim();
+    validateZonesJson(req.zonesJson);
+    HallPlan p = new HallPlan();
+    p.hallId = hallId;
+    p.name = name;
+    p.layoutBgUrl = req.backgroundUrl;
+    p.layoutZonesJson = req.zonesJson;
+    p.sortOrder = 0;
+    p = hallPlanRepo.save(p);
+
+    boolean applyLayouts = req.applyLayouts == null || req.applyLayouts;
+    if (applyLayouts && req.tables != null && !req.tables.isEmpty()) {
+      List<CafeTable> tables = tableRepo.findByBranchId(h.branchId).stream()
+        .filter(t -> Objects.equals(t.hallId, h.id))
+        .toList();
+      Map<String, CafeTable> byPublicId = new HashMap<>();
+      Map<Integer, CafeTable> byNumber = new HashMap<>();
+      for (CafeTable t : tables) {
+        if (t.publicId != null) byPublicId.put(t.publicId, t);
+        byNumber.put(t.number, t);
+      }
+      for (PlanExportTable it : req.tables) {
+        CafeTable t = null;
+        if (it.publicId() != null) t = byPublicId.get(it.publicId());
+        if (t == null) t = byNumber.get(it.number());
+        if (t == null) continue;
+        if (it.layoutX() != null || it.layoutY() != null || it.layoutW() != null || it.layoutH() != null) {
+          Double nx = it.layoutX() != null ? it.layoutX() : t.layoutX;
+          Double ny = it.layoutY() != null ? it.layoutY() : t.layoutY;
+          Double nw = it.layoutW() != null ? it.layoutW() : t.layoutW;
+          Double nh = it.layoutH() != null ? it.layoutH() : t.layoutH;
+          validateLayoutBounds(nx, ny, nw, nh);
+        }
+        if (it.layoutX() != null) t.layoutX = it.layoutX();
+        if (it.layoutY() != null) t.layoutY = it.layoutY();
+        if (it.layoutW() != null) t.layoutW = it.layoutW();
+        if (it.layoutH() != null) t.layoutH = it.layoutH();
+        if (it.layoutShape() != null) t.layoutShape = it.layoutShape();
+        if (it.layoutRotation() != null) t.layoutRotation = it.layoutRotation();
+        if (it.layoutZone() != null) t.layoutZone = it.layoutZone();
+        tableRepo.save(t);
+      }
+    }
+    auditService.log(u, "IMPORT", "HallPlan", p.id, null);
     return new HallPlanDto(p.id, p.hallId, p.name, p.isActive, p.sortOrder, p.layoutBgUrl, p.layoutZonesJson);
   }
 
@@ -316,6 +435,27 @@ public class AdminController {
       hallRepo.save(h);
     }
     auditService.log(u, "DELETE", "HallPlan", p.id, null);
+  }
+
+  @PostMapping("/hall-plans/{id}/duplicate")
+  public HallPlanDto duplicateHallPlan(@PathVariable long id, @RequestBody DuplicateHallPlanRequest req, Authentication auth) {
+    StaffUser u = requireAdmin(auth);
+    HallPlan src = hallPlanRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Plan not found"));
+    BranchHall h = hallRepo.findById(src.hallId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hall not found"));
+    requireBranchAccess(u, h.branchId);
+    HallPlan copy = new HallPlan();
+    copy.hallId = src.hallId;
+    String suffix = " Copy";
+    copy.name = (req != null && req.name != null && !req.name.isBlank()) ? req.name.trim() : (src.name + suffix);
+    copy.sortOrder = src.sortOrder + 1;
+    copy.isActive = src.isActive;
+    copy.layoutBgUrl = src.layoutBgUrl;
+    copy.layoutZonesJson = src.layoutZonesJson;
+    copy = hallPlanRepo.save(copy);
+    auditService.log(u, "CREATE", "HallPlan", copy.id, "duplicateFrom:" + src.id);
+    return new HallPlanDto(copy.id, copy.hallId, copy.name, copy.isActive, copy.sortOrder, copy.layoutBgUrl, copy.layoutZonesJson);
   }
 
   public record AdminPartyDto(
@@ -869,6 +1009,13 @@ public class AdminController {
     if (req.publicId != null && !req.publicId.isBlank()) t.publicId = req.publicId.trim();
     if (req.assignedWaiterId != null) t.assignedWaiterId = req.assignedWaiterId;
     if (req.hallId != null) t.hallId = req.hallId;
+    if (req.layoutX != null || req.layoutY != null || req.layoutW != null || req.layoutH != null) {
+      Double nx = req.layoutX != null ? req.layoutX : t.layoutX;
+      Double ny = req.layoutY != null ? req.layoutY : t.layoutY;
+      Double nw = req.layoutW != null ? req.layoutW : t.layoutW;
+      Double nh = req.layoutH != null ? req.layoutH : t.layoutH;
+      validateLayoutBounds(nx, ny, nw, nh);
+    }
     if (req.layoutX != null) t.layoutX = req.layoutX;
     if (req.layoutY != null) t.layoutY = req.layoutY;
     if (req.layoutW != null) t.layoutW = req.layoutW;
@@ -926,6 +1073,13 @@ public class AdminController {
       if (!Objects.equals(t.branchId, bid)) {
         throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong branch");
       }
+      if (item.layoutX != null || item.layoutY != null || item.layoutW != null || item.layoutH != null) {
+        Double nx = item.layoutX != null ? item.layoutX : t.layoutX;
+        Double ny = item.layoutY != null ? item.layoutY : t.layoutY;
+        Double nw = item.layoutW != null ? item.layoutW : t.layoutW;
+        Double nh = item.layoutH != null ? item.layoutH : t.layoutH;
+        validateLayoutBounds(nx, ny, nw, nh);
+      }
       if (item.layoutX != null) t.layoutX = item.layoutX;
       if (item.layoutY != null) t.layoutY = item.layoutY;
       if (item.layoutW != null) t.layoutW = item.layoutW;
@@ -938,6 +1092,35 @@ public class AdminController {
       updated++;
     }
     auditService.log(u, "UPDATE", "CafeTableLayout", (long) updated, null);
+    return Map.of("updated", updated);
+  }
+
+  public record BulkAssignHallRequest(@NotNull List<Long> tableIds, Long hallId) {}
+
+  @PostMapping("/tables/bulk-assign-hall")
+  public Map<String, Object> bulkAssignHall(
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @Valid @RequestBody BulkAssignHallRequest req,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    if (req.tableIds == null || req.tableIds.isEmpty()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "tableIds required");
+    }
+    int updated = 0;
+    for (Long id : req.tableIds) {
+      CafeTable t = tableRepo.findById(id)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
+      requireBranchAccess(u, t.branchId);
+      if (!Objects.equals(t.branchId, bid)) {
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong branch");
+      }
+      t.hallId = req.hallId;
+      tableRepo.save(t);
+      updated++;
+    }
+    auditService.log(u, "UPDATE", "CafeTable", (long) updated, "bulkAssignHall");
     return Map.of("updated", updated);
   }
 
@@ -1254,6 +1437,7 @@ public class AdminController {
     @RequestParam(value = "to", required = false) String to,
     @RequestParam(value = "branchId", required = false) Long branchId,
     @RequestParam(value = "tableId", required = false) Long tableId,
+    @RequestParam(value = "hallId", required = false) Long hallId,
     @RequestParam(value = "waiterId", required = false) Long waiterId,
     Authentication auth
   ) {
@@ -1269,9 +1453,17 @@ public class AdminController {
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Waiter not found"));
       requireBranchAccess(u, w.branchId);
     }
+    if (hallId != null) {
+      BranchHall h = hallRepo.findById(hallId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hall not found"));
+      if (!h.branchId.equals(bid)) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Hall does not belong to branch");
+      }
+      requireBranchAccess(u, h.branchId);
+    }
     Instant fromTs = parseInstantOrDate(from, true);
     Instant toTs = parseInstantOrDate(to, false);
-    List<StatsService.DailyRow> rows = statsService.dailyForBranchFiltered(bid, fromTs, toTs, tableId, waiterId);
+    List<StatsService.DailyRow> rows = statsService.dailyForBranchFiltered(bid, fromTs, toTs, tableId, waiterId, hallId);
     StringBuilder sb = new StringBuilder();
     sb.append("day,orders,calls,paid_bills,gross_cents,tips_cents\n");
     for (StatsService.DailyRow r : rows) {
@@ -1295,6 +1487,7 @@ public class AdminController {
     @RequestParam(value = "to", required = false) String to,
     @RequestParam(value = "branchId", required = false) Long branchId,
     @RequestParam(value = "tableId", required = false) Long tableId,
+    @RequestParam(value = "hallId", required = false) Long hallId,
     @RequestParam(value = "waiterId", required = false) Long waiterId,
     Authentication auth
   ) {
@@ -1310,9 +1503,17 @@ public class AdminController {
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Waiter not found"));
       requireBranchAccess(u, w.branchId);
     }
+    if (hallId != null) {
+      BranchHall h = hallRepo.findById(hallId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hall not found"));
+      if (!h.branchId.equals(bid)) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Hall does not belong to branch");
+      }
+      requireBranchAccess(u, h.branchId);
+    }
     Instant fromTs = parseInstantOrDate(from, true);
     Instant toTs = parseInstantOrDate(to, false);
-    StatsService.Summary s = statsService.summaryForBranchFiltered(bid, fromTs, toTs, tableId, waiterId);
+    StatsService.Summary s = statsService.summaryForBranchFiltered(bid, fromTs, toTs, tableId, waiterId, hallId);
     return new StatsSummaryResponse(
       s.from().toString(),
       s.to().toString(),
@@ -1331,6 +1532,7 @@ public class AdminController {
     @RequestParam(value = "to", required = false) String to,
     @RequestParam(value = "branchId", required = false) Long branchId,
     @RequestParam(value = "tableId", required = false) Long tableId,
+    @RequestParam(value = "hallId", required = false) Long hallId,
     @RequestParam(value = "waiterId", required = false) Long waiterId,
     Authentication auth
   ) {
@@ -1346,9 +1548,17 @@ public class AdminController {
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Waiter not found"));
       requireBranchAccess(u, w.branchId);
     }
+    if (hallId != null) {
+      BranchHall h = hallRepo.findById(hallId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hall not found"));
+      if (!h.branchId.equals(bid)) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Hall does not belong to branch");
+      }
+      requireBranchAccess(u, h.branchId);
+    }
     Instant fromTs = parseInstantOrDate(from, true);
     Instant toTs = parseInstantOrDate(to, false);
-    List<StatsService.DailyRow> rows = statsService.dailyForBranchFiltered(bid, fromTs, toTs, tableId, waiterId);
+    List<StatsService.DailyRow> rows = statsService.dailyForBranchFiltered(bid, fromTs, toTs, tableId, waiterId, hallId);
     List<StatsDailyRow> out = new ArrayList<>();
     for (StatsService.DailyRow r : rows) {
       out.add(new StatsDailyRow(r.day(), r.ordersCount(), r.callsCount(), r.paidBillsCount(), r.grossCents(), r.tipsCents()));
@@ -1365,6 +1575,7 @@ public class AdminController {
     @RequestParam(value = "to", required = false) String to,
     @RequestParam(value = "branchId", required = false) Long branchId,
     @RequestParam(value = "tableId", required = false) Long tableId,
+    @RequestParam(value = "hallId", required = false) Long hallId,
     @RequestParam(value = "waiterId", required = false) Long waiterId,
     @RequestParam(value = "limit", required = false) Integer limit,
     Authentication auth
@@ -1381,10 +1592,18 @@ public class AdminController {
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Waiter not found"));
       requireBranchAccess(u, w.branchId);
     }
+    if (hallId != null) {
+      BranchHall h = hallRepo.findById(hallId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hall not found"));
+      if (!h.branchId.equals(bid)) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Hall does not belong to branch");
+      }
+      requireBranchAccess(u, h.branchId);
+    }
     Instant fromTs = parseInstantOrDate(from, true);
     Instant toTs = parseInstantOrDate(to, false);
     int lim = limit == null ? 10 : limit;
-    List<StatsService.TopItemRow> rows = statsService.topItemsForBranch(bid, fromTs, toTs, tableId, waiterId, lim);
+    List<StatsService.TopItemRow> rows = statsService.topItemsForBranch(bid, fromTs, toTs, tableId, waiterId, hallId, lim);
     List<TopItemRow> out = new ArrayList<>();
     for (StatsService.TopItemRow r : rows) {
       out.add(new TopItemRow(r.menuItemId(), r.name(), r.qty(), r.grossCents()));
@@ -1398,6 +1617,7 @@ public class AdminController {
     @RequestParam(value = "to", required = false) String to,
     @RequestParam(value = "branchId", required = false) Long branchId,
     @RequestParam(value = "tableId", required = false) Long tableId,
+    @RequestParam(value = "hallId", required = false) Long hallId,
     @RequestParam(value = "waiterId", required = false) Long waiterId,
     @RequestParam(value = "limit", required = false) Integer limit,
     Authentication auth
@@ -1414,10 +1634,18 @@ public class AdminController {
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Waiter not found"));
       requireBranchAccess(u, w.branchId);
     }
+    if (hallId != null) {
+      BranchHall h = hallRepo.findById(hallId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hall not found"));
+      if (!h.branchId.equals(bid)) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Hall does not belong to branch");
+      }
+      requireBranchAccess(u, h.branchId);
+    }
     Instant fromTs = parseInstantOrDate(from, true);
     Instant toTs = parseInstantOrDate(to, false);
     int lim = limit == null ? 10 : limit;
-    List<StatsService.TopCategoryRow> rows = statsService.topCategoriesForBranch(bid, fromTs, toTs, tableId, waiterId, lim);
+    List<StatsService.TopCategoryRow> rows = statsService.topCategoriesForBranch(bid, fromTs, toTs, tableId, waiterId, hallId, lim);
     List<TopCategoryRow> out = new ArrayList<>();
     for (StatsService.TopCategoryRow r : rows) {
       out.add(new TopCategoryRow(r.categoryId(), r.name(), r.qty(), r.grossCents()));

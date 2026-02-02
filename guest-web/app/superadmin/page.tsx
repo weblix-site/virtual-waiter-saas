@@ -95,10 +95,15 @@ export default function SuperAdminPage() {
   const [newHallSort, setNewHallSort] = useState(0);
   const [selectedTableId, setSelectedTableId] = useState<number | null>(null);
   const [planEditMode, setPlanEditMode] = useState(true);
+  const [planPreview, setPlanPreview] = useState(false);
   const [snapEnabled, setSnapEnabled] = useState(true);
+  const [planZoom, setPlanZoom] = useState(1);
+  const [planPan, setPlanPan] = useState({ x: 0, y: 0 });
+  const [panMode, setPanMode] = useState(false);
   const [planBgUrl, setPlanBgUrl] = useState("");
   const [planZones, setPlanZones] = useState<{ id: string; name: string; x: number; y: number; w: number; h: number; color: string }[]>([]);
   const planRef = useRef<HTMLDivElement | null>(null);
+  const [planTemplates, setPlanTemplates] = useState<{ name: string; payload: any }[]>([]);
   const zoneDragRef = useRef<{
     id: string;
     startX: number;
@@ -120,6 +125,12 @@ export default function SuperAdminPage() {
     baseH: number;
     mode: "move" | "resize";
     corner?: "nw" | "ne" | "sw" | "se";
+  } | null>(null);
+  const panDragRef = useRef<{
+    startX: number;
+    startY: number;
+    baseX: number;
+    baseY: number;
   } | null>(null);
 
   const [newTenantName, setNewTenantName] = useState("");
@@ -170,6 +181,7 @@ export default function SuperAdminPage() {
 
   const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
   const snap = (v: number, step = 2) => (snapEnabled ? Math.round(v / step) * step : v);
+  const isInteractive = planEditMode && !planPreview;
 
   const layoutDefaults = (idx: number) => {
     const cols = 6;
@@ -199,15 +211,49 @@ export default function SuperAdminPage() {
     };
   };
 
+  const computePlanBounds = () => {
+    let maxX = 0;
+    let maxY = 0;
+    const hallTables = tables.filter((t) => (hallId === "" ? true : t.hallId === hallId));
+    hallTables.forEach((t, idx) => {
+      const l = getTableLayout(t, idx);
+      maxX = Math.max(maxX, (l.layoutX ?? 0) + (l.layoutW ?? 0));
+      maxY = Math.max(maxY, (l.layoutY ?? 0) + (l.layoutH ?? 0));
+    });
+    planZones.forEach((z) => {
+      maxX = Math.max(maxX, z.x + z.w);
+      maxY = Math.max(maxY, z.y + z.h);
+    });
+    return { maxX: Math.max(1, maxX), maxY: Math.max(1, maxY) };
+  };
+
+  const fitPlanToScreen = () => {
+    const { maxX, maxY } = computePlanBounds();
+    const zoomX = 100 / maxX;
+    const zoomY = 100 / maxY;
+    const target = Math.min(2, Math.max(0.3, Math.min(zoomX, zoomY)));
+    setPlanZoom(Number(target.toFixed(2)));
+  };
+
   useEffect(() => {
     const handleMove = (e: PointerEvent) => {
+      if (panDragRef.current) {
+        const dx = e.clientX - panDragRef.current.startX;
+        const dy = e.clientY - panDragRef.current.startY;
+        const nextX = panDragRef.current.baseX + dx;
+        const nextY = panDragRef.current.baseY + dy;
+        const clamp = (v: number) => Math.min(800, Math.max(-800, v));
+        setPlanPan({ x: clamp(nextX), y: clamp(nextY) });
+        return;
+      }
       if (!planRef.current) return;
       const rect = planRef.current.getBoundingClientRect();
       if (rect.width <= 0 || rect.height <= 0) return;
       const startRef = zoneDragRef.current ?? dragRef.current;
       if (!startRef) return;
-      const dx = ((e.clientX - startRef.startX) / rect.width) * 100;
-      const dy = ((e.clientY - startRef.startY) / rect.height) * 100;
+      const scale = planZoom || 1;
+      const dx = (((e.clientX - startRef.startX) / rect.width) * 100) / scale;
+      const dy = (((e.clientY - startRef.startY) / rect.height) * 100) / scale;
       if (zoneDragRef.current) {
         const z = zoneDragRef.current;
         let nx = z.baseX;
@@ -292,6 +338,7 @@ export default function SuperAdminPage() {
     const handleUp = () => {
       dragRef.current = null;
       zoneDragRef.current = null;
+      panDragRef.current = null;
     };
     window.addEventListener("pointermove", handleMove);
     window.addEventListener("pointerup", handleUp);
@@ -299,7 +346,7 @@ export default function SuperAdminPage() {
       window.removeEventListener("pointermove", handleMove);
       window.removeEventListener("pointerup", handleUp);
     };
-  }, []);
+  }, [planZoom, snapEnabled]);
 
   async function login() {
     setError(null);
@@ -386,6 +433,89 @@ export default function SuperAdminPage() {
     loadTables();
   }
 
+  async function exportPlanJson() {
+    if (!hallPlanId) return;
+    const res = await api(`/api/admin/hall-plans/${hallPlanId}/export`);
+    const body = await res.json();
+    const blob = new Blob([JSON.stringify(body, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${body.name || "plan"}-export.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function importPlanJson(file: File, applyLayouts = true) {
+    if (!hallId) return;
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+    const name = parsed.name || `Imported ${new Date().toISOString()}`;
+    const payload = {
+      name,
+      backgroundUrl: parsed.backgroundUrl ?? "",
+      zonesJson: parsed.zonesJson ?? "",
+      tables: parsed.tables ?? [],
+      applyLayouts,
+    };
+    const res = await api(`/api/admin/halls/${hallId}/plans/import`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    const plan = await res.json();
+    setHallPlanId(plan.id);
+    loadTables();
+  }
+
+  function saveTemplate() {
+    if (!hallPlanId) return;
+    const name = prompt("Template name", hallPlans.find((p) => p.id === hallPlanId)?.name ?? "Template");
+    if (!name) return;
+    const payload = {
+      name,
+      backgroundUrl: planBgUrl,
+      zonesJson: JSON.stringify(planZones),
+      tables: tables
+        .filter((t) => (hallId === "" ? true : t.hallId === hallId))
+        .map((t, idx) => {
+          const layout = getTableLayout(t, idx);
+          return {
+            publicId: t.publicId,
+            number: t.number,
+            layoutX: layout.layoutX,
+            layoutY: layout.layoutY,
+            layoutW: layout.layoutW,
+            layoutH: layout.layoutH,
+            layoutShape: layout.layoutShape,
+            layoutRotation: layout.layoutRotation,
+            layoutZone: layout.layoutZone,
+          };
+        }),
+    };
+    const next = [...planTemplates.filter((t) => t.name !== name), { name, payload }];
+    setPlanTemplates(next);
+    localStorage.setItem(`vw_plan_templates_${hallId}`, JSON.stringify(next));
+  }
+
+  async function applyTemplate(t: { name: string; payload: any }) {
+    if (!hallId) return;
+    const res = await api(`/api/admin/halls/${hallId}/plans/import`, {
+      method: "POST",
+      body: JSON.stringify({ ...t.payload, applyLayouts: true }),
+    });
+    const plan = await res.json();
+    setHallPlanId(plan.id);
+    loadTables();
+  }
+
+  function removeTemplate(name: string) {
+    const next = planTemplates.filter((t) => t.name !== name);
+    setPlanTemplates(next);
+    if (hallId) localStorage.setItem(`vw_plan_templates_${hallId}`, JSON.stringify(next));
+  }
+
   function autoLayoutTables() {
     setTables((prev) =>
       prev.map((t, idx) => {
@@ -455,6 +585,17 @@ export default function SuperAdminPage() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hallId, branchId]);
+
+  useEffect(() => {
+    if (!hallId) return;
+    try {
+      const raw = localStorage.getItem(`vw_plan_templates_${hallId}`);
+      if (raw) setPlanTemplates(JSON.parse(raw));
+      else setPlanTemplates([]);
+    } catch (_) {
+      setPlanTemplates([]);
+    }
+  }, [hallId]);
 
   useEffect(() => {
     if (!hallPlanId) return;
@@ -754,6 +895,29 @@ export default function SuperAdminPage() {
             <input type="checkbox" checked={snapEnabled} onChange={(e) => setSnapEnabled(e.target.checked)} />
             Snap to grid
           </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <input type="checkbox" checked={planPreview} onChange={(e) => setPlanPreview(e.target.checked)} />
+            Preview
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <input type="checkbox" checked={panMode} onChange={(e) => setPanMode(e.target.checked)} />
+            Pan mode
+          </label>
+          <button onClick={fitPlanToScreen} disabled={!branchId}>Fit to screen</button>
+          <button onClick={() => setPlanZoom(1)} disabled={!branchId}>Reset zoom</button>
+          <button onClick={() => setPlanPan({ x: 0, y: 0 })} disabled={!branchId}>Reset pan</button>
+          <button onClick={() => setPlanZoom((z) => Math.max(0.3, Number((z - 0.1).toFixed(2))))} disabled={!branchId}>-</button>
+          <button onClick={() => setPlanZoom((z) => Math.min(2, Number((z + 0.1).toFixed(2))))} disabled={!branchId}>+</button>
+          <input
+            type="range"
+            min={0.3}
+            max={2}
+            step={0.05}
+            value={planZoom}
+            onChange={(e) => setPlanZoom(Number(e.target.value))}
+            disabled={!branchId}
+          />
+          <span style={{ color: "#666" }}>Zoom: {Math.round(planZoom * 100)}%</span>
           <select value={hallId} onChange={(e) => setHallId(e.target.value ? Number(e.target.value) : "")} disabled={!branchId}>
             <option value="">Select hall</option>
             {halls.map((h) => (
@@ -779,6 +943,16 @@ export default function SuperAdminPage() {
           <button
             onClick={async () => {
               if (!hallPlanId) return;
+              await api(`/api/admin/hall-plans/${hallPlanId}/duplicate`, { method: "POST", body: JSON.stringify({}) });
+              loadTables();
+            }}
+            disabled={!hallPlanId}
+          >
+            Duplicate plan
+          </button>
+          <button
+            onClick={async () => {
+              if (!hallPlanId) return;
               await api(`/api/admin/hall-plans/${hallPlanId}`, { method: "DELETE" });
               setHallPlanId("");
               loadTables();
@@ -790,6 +964,19 @@ export default function SuperAdminPage() {
           <button onClick={loadTables} disabled={!branchId}>Load tables</button>
           <button onClick={autoLayoutTables} disabled={!branchId}>Auto layout</button>
           <button onClick={saveTableLayout} disabled={!branchId || !hallId}>Save layout</button>
+          <button onClick={exportPlanJson} disabled={!hallPlanId}>Export JSON</button>
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 12, color: "#666" }}>Import JSON</span>
+            <input
+              type="file"
+              accept="application/json"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) importPlanJson(f, true);
+                e.currentTarget.value = "";
+              }}
+            />
+          </label>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
           <input placeholder="New hall name" value={newHallName} onChange={(e) => setNewHallName(e.target.value)} />
@@ -821,6 +1008,103 @@ export default function SuperAdminPage() {
             Add plan
           </button>
         </div>
+        {hallId && (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
+            <span style={{ fontSize: 12, color: "#666" }}>Quick switch:</span>
+            {["Day", "Evening", "Banquet"].map((name) => (
+              <button
+                key={name}
+                onClick={async () => {
+                  if (!hallId) return;
+                  let plan = hallPlans.find((p) => (p.name ?? "").trim().toLowerCase() === name.toLowerCase());
+                  if (!plan) {
+                    const res = await api(`/api/admin/halls/${hallId}/plans`, {
+                      method: "POST",
+                      body: JSON.stringify({ name, sortOrder: 0 }),
+                    });
+                    plan = await res.json();
+                  }
+                  await api(`/api/admin/halls/${hallId}`, { method: "PATCH", body: JSON.stringify({ activePlanId: plan.id }) });
+                  setHallPlanId(plan.id);
+                  loadTables();
+                }}
+                style={{
+                  padding: "4px 10px",
+                  borderRadius: 999,
+                  border:
+                    hallPlans.find((p) => (p.name ?? "").trim().toLowerCase() === name.toLowerCase())?.id === hallPlanId
+                      ? "1px solid #111"
+                      : "1px solid #ddd",
+                  background:
+                    hallPlans.find((p) => (p.name ?? "").trim().toLowerCase() === name.toLowerCase())?.id === hallPlanId
+                      ? "#111"
+                      : "#fff",
+                  color:
+                    hallPlans.find((p) => (p.name ?? "").trim().toLowerCase() === name.toLowerCase())?.id === hallPlanId
+                      ? "#fff"
+                      : "#111",
+                  cursor: "pointer",
+                }}
+              >
+                {name}
+              </button>
+            ))}
+            {hallPlans.length > 0 &&
+              hallPlans.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={async () => {
+                    await api(`/api/admin/halls/${hallId}`, { method: "PATCH", body: JSON.stringify({ activePlanId: p.id }) });
+                    setHallPlanId(p.id);
+                    loadTables();
+                  }}
+                  style={{
+                    padding: "4px 10px",
+                    borderRadius: 999,
+                    border: p.id === hallPlanId ? "1px solid #111" : "1px solid #ddd",
+                    background: p.id === hallPlanId ? "#111" : "#fff",
+                    color: p.id === hallPlanId ? "#fff" : "#111",
+                    cursor: "pointer",
+                  }}
+                >
+                  {p.name}
+                </button>
+              ))}
+          </div>
+        )}
+        {hallId && (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
+            <span style={{ fontSize: 12, color: "#666" }}>Templates:</span>
+            <button onClick={saveTemplate} disabled={!hallPlanId}>Save current</button>
+            {planTemplates.map((t) => (
+              <span key={t.name} style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                <button onClick={() => applyTemplate(t)}>{t.name}</button>
+                <button onClick={() => removeTemplate(t.name)} style={{ color: "#b00" }}>×</button>
+              </span>
+            ))}
+            {planTemplates.length === 0 && <span style={{ fontSize: 12, color: "#999" }}>No templates</span>}
+          </div>
+        )}
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
+          <span style={{ fontSize: 12, color: "#666" }}>Legend:</span>
+          {staff.filter((s) => s.role === "WAITER").map((s) => (
+            <span key={s.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+              <span
+                style={{
+                  width: 10,
+                  height: 10,
+                  borderRadius: "50%",
+                  background: waiterColor(s.id),
+                  display: "inline-block",
+                }}
+              />
+              {s.username} #{s.id}
+            </span>
+          ))}
+          {staff.filter((s) => s.role === "WAITER").length === 0 && (
+            <span style={{ fontSize: 12, color: "#999" }}>Нет официантов</span>
+          )}
+        </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
           <label>
             Background URL
@@ -835,6 +1119,16 @@ export default function SuperAdminPage() {
         <div style={{ display: "grid", gridTemplateColumns: "1.3fr 0.7fr", gap: 16, marginTop: 12 }}>
           <div
             ref={planRef}
+            onPointerDown={(e) => {
+              if (!panMode) return;
+              if (e.target !== e.currentTarget) return;
+              panDragRef.current = {
+                startX: e.clientX,
+                startY: e.clientY,
+                baseX: planPan.x,
+                baseY: planPan.y,
+              };
+            }}
             style={{
               position: "relative",
               height: 520,
@@ -845,6 +1139,7 @@ export default function SuperAdminPage() {
                 "radial-gradient(circle at 80% 20%, rgba(108,92,231,0.08), transparent 45%)," +
                 "linear-gradient(180deg, #fafafa, #f5f5f7)",
               overflow: "hidden",
+              cursor: panMode ? "grab" : "default",
             }}
           >
             {planBgUrl && (
@@ -863,158 +1158,78 @@ export default function SuperAdminPage() {
               style={{
                 position: "absolute",
                 inset: 0,
-                backgroundImage:
-                  "linear-gradient(rgba(0,0,0,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.04) 1px, transparent 1px)",
-                backgroundSize: "24px 24px",
-                pointerEvents: "none",
+                transform: `translate(${planPan.x}px, ${planPan.y}px) scale(${planZoom})`,
+                transformOrigin: "top left",
               }}
-            />
-            {planZones.map((z) => (
+            >
               <div
-                key={z.id}
-                onPointerDown={(e) => {
-                  if (!planEditMode) return;
-                  zoneDragRef.current = {
-                    id: z.id,
-                    startX: e.clientX,
-                    startY: e.clientY,
-                    baseX: z.x,
-                    baseY: z.y,
-                    baseW: z.w,
-                    baseH: z.h,
-                    mode: "move",
-                  };
-                }}
                 style={{
                   position: "absolute",
-                  left: `${z.x}%`,
-                  top: `${z.y}%`,
-                  width: `${z.w}%`,
-                  height: `${z.h}%`,
-                  borderRadius: 16,
-                  border: `1px dashed ${z.color}`,
-                  background: `${z.color}22`,
-                  display: "flex",
-                  alignItems: "flex-start",
-                  justifyContent: "flex-start",
-                  padding: 6,
-                  fontSize: 12,
-                  color: "#333",
+                  inset: 0,
+                  backgroundImage:
+                    "linear-gradient(rgba(0,0,0,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.04) 1px, transparent 1px)",
+                  backgroundSize: "24px 24px",
+                  pointerEvents: "none",
                 }}
-              >
-                {z.name}
-                {planEditMode && (
-                  <>
-                    {["nw", "ne", "sw", "se"].map((corner) => (
-                      <div
-                        key={corner}
-                        onPointerDown={(e) => {
-                          e.stopPropagation();
-                          zoneDragRef.current = {
-                            id: z.id,
-                            startX: e.clientX,
-                            startY: e.clientY,
-                            baseX: z.x,
-                            baseY: z.y,
-                            baseW: z.w,
-                            baseH: z.h,
-                            mode: "resize",
-                            corner: corner as "nw" | "ne" | "sw" | "se",
-                          };
-                        }}
-                        style={{
-                          position: "absolute",
-                          width: 8,
-                          height: 8,
-                          background: "#111",
-                          borderRadius: 2,
-                          boxShadow: "0 0 0 2px #fff",
-                          top: corner.includes("n") ? -4 : undefined,
-                          bottom: corner.includes("s") ? -4 : undefined,
-                          left: corner.includes("w") ? -4 : undefined,
-                          right: corner.includes("e") ? -4 : undefined,
-                          cursor: `${corner}-resize`,
-                        }}
-                      />
-                    ))}
-                  </>
-                )}
-              </div>
-            ))}
-            {tables
-              .filter((t) => (hallId === "" ? true : t.hallId === hallId))
-              .map((t, idx) => {
-              const layout = getTableLayout(t, idx);
-              const color = waiterColor(t.assignedWaiterId ?? null);
-              const selected = t.id === selectedTableId;
-              return (
+              />
+              {planZones.map((z) => (
                 <div
-                  key={t.id}
-                  onPointerDown={(e) => {
-                    if (!planEditMode) return;
-                    dragRef.current = {
-                      id: t.id,
+                  key={z.id}
+                onPointerDown={(e) => {
+                  if (!isInteractive || panMode) return;
+                  zoneDragRef.current = {
+                    id: z.id,
                       startX: e.clientX,
                       startY: e.clientY,
-                      baseX: layout.layoutX ?? 0,
-                      baseY: layout.layoutY ?? 0,
-                      baseW: layout.layoutW ?? 10,
-                      baseH: layout.layoutH ?? 10,
+                      baseX: z.x,
+                      baseY: z.y,
+                      baseW: z.w,
+                      baseH: z.h,
                       mode: "move",
                     };
-                    setSelectedTableId(t.id);
                   }}
-                  onClick={() => setSelectedTableId(t.id)}
                   style={{
                     position: "absolute",
-                    left: `${layout.layoutX}%`,
-                    top: `${layout.layoutY}%`,
-                    width: `${layout.layoutW}%`,
-                    height: `${layout.layoutH}%`,
-                    borderRadius: layout.layoutShape === "ROUND" ? 999 : 14,
-                    border: selected ? `2px solid ${color}` : "1px solid rgba(0,0,0,0.12)",
-                    background: selected ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.9)",
-                    boxShadow: selected ? "0 10px 28px rgba(0,0,0,0.18)" : "0 6px 18px rgba(0,0,0,0.12)",
-                    transform: `rotate(${layout.layoutRotation ?? 0}deg)`,
+                    left: `${z.x}%`,
+                    top: `${z.y}%`,
+                    width: `${z.w}%`,
+                    height: `${z.h}%`,
+                    borderRadius: 16,
+                    border: `1px dashed ${z.color}`,
+                    background: `${z.color}22`,
                     display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flexDirection: "column",
-                    gap: 4,
-                    cursor: planEditMode ? "grab" : "default",
-                    userSelect: "none",
+                    alignItems: "flex-start",
+                    justifyContent: "flex-start",
+                    padding: 6,
+                    fontSize: 12,
+                    color: "#333",
                   }}
                 >
-                  <div style={{ fontWeight: 700, fontSize: 16 }}>#{t.number}</div>
-                  <div style={{ fontSize: 12, color }}>
-                    {t.assignedWaiterId ? `Waiter #${t.assignedWaiterId}` : "Unassigned"}
-                  </div>
-                  {layout.layoutZone ? (
-                    <div style={{ fontSize: 11, color: "#666" }}>{layout.layoutZone}</div>
-                  ) : null}
-                  {planEditMode && selected && (
+                  {z.name}
+                  {isInteractive && (
                     <>
                       {["nw", "ne", "sw", "se"].map((corner) => (
                         <div
-                          key={corner}
-                          onPointerDown={(e) => {
-                            e.stopPropagation();
-                            dragRef.current = {
-                              id: t.id,
+                      key={corner}
+                      onPointerDown={(e) => {
+                        if (!isInteractive || panMode) return;
+                        e.stopPropagation();
+                        zoneDragRef.current = {
+                              id: z.id,
                               startX: e.clientX,
                               startY: e.clientY,
-                              baseX: layout.layoutX ?? 0,
-                              baseY: layout.layoutY ?? 0,
-                              baseW: layout.layoutW ?? 10,
-                              baseH: layout.layoutH ?? 10,
+                              baseX: z.x,
+                              baseY: z.y,
+                              baseW: z.w,
+                              baseH: z.h,
                               mode: "resize",
                               corner: corner as "nw" | "ne" | "sw" | "se",
                             };
                           }}
                           style={{
                             position: "absolute",
-                            width: 10,
-                            height: 10,
+                            width: 8,
+                            height: 8,
                             background: "#111",
                             borderRadius: 2,
                             boxShadow: "0 0 0 2px #fff",
@@ -1026,44 +1241,102 @@ export default function SuperAdminPage() {
                           }}
                         />
                       ))}
-                      {["n", "s", "e", "w"].map((edge) => (
-                        <div
-                          key={edge}
-                          onPointerDown={(e) => {
-                            e.stopPropagation();
-                            zoneDragRef.current = {
-                              id: z.id,
-                              startX: e.clientX,
-                              startY: e.clientY,
-                              baseX: z.x,
-                              baseY: z.y,
-                              baseW: z.w,
-                              baseH: z.h,
-                              mode: "resize",
-                              corner: edge as "nw" | "ne" | "sw" | "se",
-                            };
-                          }}
-                          style={{
-                            position: "absolute",
-                            width: edge === "n" || edge === "s" ? 18 : 8,
-                            height: edge === "e" || edge === "w" ? 18 : 8,
-                            background: "#111",
-                            borderRadius: 4,
-                            boxShadow: "0 0 0 2px #fff",
-                            top: edge === "n" ? -6 : edge === "s" ? undefined : "50%",
-                            bottom: edge === "s" ? -6 : undefined,
-                            left: edge === "w" ? -6 : edge === "e" ? undefined : "50%",
-                            right: edge === "e" ? -6 : undefined,
-                            transform: edge === "n" || edge === "s" ? "translateX(-50%)" : "translateY(-50%)",
-                            cursor: `${edge}-resize`,
-                          }}
-                        />
-                      ))}
                     </>
                   )}
                 </div>
-              );
-            })}
+              ))}
+              {tables
+                .filter((t) => (hallId === "" ? true : t.hallId === hallId))
+                .map((t, idx) => {
+                  const layout = getTableLayout(t, idx);
+                  const color = waiterColor(t.assignedWaiterId ?? null);
+                  const selected = t.id === selectedTableId;
+                  return (
+                    <div
+                      key={t.id}
+                  onPointerDown={(e) => {
+                    if (!isInteractive || panMode) return;
+                    dragRef.current = {
+                      id: t.id,
+                          startX: e.clientX,
+                          startY: e.clientY,
+                          baseX: layout.layoutX ?? 0,
+                          baseY: layout.layoutY ?? 0,
+                          baseW: layout.layoutW ?? 10,
+                          baseH: layout.layoutH ?? 10,
+                          mode: "move",
+                        };
+                        setSelectedTableId(t.id);
+                      }}
+                      onClick={() => setSelectedTableId(t.id)}
+                      style={{
+                        position: "absolute",
+                        left: `${layout.layoutX}%`,
+                        top: `${layout.layoutY}%`,
+                        width: `${layout.layoutW}%`,
+                        height: `${layout.layoutH}%`,
+                        borderRadius: layout.layoutShape === "ROUND" ? 999 : 14,
+                        border: selected ? `2px solid ${color}` : "1px solid rgba(0,0,0,0.12)",
+                        background: selected ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.9)",
+                        boxShadow: selected ? "0 10px 28px rgba(0,0,0,0.18)" : "0 6px 18px rgba(0,0,0,0.12)",
+                        transform: `rotate(${layout.layoutRotation ?? 0}deg)`,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexDirection: "column",
+                        gap: 4,
+                        cursor: isInteractive ? "grab" : "default",
+                        userSelect: "none",
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, fontSize: 16 }}>#{t.number}</div>
+                      <div style={{ fontSize: 12, color }}>
+                        {t.assignedWaiterId ? `Waiter #${t.assignedWaiterId}` : "Unassigned"}
+                      </div>
+                      {layout.layoutZone ? (
+                        <div style={{ fontSize: 11, color: "#666" }}>{layout.layoutZone}</div>
+                      ) : null}
+                      {isInteractive && selected && (
+                        <>
+                          {["nw", "ne", "sw", "se"].map((corner) => (
+                            <div
+                              key={corner}
+                              onPointerDown={(e) => {
+                                if (!isInteractive || panMode) return;
+                                e.stopPropagation();
+                                dragRef.current = {
+                                  id: t.id,
+                                  startX: e.clientX,
+                                  startY: e.clientY,
+                                  baseX: layout.layoutX ?? 0,
+                                  baseY: layout.layoutY ?? 0,
+                                  baseW: layout.layoutW ?? 10,
+                                  baseH: layout.layoutH ?? 10,
+                                  mode: "resize",
+                                  corner: corner as "nw" | "ne" | "sw" | "se",
+                                };
+                              }}
+                              style={{
+                                position: "absolute",
+                                width: 10,
+                                height: 10,
+                                background: "#111",
+                                borderRadius: 2,
+                                boxShadow: "0 0 0 2px #fff",
+                                top: corner.includes("n") ? -4 : undefined,
+                                bottom: corner.includes("s") ? -4 : undefined,
+                                left: corner.includes("w") ? -4 : undefined,
+                                right: corner.includes("e") ? -4 : undefined,
+                                cursor: `${corner}-resize`,
+                              }}
+                            />
+                          ))}
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
           </div>
           <div style={{ border: "1px solid #eee", borderRadius: 12, padding: 12, background: "#fff" }}>
             <h3 style={{ marginTop: 0 }}>Table settings</h3>

@@ -28,7 +28,7 @@ public class StatsService {
   ) {}
 
   public Summary summaryForBranch(long branchId, Instant from, Instant to) {
-    return summaryForBranchFiltered(branchId, from, to, null, null);
+    return summaryForBranchFiltered(branchId, from, to, null, null, null);
   }
 
   public Summary summaryForTenant(long tenantId, Instant from, Instant to) {
@@ -48,34 +48,34 @@ public class StatsService {
   ) {}
 
   public java.util.List<DailyRow> dailyForBranch(long branchId, Instant from, Instant to) {
-    return dailyForBranchFiltered(branchId, from, to, null, null);
+    return dailyForBranchFiltered(branchId, from, to, null, null, null);
   }
 
-  public Summary summaryForBranchFiltered(long branchId, Instant from, Instant to, Long tableId, Long waiterId) {
+  public Summary summaryForBranchFiltered(long branchId, Instant from, Instant to, Long tableId, Long waiterId, Long hallId) {
     Map<String, Object> params = baseParams(from, to);
     params.put("branchId", branchId);
     params.put("waiterId", waiterId);
-    String tableFilter = buildTableFilter(params, tableId);
+    String tableFilter = buildTableFilter(params, tableId, hallId);
     return runSummary(tableFilter, params);
   }
 
-  public java.util.List<DailyRow> dailyForBranchFiltered(long branchId, Instant from, Instant to, Long tableId, Long waiterId) {
+  public java.util.List<DailyRow> dailyForBranchFiltered(long branchId, Instant from, Instant to, Long tableId, Long waiterId, Long hallId) {
     Map<String, Object> params = baseParams(from, to);
     params.put("branchId", branchId);
     params.put("waiterId", waiterId);
-    String tableFilter = buildTableFilter(params, tableId);
+    String tableFilter = buildTableFilter(params, tableId, hallId);
     return runDaily(tableFilter, params);
   }
 
   public record TopItemRow(long menuItemId, String name, long qty, long grossCents) {}
   public record TopCategoryRow(long categoryId, String name, long qty, long grossCents) {}
 
-  public java.util.List<TopItemRow> topItemsForBranch(long branchId, Instant from, Instant to, Long tableId, Long waiterId, int limit) {
+  public java.util.List<TopItemRow> topItemsForBranch(long branchId, Instant from, Instant to, Long tableId, Long waiterId, Long hallId, int limit) {
     Map<String, Object> params = baseParams(from, to);
     params.put("branchId", branchId);
     params.put("waiterId", waiterId);
     params.put("limit", Math.max(1, Math.min(limit, 200)));
-    String tableFilter = buildTableFilter(params, tableId);
+    String tableFilter = buildTableFilter(params, tableId, hallId);
     String sql =
       "SELECT oi.menu_item_id AS menu_item_id,\n" +
       "       COALESCE(oi.name_snapshot, mi.name_ru, 'Unknown') AS name,\n" +
@@ -99,12 +99,12 @@ public class StatsService {
     ));
   }
 
-  public java.util.List<TopCategoryRow> topCategoriesForBranch(long branchId, Instant from, Instant to, Long tableId, Long waiterId, int limit) {
+  public java.util.List<TopCategoryRow> topCategoriesForBranch(long branchId, Instant from, Instant to, Long tableId, Long waiterId, Long hallId, int limit) {
     Map<String, Object> params = baseParams(from, to);
     params.put("branchId", branchId);
     params.put("waiterId", waiterId);
     params.put("limit", Math.max(1, Math.min(limit, 200)));
-    String tableFilter = buildTableFilter(params, tableId);
+    String tableFilter = buildTableFilter(params, tableId, hallId);
     String sql =
       "SELECT mc.id AS category_id,\n" +
       "       COALESCE(mc.name_ru, 'Unknown') AS name,\n" +
@@ -240,11 +240,15 @@ public class StatsService {
     return params;
   }
 
-  private String buildTableFilter(Map<String, Object> params, Long tableId) {
+  private String buildTableFilter(Map<String, Object> params, Long tableId, Long hallId) {
     StringBuilder sb = new StringBuilder("t.branch_id = :branchId");
     if (tableId != null) {
       sb.append(" AND t.id = :tableId");
       params.put("tableId", tableId);
+    }
+    if (hallId != null) {
+      sb.append(" AND t.hall_id = :hallId");
+      params.put("hallId", hallId);
     }
     return sb.toString();
   }

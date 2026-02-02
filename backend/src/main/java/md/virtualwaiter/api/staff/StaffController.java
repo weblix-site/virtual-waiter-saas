@@ -179,11 +179,25 @@ public class StaffController {
   @GetMapping("/branch-layout")
   public BranchLayoutResponse branchLayout(
     @RequestParam(value = "hallId", required = false) Long hallId,
+    @RequestParam(value = "planId", required = false) Long planId,
     Authentication auth
   ) {
     StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
     if (u.branchId == null) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "User has no branch");
+    }
+    if (planId != null) {
+      HallPlan p = hallPlanRepo.findById(planId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Plan not found"));
+      BranchHall h = hallRepo.findById(p.hallId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hall not found"));
+      if (!Objects.equals(h.branchId, u.branchId)) {
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong branch");
+      }
+      if (hallId != null && !Objects.equals(hallId, h.id)) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Plan does not belong to hall");
+      }
+      return new BranchLayoutResponse(p.layoutBgUrl, p.layoutZonesJson);
     }
     if (hallId != null) {
       BranchHall h = hallRepo.findById(hallId)
@@ -211,6 +225,24 @@ public class StaffController {
     List<HallDto> out = new ArrayList<>();
     for (BranchHall h : halls) {
       out.add(new HallDto(h.id, h.branchId, h.name, h.isActive, h.sortOrder, h.layoutBgUrl, h.layoutZonesJson, h.activePlanId));
+    }
+    return out;
+  }
+
+  public record StaffHallPlanDto(long id, long hallId, String name, boolean isActive, int sortOrder) {}
+
+  @GetMapping("/halls/{hallId}/plans")
+  public List<StaffHallPlanDto> hallPlans(@PathVariable long hallId, Authentication auth) {
+    StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
+    BranchHall h = hallRepo.findById(hallId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hall not found"));
+    if (!Objects.equals(h.branchId, u.branchId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong branch");
+    }
+    List<HallPlan> plans = hallPlanRepo.findByHallIdOrderBySortOrderAscIdAsc(hallId);
+    List<StaffHallPlanDto> out = new ArrayList<>();
+    for (HallPlan p : plans) {
+      out.add(new StaffHallPlanDto(p.id, p.hallId, p.name, p.isActive, p.sortOrder));
     }
     return out;
   }
@@ -335,16 +367,21 @@ public class StaffController {
 
   public record StaffOrderItemDto(long id, long menuItemId, String name, int unitPriceCents, int qty, String comment) {}
   public record StaffOrderDto(long id, long tableId, int tableNumber, Long assignedWaiterId, String status, String createdAt, List<StaffOrderItemDto> items) {}
+  public record StaffOrderStatusDto(long id, long tableId, String status) {}
 
   public record KitchenOrderDto(long id, long tableId, int tableNumber, Long assignedWaiterId, String status, String createdAt, long ageSeconds, List<StaffOrderItemDto> items) {}
 
   @GetMapping("/orders/active")
   public List<StaffOrderDto> activeOrders(
     @RequestParam(value = "statusIn", required = false) String statusIn,
+    @RequestParam(value = "hallId", required = false) Long hallId,
     Authentication auth
   ) {
     StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
     List<CafeTable> tables = tableRepo.findByBranchId(u.branchId);
+    if (hallId != null) {
+      tables = tables.stream().filter(t -> Objects.equals(t.hallId, hallId)).toList();
+    }
     List<Long> tableIds = tables.stream().map(t -> t.id).toList();
     if (tableIds.isEmpty()) return List.of();
 
@@ -393,13 +430,119 @@ public class StaffController {
     return out;
   }
 
+  @GetMapping("/orders/active/updates")
+  public List<StaffOrderDto> activeOrderUpdates(
+    @RequestParam("since") String since,
+    @RequestParam(value = "statusIn", required = false) String statusIn,
+    @RequestParam(value = "hallId", required = false) Long hallId,
+    Authentication auth
+  ) {
+    StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
+    Instant sinceTs;
+    try {
+      sinceTs = Instant.parse(since);
+    } catch (Exception e) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid since");
+    }
+    List<CafeTable> tables = tableRepo.findByBranchId(u.branchId);
+    if (hallId != null) {
+      tables = tables.stream().filter(t -> Objects.equals(t.hallId, hallId)).toList();
+    }
+    List<Long> tableIds = tables.stream().map(t -> t.id).toList();
+    if (tableIds.isEmpty()) return List.of();
+
+    List<String> closed = List.of("CLOSED", "CANCELLED");
+    List<Order> orders = orderRepo.findByTableIdInAndStatusNotInAndCreatedAtAfterOrderByCreatedAtDesc(tableIds, closed, sinceTs);
+    if (statusIn != null && !statusIn.isBlank()) {
+      Set<String> allow = new HashSet<>();
+      for (String s : statusIn.split(",")) {
+        String v = s.trim().toUpperCase(Locale.ROOT);
+        if (!v.isEmpty()) allow.add(v);
+      }
+      if (!allow.isEmpty()) {
+        orders = orders.stream().filter(o -> allow.contains(o.status)).toList();
+      }
+    }
+    if (orders.isEmpty()) return List.of();
+
+    Map<Long, Integer> tableNumberById = new HashMap<>();
+    Map<Long, Long> assignedById = new HashMap<>();
+    for (CafeTable t : tables) {
+      tableNumberById.put(t.id, t.number);
+      assignedById.put(t.id, t.assignedWaiterId);
+    }
+
+    List<Long> orderIds = orders.stream().map(o -> o.id).toList();
+    List<OrderItem> items = orderItemRepo.findByOrderIdIn(orderIds);
+    Map<Long, List<StaffOrderItemDto>> itemsByOrder = new HashMap<>();
+    for (OrderItem it : items) {
+      itemsByOrder.computeIfAbsent(it.orderId, k -> new ArrayList<>()).add(
+        new StaffOrderItemDto(it.id, it.menuItemId, it.nameSnapshot, it.unitPriceCents, it.qty, it.comment)
+      );
+    }
+
+    List<StaffOrderDto> out = new ArrayList<>();
+    for (Order o : orders) {
+      out.add(new StaffOrderDto(
+        o.id,
+        o.tableId,
+        tableNumberById.getOrDefault(o.tableId, 0),
+        assignedById.get(o.tableId),
+        o.status,
+        o.createdAt.toString(),
+        itemsByOrder.getOrDefault(o.id, List.of())
+      ));
+    }
+    return out;
+  }
+
+  @GetMapping("/orders/active/status")
+  public List<StaffOrderStatusDto> activeOrderStatuses(
+    @RequestParam("ids") String ids,
+    @RequestParam(value = "hallId", required = false) Long hallId,
+    Authentication auth
+  ) {
+    StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
+    if (ids == null || ids.isBlank()) return List.of();
+    List<Long> orderIds = new ArrayList<>();
+    for (String part : ids.split(",")) {
+      if (orderIds.size() >= 200) break;
+      String v = part.trim();
+      if (v.isEmpty()) continue;
+      try {
+        orderIds.add(Long.parseLong(v));
+      } catch (_) {}
+    }
+    if (orderIds.isEmpty()) return List.of();
+
+    List<CafeTable> tables = tableRepo.findByBranchId(u.branchId);
+    if (hallId != null) {
+      tables = tables.stream().filter(t -> Objects.equals(t.hallId, hallId)).toList();
+    }
+    Set<Long> tableIds = new HashSet<>();
+    for (CafeTable t : tables) tableIds.add(t.id);
+    if (tableIds.isEmpty()) return List.of();
+
+    List<Order> orders = orderRepo.findByIdIn(orderIds);
+    List<StaffOrderStatusDto> out = new ArrayList<>();
+    for (Order o : orders) {
+      if (!tableIds.contains(o.tableId)) continue;
+      out.add(new StaffOrderStatusDto(o.id, o.tableId, o.status));
+    }
+    return out;
+  }
+
   @GetMapping("/orders/kitchen")
   public List<KitchenOrderDto> kitchenQueue(
     @RequestParam(value = "statusIn", required = false) String statusIn,
+    @RequestParam(value = "hallId", required = false) Long hallId,
     Authentication auth
   ) {
     StaffUser u = requireRole(auth, "KITCHEN", "ADMIN");
     List<CafeTable> tables = tableRepo.findByBranchId(u.branchId);
+    if (hallId != null) {
+      tables = tables.stream().filter(t -> Objects.equals(t.hallId, hallId)).toList();
+    }
     List<Long> tableIds = tables.stream().map(t -> t.id).toList();
     if (tableIds.isEmpty()) return List.of();
 
@@ -520,9 +663,12 @@ public class StaffController {
   public record StaffWaiterCallDto(long id, long tableId, int tableNumber, String status, String createdAt) {}
 
   @GetMapping("/waiter-calls/active")
-  public List<StaffWaiterCallDto> activeCalls(Authentication auth) {
+  public List<StaffWaiterCallDto> activeCalls(@RequestParam(value = "hallId", required = false) Long hallId, Authentication auth) {
     StaffUser u = requireRole(auth, "WAITER", "ADMIN");
     List<CafeTable> tables = tableRepo.findByBranchId(u.branchId);
+    if (hallId != null) {
+      tables = tables.stream().filter(t -> Objects.equals(t.hallId, hallId)).toList();
+    }
     List<Long> tableIds = tables.stream().map(t -> t.id).toList();
     if (tableIds.isEmpty()) return List.of();
     Map<Long, Integer> tableNumberById = new HashMap<>();
@@ -600,7 +746,7 @@ public class StaffController {
   ) {}
 
   @GetMapping("/bill-requests/active")
-  public List<StaffBillRequestDto> activeBillRequests(Authentication auth) {
+  public List<StaffBillRequestDto> activeBillRequests(@RequestParam(value = "hallId", required = false) Long hallId, Authentication auth) {
     StaffUser u = requireRole(auth, "WAITER", "ADMIN");
     List<BillRequest> reqs = billRequestRepo.findByStatusOrderByCreatedAtAsc("CREATED");
     if (reqs.isEmpty()) return List.of();
@@ -617,6 +763,7 @@ public class StaffController {
       CafeTable t = tables.get(br.tableId);
       if (t == null) continue;
       if (u.branchId != null && !Objects.equals(t.branchId, u.branchId)) continue;
+      if (hallId != null && !Objects.equals(t.hallId, hallId)) continue;
       List<BillRequestItem> items = billRequestItemRepo.findByBillRequestId(br.id);
       List<StaffBillLine> lines = new ArrayList<>();
       for (BillRequestItem it : items) {
