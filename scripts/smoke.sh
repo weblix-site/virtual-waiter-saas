@@ -52,6 +52,7 @@ ensure_backend() {
     export SPRING_DATASOURCE_URL="jdbc:postgresql://localhost:${DB_PORT}/${DB_NAME}"
     export SPRING_DATASOURCE_USERNAME="$DB_USER"
     export SPRING_DATASOURCE_PASSWORD="$DB_PASS"
+    export APP_AUTH_COOKIE_SECRET="${APP_AUTH_COOKIE_SECRET:-dev_cookie_secret_change_me}"
     mkdir -p "$(dirname "$LOG_FILE")"
     : > "$LOG_FILE"
     ./backend/gradlew -p backend bootRun --args="--spring.main.banner-mode=off" >"$LOG_FILE" 2>&1 &

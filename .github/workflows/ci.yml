@@ -42,6 +42,8 @@ jobs:
           validate-wrappers: false
       - name: Check migrations
         run: bash scripts/check_migrations.sh
+        env:
+          APP_AUTH_COOKIE_SECRET: dev_cookie_secret_change_me
 
   smoke:
     runs-on: ubuntu-latest
@@ -64,6 +66,7 @@ jobs:
           export SPRING_DATASOURCE_URL="jdbc:postgresql://localhost:5432/vw"
           export SPRING_DATASOURCE_USERNAME="vw"
           export SPRING_DATASOURCE_PASSWORD="vw"
+          export APP_AUTH_COOKIE_SECRET="dev_cookie_secret_change_me"
           ./gradlew -p backend bootRun > /tmp/backend.log 2>&1 &
           echo $! > /tmp/backend.pid
           for i in {1..30}; do
