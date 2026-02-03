@@ -79,6 +79,10 @@ public final class Messages {
     put("Unsupported paymentMethod", "error.unsupported_payment_method");
     put("Cash payment is disabled", "error.cash_disabled");
     put("Terminal payment is disabled", "error.terminal_disabled");
+    put("Online payment disabled", "error.online_pay_disabled");
+    put("Unsupported payment provider", "error.unsupported_payment_provider");
+    put("Online payment provider required", "error.online_pay_provider_required");
+    put("Amount invalid", "error.amount_invalid");
     put("Unsupported mode", "error.unsupported_mode");
     put("No orders for this session", "error.no_orders_for_session");
     put("orderItemIds required for SELECTED", "error.order_item_ids_required");
@@ -86,6 +90,12 @@ public final class Messages {
     put("No orders for this table", "error.no_orders_for_table");
     put("Whole table payment is disabled", "error.whole_table_disabled");
     put("Party required to pay whole table", "error.party_required_pay_whole");
+    put("Promo code not found", "error.promo_code_not_found");
+    put("Promo code inactive", "error.promo_code_inactive");
+    put("Promo code expired", "error.promo_code_expired");
+    put("Promo code not active", "error.promo_code_not_active");
+    put("Promo code exhausted", "error.promo_code_exhausted");
+    put("Promo code invalid", "error.promo_code_invalid");
 
     // Admin layout / data
     put("layoutX + layoutW must be <= 100", "error.layout_x_w_exceed");

@@ -2,18 +2,20 @@ package md.virtualwaiter.api.admin;
 
 import md.virtualwaiter.domain.AuditLog;
 import md.virtualwaiter.domain.Branch;
+import md.virtualwaiter.domain.BranchDiscount;
 import md.virtualwaiter.domain.BranchHall;
 import md.virtualwaiter.domain.BranchReview;
 import md.virtualwaiter.domain.BranchSettings;
 import md.virtualwaiter.domain.CafeTable;
 import md.virtualwaiter.domain.ChatMessage;
-import md.virtualwaiter.domain.Currency;
 import md.virtualwaiter.domain.GuestSession;
 import md.virtualwaiter.domain.HallPlan;
 import md.virtualwaiter.domain.HallPlanTemplate;
 import md.virtualwaiter.domain.HallPlanVersion;
+import md.virtualwaiter.domain.InventoryItem;
 import md.virtualwaiter.domain.MenuCategory;
 import md.virtualwaiter.domain.MenuItem;
+import md.virtualwaiter.domain.MenuItemIngredient;
 import md.virtualwaiter.domain.MenuItemModifierGroup;
 import md.virtualwaiter.domain.ModifierGroup;
 import md.virtualwaiter.domain.ModifierOption;
@@ -23,16 +25,20 @@ import md.virtualwaiter.domain.TableParty;
 import md.virtualwaiter.repo.AuditLogRepo;
 import md.virtualwaiter.repo.BranchHallRepo;
 import md.virtualwaiter.repo.BranchRepo;
+import md.virtualwaiter.repo.BranchDiscountRepo;
 import md.virtualwaiter.repo.BranchReviewRepo;
 import md.virtualwaiter.repo.BranchSettingsRepo;
 import md.virtualwaiter.repo.CafeTableRepo;
 import md.virtualwaiter.repo.ChatMessageRepo;
 import md.virtualwaiter.repo.CurrencyRepo;
 import md.virtualwaiter.repo.GuestSessionRepo;
+import md.virtualwaiter.repo.GuestOfferRepo;
 import md.virtualwaiter.repo.HallPlanRepo;
 import md.virtualwaiter.repo.HallPlanTemplateRepo;
 import md.virtualwaiter.repo.HallPlanVersionRepo;
+import md.virtualwaiter.repo.InventoryItemRepo;
 import md.virtualwaiter.repo.MenuCategoryRepo;
+import md.virtualwaiter.repo.MenuItemIngredientRepo;
 import md.virtualwaiter.repo.MenuItemModifierGroupRepo;
 import md.virtualwaiter.repo.MenuItemRepo;
 import md.virtualwaiter.repo.ModifierGroupRepo;
@@ -44,6 +50,7 @@ import md.virtualwaiter.security.QrSignatureService;
 import md.virtualwaiter.service.BranchSettingsService;
 import md.virtualwaiter.service.StatsService;
 import md.virtualwaiter.service.AuditService;
+import md.virtualwaiter.service.LoyaltyService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -82,6 +89,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.io.IOException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.regex.Pattern;
@@ -100,6 +108,7 @@ public class AdminController {
   private final MenuItemRepo itemRepo;
   private final CafeTableRepo tableRepo;
   private final BranchRepo branchRepo;
+  private final BranchDiscountRepo branchDiscountRepo;
   private final BranchHallRepo hallRepo;
   private final HallPlanRepo hallPlanRepo;
   private final HallPlanVersionRepo hallPlanVersionRepo;
@@ -117,7 +126,11 @@ public class AdminController {
   private final AuditLogRepo auditLogRepo;
   private final TablePartyRepo partyRepo;
   private final GuestSessionRepo guestSessionRepo;
+  private final GuestOfferRepo guestOfferRepo;
+  private final InventoryItemRepo inventoryItemRepo;
+  private final MenuItemIngredientRepo ingredientRepo;
   private final CurrencyRepo currencyRepo;
+  private final LoyaltyService loyaltyService;
   private final int maxPhotoUrlLength;
   private final int maxPhotoUrlsCount;
   private final Set<String> allowedPhotoExts;
@@ -131,6 +144,7 @@ public class AdminController {
     MenuItemRepo itemRepo,
     CafeTableRepo tableRepo,
     BranchRepo branchRepo,
+    BranchDiscountRepo branchDiscountRepo,
     BranchHallRepo hallRepo,
     HallPlanRepo hallPlanRepo,
     HallPlanVersionRepo hallPlanVersionRepo,
@@ -148,7 +162,11 @@ public class AdminController {
     AuditLogRepo auditLogRepo,
     TablePartyRepo partyRepo,
     GuestSessionRepo guestSessionRepo,
+    GuestOfferRepo guestOfferRepo,
+    InventoryItemRepo inventoryItemRepo,
+    MenuItemIngredientRepo ingredientRepo,
     CurrencyRepo currencyRepo,
+    LoyaltyService loyaltyService,
     @Value("${app.media.maxPhotoUrlLength:512}") int maxPhotoUrlLength,
     @Value("${app.media.maxPhotoUrlsCount:6}") int maxPhotoUrlsCount,
     @Value("${app.media.allowedPhotoExts:jpg,jpeg,png,webp,gif}") String allowedPhotoExts
@@ -161,6 +179,7 @@ public class AdminController {
     this.itemRepo = itemRepo;
     this.tableRepo = tableRepo;
     this.branchRepo = branchRepo;
+    this.branchDiscountRepo = branchDiscountRepo;
     this.hallRepo = hallRepo;
     this.hallPlanRepo = hallPlanRepo;
     this.hallPlanVersionRepo = hallPlanVersionRepo;
@@ -178,7 +197,11 @@ public class AdminController {
     this.auditLogRepo = auditLogRepo;
     this.partyRepo = partyRepo;
     this.guestSessionRepo = guestSessionRepo;
+    this.guestOfferRepo = guestOfferRepo;
+    this.inventoryItemRepo = inventoryItemRepo;
+    this.ingredientRepo = ingredientRepo;
     this.currencyRepo = currencyRepo;
+    this.loyaltyService = loyaltyService;
     this.maxPhotoUrlLength = maxPhotoUrlLength;
     this.maxPhotoUrlsCount = maxPhotoUrlsCount;
     this.allowedPhotoExts = parseExts(allowedPhotoExts);
@@ -318,7 +341,7 @@ public class AdminController {
       }
     } catch (ResponseStatusException e) {
       throw e;
-    } catch (Exception e) {
+    } catch (IOException e) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "zonesJson invalid");
     }
   }
@@ -820,6 +843,14 @@ public class AdminController {
     boolean allowPayWholeTable,
     boolean tipsEnabled,
     List<Integer> tipsPercentages,
+    int serviceFeePercent,
+    int taxPercent,
+    boolean inventoryEnabled,
+    boolean loyaltyEnabled,
+    int loyaltyPointsPer100Cents,
+    boolean onlinePayEnabled,
+    String onlinePayProvider,
+    String onlinePayCurrencyCode,
     boolean payCashEnabled,
     boolean payTerminalEnabled,
     String currencyCode,
@@ -844,6 +875,14 @@ public class AdminController {
       s.allowPayWholeTable(),
       s.tipsEnabled(),
       s.tipsPercentages(),
+      s.serviceFeePercent(),
+      s.taxPercent(),
+      s.inventoryEnabled(),
+      s.loyaltyEnabled(),
+      s.loyaltyPointsPer100Cents(),
+      s.onlinePayEnabled(),
+      s.onlinePayProvider(),
+      s.onlinePayCurrencyCode(),
       s.payCashEnabled(),
       s.payTerminalEnabled(),
       s.currencyCode(),
@@ -863,6 +902,14 @@ public class AdminController {
     Boolean allowPayWholeTable,
     Boolean tipsEnabled,
     List<Integer> tipsPercentages,
+    Integer serviceFeePercent,
+    Integer taxPercent,
+    Boolean inventoryEnabled,
+    Boolean loyaltyEnabled,
+    Integer loyaltyPointsPer100Cents,
+    Boolean onlinePayEnabled,
+    String onlinePayProvider,
+    String onlinePayCurrencyCode,
     Boolean payCashEnabled,
     Boolean payTerminalEnabled,
     String currencyCode,
@@ -898,6 +945,30 @@ public class AdminController {
     if (req.tipsPercentages != null) {
       s.tipsPercentages = toCsv(req.tipsPercentages);
     }
+    if (req.serviceFeePercent != null) s.serviceFeePercent = req.serviceFeePercent;
+    if (req.taxPercent != null) s.taxPercent = req.taxPercent;
+    if (req.inventoryEnabled != null) s.inventoryEnabled = req.inventoryEnabled;
+    if (req.loyaltyEnabled != null) s.loyaltyEnabled = req.loyaltyEnabled;
+    if (req.loyaltyPointsPer100Cents != null && req.loyaltyPointsPer100Cents >= 0) {
+      s.loyaltyPointsPer100Cents = req.loyaltyPointsPer100Cents;
+    }
+    if (req.onlinePayEnabled != null) s.onlinePayEnabled = req.onlinePayEnabled;
+    if (req.onlinePayProvider != null) {
+      String p = req.onlinePayProvider.trim().toUpperCase(Locale.ROOT);
+      if (!p.isEmpty() && !Set.of("MAIB", "PAYNET", "MIA").contains(p)) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported payment provider");
+      }
+      s.onlinePayProvider = p.isEmpty() ? null : p;
+    }
+    if (req.onlinePayCurrencyCode != null && !req.onlinePayCurrencyCode.isBlank()) {
+      String code = req.onlinePayCurrencyCode.trim().toUpperCase(Locale.ROOT);
+      md.virtualwaiter.domain.Currency cur = currencyRepo.findById(code)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown currency"));
+      if (!cur.isActive) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Currency is inactive");
+      }
+      s.onlinePayCurrencyCode = code;
+    }
     if (req.payCashEnabled != null) s.payCashEnabled = req.payCashEnabled;
     if (req.payTerminalEnabled != null) s.payTerminalEnabled = req.payTerminalEnabled;
     if (req.currencyCode != null && !req.currencyCode.isBlank()) {
@@ -912,6 +983,10 @@ public class AdminController {
     if (req.defaultLang != null && !req.defaultLang.isBlank()) {
       String lang = normalizeLocale(req.defaultLang);
       s.defaultLang = lang;
+    }
+
+    if (Boolean.TRUE.equals(s.onlinePayEnabled) && (s.onlinePayProvider == null || s.onlinePayProvider.isBlank())) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Online payment provider required");
     }
 
     settingsRepo.save(s);
@@ -939,6 +1014,14 @@ public class AdminController {
       r.allowPayWholeTable(),
       r.tipsEnabled(),
       r.tipsPercentages(),
+      r.serviceFeePercent(),
+      r.taxPercent(),
+      r.inventoryEnabled(),
+      r.loyaltyEnabled(),
+      r.loyaltyPointsPer100Cents(),
+      r.onlinePayEnabled(),
+      r.onlinePayProvider(),
+      r.onlinePayCurrencyCode(),
       r.payCashEnabled(),
       r.payTerminalEnabled(),
       r.currencyCode(),
@@ -993,6 +1076,361 @@ public class AdminController {
     c = currencyRepo.save(c);
     auditService.log(u, "UPDATE", "Currency", null, c.code);
     return new CurrencyDto(c.code, c.name, c.symbol, c.isActive);
+  }
+
+  // --- Inventory (MVP) ---
+  public record InventoryItemDto(
+    long id,
+    String nameRu,
+    String nameRo,
+    String nameEn,
+    String unit,
+    double qtyOnHand,
+    double minQty,
+    boolean isActive
+  ) {}
+
+  public record InventoryItemRequest(
+    @NotBlank String nameRu,
+    String nameRo,
+    String nameEn,
+    String unit,
+    Double qtyOnHand,
+    Double minQty,
+    Boolean isActive
+  ) {}
+
+  public record IngredientDto(
+    long inventoryItemId,
+    double qtyPerItem
+  ) {}
+
+  public record IngredientView(
+    long inventoryItemId,
+    String nameRu,
+    String nameRo,
+    String nameEn,
+    String unit,
+    double qtyPerItem
+  ) {}
+
+  @GetMapping("/inventory/items")
+  public List<InventoryItemDto> listInventoryItems(
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    List<InventoryItem> items = inventoryItemRepo.findByBranchIdOrderByIdDesc(bid);
+    List<InventoryItemDto> out = new ArrayList<>();
+    for (InventoryItem it : items) {
+      out.add(new InventoryItemDto(
+        it.id,
+        it.nameRu,
+        it.nameRo,
+        it.nameEn,
+        it.unit,
+        it.qtyOnHand == null ? 0.0 : it.qtyOnHand,
+        it.minQty == null ? 0.0 : it.minQty,
+        it.isActive
+      ));
+    }
+    return out;
+  }
+
+  @GetMapping("/inventory/low-stock")
+  public List<InventoryItemDto> lowStockInventory(
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    List<InventoryItem> items = inventoryItemRepo.findByBranchIdAndIsActiveTrueOrderByIdDesc(bid);
+    List<InventoryItemDto> out = new ArrayList<>();
+    for (InventoryItem it : items) {
+      double qty = it.qtyOnHand == null ? 0.0 : it.qtyOnHand;
+      double min = it.minQty == null ? 0.0 : it.minQty;
+      if (qty <= min) {
+        out.add(new InventoryItemDto(it.id, it.nameRu, it.nameRo, it.nameEn, it.unit, qty, min, it.isActive));
+      }
+    }
+    return out;
+  }
+
+  @PostMapping("/inventory/items")
+  public InventoryItemDto createInventoryItem(
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @Valid @RequestBody InventoryItemRequest req,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    InventoryItem it = new InventoryItem();
+    it.branchId = bid;
+    it.nameRu = req.nameRu.trim();
+    it.nameRo = req.nameRo;
+    it.nameEn = req.nameEn;
+    it.unit = req.unit == null || req.unit.isBlank() ? "pcs" : req.unit.trim();
+    it.qtyOnHand = req.qtyOnHand == null ? Double.valueOf(0.0) : req.qtyOnHand;
+    it.minQty = req.minQty == null ? Double.valueOf(0.0) : req.minQty;
+    it.isActive = req.isActive == null || req.isActive;
+    inventoryItemRepo.save(it);
+    return new InventoryItemDto(it.id, it.nameRu, it.nameRo, it.nameEn, it.unit, it.qtyOnHand, it.minQty, it.isActive);
+  }
+
+  @PutMapping("/inventory/items/{id}")
+  public InventoryItemDto updateInventoryItem(
+    @PathVariable("id") long id,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @Valid @RequestBody InventoryItemRequest req,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    InventoryItem it = inventoryItemRepo.findByIdAndBranchId(id, bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Inventory item not found"));
+    if (req.nameRu != null && !req.nameRu.isBlank()) it.nameRu = req.nameRu.trim();
+    if (req.nameRo != null) it.nameRo = req.nameRo;
+    if (req.nameEn != null) it.nameEn = req.nameEn;
+    if (req.unit != null && !req.unit.isBlank()) it.unit = req.unit.trim();
+    if (req.qtyOnHand != null) it.qtyOnHand = req.qtyOnHand;
+    if (req.minQty != null) it.minQty = req.minQty;
+    if (req.isActive != null) it.isActive = req.isActive;
+    it.updatedAt = Instant.now();
+    inventoryItemRepo.save(it);
+    return new InventoryItemDto(it.id, it.nameRu, it.nameRo, it.nameEn, it.unit, it.qtyOnHand, it.minQty, it.isActive);
+  }
+
+  @DeleteMapping("/inventory/items/{id}")
+  public void deleteInventoryItem(
+    @PathVariable("id") long id,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    InventoryItem it = inventoryItemRepo.findByIdAndBranchId(id, bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Inventory item not found"));
+    inventoryItemRepo.delete(it);
+  }
+
+  @GetMapping("/menu/items/{id}/ingredients")
+  public List<IngredientView> listMenuItemIngredients(
+    @PathVariable("id") long menuItemId,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    MenuItem mi = itemRepo.findById(menuItemId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Menu item not found"));
+    MenuCategory cat = categoryRepo.findById(mi.categoryId).orElse(null);
+    if (cat == null || cat.branchId != bid) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Menu item not in branch");
+    }
+    List<MenuItemIngredient> ingredients = ingredientRepo.findByMenuItemId(menuItemId);
+    Map<Long, InventoryItem> inventory = new HashMap<>();
+    for (InventoryItem it : inventoryItemRepo.findByBranchIdOrderByIdDesc(bid)) {
+      inventory.put(it.id, it);
+    }
+    List<IngredientView> out = new ArrayList<>();
+    for (MenuItemIngredient ing : ingredients) {
+      InventoryItem it = inventory.get(ing.inventoryItemId);
+      if (it == null) continue;
+      out.add(new IngredientView(
+        it.id,
+        it.nameRu,
+        it.nameRo,
+        it.nameEn,
+        it.unit,
+        ing.qtyPerItem == null ? 0.0 : ing.qtyPerItem
+      ));
+    }
+    return out;
+  }
+
+  @PutMapping("/menu/items/{id}/ingredients")
+  @Transactional
+  public List<IngredientView> replaceMenuItemIngredients(
+    @PathVariable("id") long menuItemId,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @Valid @RequestBody List<IngredientDto> req,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    MenuItem mi = itemRepo.findById(menuItemId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Menu item not found"));
+    MenuCategory cat = categoryRepo.findById(mi.categoryId).orElse(null);
+    if (cat == null || cat.branchId != bid) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Menu item not in branch");
+    }
+    ingredientRepo.deleteByMenuItemId(menuItemId);
+    List<IngredientView> out = new ArrayList<>();
+    if (req != null) {
+      for (IngredientDto dto : req) {
+        if (dto.qtyPerItem <= 0) continue;
+        InventoryItem it = inventoryItemRepo.findByIdAndBranchId(dto.inventoryItemId, bid)
+          .orElse(null);
+        if (it == null) continue;
+        MenuItemIngredient ing = new MenuItemIngredient();
+        ing.menuItemId = menuItemId;
+        ing.inventoryItemId = it.id;
+        ing.qtyPerItem = dto.qtyPerItem;
+        ingredientRepo.save(ing);
+        out.add(new IngredientView(it.id, it.nameRu, it.nameRo, it.nameEn, it.unit, dto.qtyPerItem));
+      }
+    }
+    return out;
+  }
+
+  // --- Loyalty / CRM ---
+  public record LoyaltyProfileResponse(
+    String phone,
+    int pointsBalance,
+    List<LoyaltyService.FavoriteItemDto> favorites,
+    List<LoyaltyService.OfferDto> offers
+  ) {}
+
+  public record CreateOfferRequest(
+    @NotBlank String phone,
+    @NotBlank String title,
+    String body,
+    String discountCode,
+    String startsAt,
+    String endsAt,
+    Boolean isActive
+  ) {}
+
+  public record UpdateOfferRequest(
+    String phone,
+    String title,
+    String body,
+    String discountCode,
+    String startsAt,
+    String endsAt,
+    Boolean isActive
+  ) {}
+
+  public record OfferDto(
+    long id,
+    String phone,
+    String title,
+    String body,
+    String discountCode,
+    String startsAt,
+    String endsAt,
+    boolean isActive
+  ) {}
+
+  @GetMapping("/loyalty/profile")
+  public LoyaltyProfileResponse getLoyaltyProfile(
+    @RequestParam("phone") String phone,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    LoyaltyService.LoyaltyProfile p = loyaltyService.getProfile(bid, phone);
+    return new LoyaltyProfileResponse(p.phone(), p.pointsBalance(), p.favorites(), p.offers());
+  }
+
+  @GetMapping("/loyalty/offers")
+  public List<OfferDto> listLoyaltyOffers(
+    @RequestParam("phone") String phone,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    String p = phone == null ? "" : phone.trim();
+    if (p.isBlank()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "phone required");
+    List<md.virtualwaiter.domain.GuestOffer> list = guestOfferRepo.findTop100ByBranchIdAndPhoneOrderByIdDesc(bid, p);
+    List<OfferDto> out = new ArrayList<>();
+    for (md.virtualwaiter.domain.GuestOffer o : list) {
+      out.add(new OfferDto(
+        o.id,
+        o.phone,
+        o.title,
+        o.body,
+        o.discountCode,
+        o.startsAt == null ? null : o.startsAt.toString(),
+        o.endsAt == null ? null : o.endsAt.toString(),
+        o.isActive
+      ));
+    }
+    return out;
+  }
+
+  @PostMapping("/loyalty/offers")
+  public OfferDto createLoyaltyOffer(
+    @Valid @RequestBody CreateOfferRequest req,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    md.virtualwaiter.domain.GuestOffer o = new md.virtualwaiter.domain.GuestOffer();
+    o.branchId = bid;
+    o.phone = req.phone.trim();
+    o.title = req.title.trim();
+    o.body = req.body;
+    o.discountCode = req.discountCode == null ? null : req.discountCode.trim();
+    o.startsAt = parseInstantOrDateOrNull(req.startsAt, true);
+    o.endsAt = parseInstantOrDateOrNull(req.endsAt, false);
+    o.isActive = req.isActive == null || req.isActive;
+    o = guestOfferRepo.save(o);
+    return new OfferDto(
+      o.id, o.phone, o.title, o.body, o.discountCode,
+      o.startsAt == null ? null : o.startsAt.toString(),
+      o.endsAt == null ? null : o.endsAt.toString(),
+      o.isActive
+    );
+  }
+
+  @PatchMapping("/loyalty/offers/{id}")
+  public OfferDto updateLoyaltyOffer(
+    @PathVariable("id") long id,
+    @RequestBody UpdateOfferRequest req,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    md.virtualwaiter.domain.GuestOffer o = guestOfferRepo.findByIdAndBranchId(id, bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Offer not found"));
+    if (req.phone != null && !req.phone.isBlank()) o.phone = req.phone.trim();
+    if (req.title != null && !req.title.isBlank()) o.title = req.title.trim();
+    if (req.body != null) o.body = req.body;
+    if (req.discountCode != null) o.discountCode = req.discountCode.trim();
+    if (req.startsAt != null) o.startsAt = parseInstantOrDateOrNull(req.startsAt, true);
+    if (req.endsAt != null) o.endsAt = parseInstantOrDateOrNull(req.endsAt, false);
+    if (req.isActive != null) o.isActive = req.isActive;
+    o.updatedAt = Instant.now();
+    o = guestOfferRepo.save(o);
+    return new OfferDto(
+      o.id, o.phone, o.title, o.body, o.discountCode,
+      o.startsAt == null ? null : o.startsAt.toString(),
+      o.endsAt == null ? null : o.endsAt.toString(),
+      o.isActive
+    );
+  }
+
+  @DeleteMapping("/loyalty/offers/{id}")
+  public Map<String, Object> deleteLoyaltyOffer(
+    @PathVariable("id") long id,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    md.virtualwaiter.domain.GuestOffer o = guestOfferRepo.findByIdAndBranchId(id, bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Offer not found"));
+    guestOfferRepo.delete(o);
+    Map<String, Object> out = new HashMap<>();
+    out.put("deleted", true);
+    out.put("id", id);
+    return out;
   }
 
   // --- Menu categories ---
@@ -2784,5 +3222,208 @@ public class AdminController {
     if (req.recommended != null) su.recommended = req.recommended;
     if (req.experienceYears != null) su.experienceYears = sanitizeExperienceYears(req.experienceYears);
     if (req.favoriteItems != null) su.favoriteItems = sanitizeFavoriteItems(req.favoriteItems);
+  }
+
+  public record DiscountDto(
+    long id,
+    long branchId,
+    String scope,
+    String code,
+    String type,
+    int value,
+    String label,
+    boolean active,
+    Integer maxUses,
+    int usedCount,
+    Instant startsAt,
+    Instant endsAt,
+    Integer daysMask,
+    Integer startMinute,
+    Integer endMinute,
+    Integer tzOffsetMinutes
+  ) {}
+
+  public record CreateDiscountRequest(
+    Long branchId,
+    String scope,
+    String code,
+    String type,
+    Integer value,
+    String label,
+    Boolean active,
+    Integer maxUses,
+    Instant startsAt,
+    Instant endsAt,
+    Integer daysMask,
+    Integer startMinute,
+    Integer endMinute,
+    Integer tzOffsetMinutes
+  ) {}
+
+  public record UpdateDiscountRequest(
+    String scope,
+    String code,
+    String type,
+    Integer value,
+    String label,
+    Boolean active,
+    Integer maxUses,
+    Integer usedCount,
+    Instant startsAt,
+    Instant endsAt,
+    Integer daysMask,
+    Integer startMinute,
+    Integer endMinute,
+    Integer tzOffsetMinutes
+  ) {}
+
+  @GetMapping("/discounts")
+  public List<DiscountDto> listDiscounts(Authentication auth, @RequestParam(required = false) Long branchId) {
+    StaffUser u = requireAdmin(auth);
+    long bId = resolveBranchId(u, branchId);
+    List<BranchDiscount> items = branchDiscountRepo.findByBranchIdOrderByIdDesc(bId);
+    return items.stream().map(this::toDiscountDto).toList();
+  }
+
+  @PostMapping("/discounts")
+  public DiscountDto createDiscount(Authentication auth, @Valid @RequestBody CreateDiscountRequest req) {
+    StaffUser u = requireAdmin(auth);
+    long bId = resolveBranchId(u, req.branchId);
+    BranchDiscount d = new BranchDiscount();
+    d.branchId = bId;
+    d.scope = normalizeScope(req.scope);
+    d.code = trimOrNull(req.code);
+    d.type = normalizeType(req.type);
+    d.value = req.value == null ? 0 : req.value;
+    d.label = trimOrNull(req.label);
+    d.active = req.active == null || req.active;
+    d.maxUses = req.maxUses;
+    d.startsAt = req.startsAt;
+    d.endsAt = req.endsAt;
+    d.daysMask = req.daysMask;
+    d.startMinute = req.startMinute;
+    d.endMinute = req.endMinute;
+    d.tzOffsetMinutes = req.tzOffsetMinutes;
+    validateDiscount(d, true);
+    if ("COUPON".equalsIgnoreCase(d.scope) && d.code != null) {
+      if (branchDiscountRepo.findFirstByBranchIdAndCodeIgnoreCase(d.branchId, d.code).isPresent()) {
+        throw new ResponseStatusException(HttpStatus.CONFLICT, "Promo code already exists");
+      }
+    }
+    d = branchDiscountRepo.save(d);
+    return toDiscountDto(d);
+  }
+
+  @PutMapping("/discounts/{id}")
+  public DiscountDto updateDiscount(
+    Authentication auth,
+    @PathVariable("id") long id,
+    @Valid @RequestBody UpdateDiscountRequest req
+  ) {
+    StaffUser u = requireAdmin(auth);
+    BranchDiscount d = branchDiscountRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Discount not found"));
+    requireBranchAccess(u, d.branchId);
+    if (req.scope != null) d.scope = normalizeScope(req.scope);
+    if (req.code != null) d.code = trimOrNull(req.code);
+    if (req.type != null) d.type = normalizeType(req.type);
+    if (req.value != null) d.value = req.value;
+    if (req.label != null) d.label = trimOrNull(req.label);
+    if (req.active != null) d.active = req.active;
+    if (req.maxUses != null) d.maxUses = req.maxUses;
+    if (req.usedCount != null) d.usedCount = Math.max(0, req.usedCount);
+    if (req.startsAt != null) d.startsAt = req.startsAt;
+    if (req.endsAt != null) d.endsAt = req.endsAt;
+    if (req.daysMask != null) d.daysMask = req.daysMask;
+    if (req.startMinute != null) d.startMinute = req.startMinute;
+    if (req.endMinute != null) d.endMinute = req.endMinute;
+    if (req.tzOffsetMinutes != null) d.tzOffsetMinutes = req.tzOffsetMinutes;
+    validateDiscount(d, "COUPON".equalsIgnoreCase(d.scope));
+    if ("COUPON".equalsIgnoreCase(d.scope) && d.code != null) {
+      final Long currentId = d.id;
+      branchDiscountRepo.findFirstByBranchIdAndCodeIgnoreCase(d.branchId, d.code).ifPresent(existing -> {
+        if (!existing.id.equals(currentId)) {
+          throw new ResponseStatusException(HttpStatus.CONFLICT, "Promo code already exists");
+        }
+      });
+    }
+    d = branchDiscountRepo.save(d);
+    return toDiscountDto(d);
+  }
+
+  @DeleteMapping("/discounts/{id}")
+  public Map<String, Object> deleteDiscount(Authentication auth, @PathVariable("id") long id) {
+    StaffUser u = requireAdmin(auth);
+    BranchDiscount d = branchDiscountRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Discount not found"));
+    requireBranchAccess(u, d.branchId);
+    branchDiscountRepo.delete(d);
+    return Map.of("deleted", true, "id", id);
+  }
+
+  private DiscountDto toDiscountDto(BranchDiscount d) {
+    return new DiscountDto(
+      d.id,
+      d.branchId,
+      d.scope,
+      d.code,
+      d.type,
+      d.value,
+      d.label,
+      d.active,
+      d.maxUses,
+      d.usedCount,
+      d.startsAt,
+      d.endsAt,
+      d.daysMask,
+      d.startMinute,
+      d.endMinute,
+      d.tzOffsetMinutes
+    );
+  }
+
+  private void validateDiscount(BranchDiscount d, boolean requireCode) {
+    if (d.scope == null || (!"COUPON".equalsIgnoreCase(d.scope) && !"HAPPY_HOUR".equalsIgnoreCase(d.scope))) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported discount scope");
+    }
+    if (requireCode) {
+      if (d.code == null || d.code.isBlank()) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Promo code invalid");
+      }
+    }
+    if (d.type == null || (!"PERCENT".equalsIgnoreCase(d.type) && !"FIXED".equalsIgnoreCase(d.type))) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported discount type");
+    }
+    if ("PERCENT".equalsIgnoreCase(d.type)) {
+      if (d.value <= 0 || d.value > 100) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Promo code invalid");
+      }
+    } else if (d.value <= 0) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Promo code invalid");
+    }
+    if ("HAPPY_HOUR".equalsIgnoreCase(d.scope)) {
+      if (d.startMinute == null || d.endMinute == null) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Happy hour time window required");
+      }
+      if (d.startMinute < 0 || d.startMinute > 1439 || d.endMinute < 0 || d.endMinute > 1439) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Happy hour time window invalid");
+      }
+    }
+    if (d.daysMask != null && (d.daysMask < 1 || d.daysMask > 127)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Happy hour days mask invalid");
+    }
+    if (d.tzOffsetMinutes != null && (d.tzOffsetMinutes < -840 || d.tzOffsetMinutes > 840)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Happy hour tz offset invalid");
+    }
+  }
+
+  private String normalizeScope(String v) {
+    String t = v == null ? "" : v.trim().toUpperCase(Locale.ROOT);
+    return t.isEmpty() ? "COUPON" : t;
+  }
+
+  private String normalizeType(String v) {
+    String t = v == null ? "" : v.trim().toUpperCase(Locale.ROOT);
+    return t.isEmpty() ? "PERCENT" : t;
   }
 }

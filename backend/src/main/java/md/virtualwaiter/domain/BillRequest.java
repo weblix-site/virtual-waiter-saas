@@ -39,6 +39,27 @@ public class BillRequest {
   @Column(name = "subtotal_cents", nullable = false)
   public int subtotalCents;
 
+  @Column(name = "discount_cents", nullable = false)
+  public int discountCents;
+
+  @Column(name = "discount_code")
+  public String discountCode;
+
+  @Column(name = "discount_label")
+  public String discountLabel;
+
+  @Column(name = "service_fee_percent")
+  public Integer serviceFeePercent;
+
+  @Column(name = "service_fee_cents", nullable = false)
+  public int serviceFeeCents;
+
+  @Column(name = "tax_percent")
+  public Integer taxPercent;
+
+  @Column(name = "tax_cents", nullable = false)
+  public int taxCents;
+
   @Column(name = "tips_percent")
   public Integer tipsPercent;
 

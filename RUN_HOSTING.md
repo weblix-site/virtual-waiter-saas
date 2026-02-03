@@ -67,6 +67,17 @@ nano .env
 
 В `APP_QR_HMAC_SECRET` установите **сильный ключ**.
 
+### Обязательные переменные (иначе backend не стартует)
+Эти переменные должны быть заданы обязательно:
+- `APP_QR_HMAC_SECRET`
+- `APP_AUTH_COOKIE_SECRET`
+
+Минимальный пример:
+```
+APP_QR_HMAC_SECRET=СЛОЖНЫЙ_СЕКРЕТ_32_СИМВОЛА_ИЛИ_БОЛЕЕ
+APP_AUTH_COOKIE_SECRET=ДРУГОЙ_СЛОЖНЫЙ_СЕКРЕТ_32_СИМВОЛА_ИЛИ_БОЛЕЕ
+```
+
 > Важно для домена:
 > - `APP_PUBLIC_BASE_URL=https://YOUR_DOMAIN`
 > - `NEXT_PUBLIC_API_BASE=https://YOUR_DOMAIN/api`
@@ -101,6 +112,29 @@ APP_AUTH_COOKIE_SECURE=true
 # Push (если не используете FCM — оставьте пустым)
 FCM_SERVER_KEY=
 ```
+
+### Онлайн‑оплата (MAIB/Paynet/MIA)
+1) В админке включите **Online payments enabled** и выберите провайдера (MAIB/Paynet/MIA).
+2) Укажите валюту онлайн‑оплаты (обычно совпадает с валютой филиала).
+3) В личном кабинете провайдера настройте webhook:
+```
+https://YOUR_DOMAIN/api/public/payments/webhook/{provider}
+```
+где `{provider}` = `maib` | `paynet` | `mia`.
+
+Дополнительно включите проверку подписи webhook:
+```
+X-Signature: <HMAC-SHA256 hex>
+```
+Сигнатура считается от **сырого тела запроса** и общего секрета провайдера.
+Переменные окружения:
+- `APP_PAYMENTS_MAIB_WEBHOOK_SECRET`
+- `APP_PAYMENTS_PAYNET_WEBHOOK_SECRET`
+- `APP_PAYMENTS_MIA_WEBHOOK_SECRET`
+
+> Примечание: реальные интеграции требуют ключей/подписей от провайдера.
+> В текущем MVP провайдеры подключены как заглушки и принимают JSON вида:
+> `{"providerRef":"...","status":"PAID","amountCents":12345,"currencyCode":"MDL"}`.
 
 ---
 
@@ -177,7 +211,7 @@ certbot --nginx -d YOUR_DOMAIN
 
 ---
 
-## Мониторинг и алерты (Prometheus)
+## 8) Мониторинг и алерты (Prometheus)
 Включён эндпойнт: `https://YOUR_DOMAIN/api/actuator/prometheus` (если проксируете `/api` на backend).
 
 Пример scrape‑настройки:
@@ -196,36 +230,36 @@ scrape_configs:
 
 ---
 
-## 8) Полезные команды
+## 9) Полезные команды
 
 ```
 # Логи
- docker compose -f infra/docker-compose.full.yml logs -f
+docker compose -f infra/docker-compose.full.yml logs -f
 
 # Бэкап базы (PostgreSQL)
- docker exec -t <POSTGRES_CONTAINER> pg_dump -U ${POSTGRES_USER} ${POSTGRES_DB} > backup.sql
+docker exec -t <POSTGRES_CONTAINER> pg_dump -U ${POSTGRES_USER} ${POSTGRES_DB} > backup.sql
 
 # Восстановление базы
- cat backup.sql | docker exec -i <POSTGRES_CONTAINER> psql -U ${POSTGRES_USER} ${POSTGRES_DB}
+cat backup.sql | docker exec -i <POSTGRES_CONTAINER> psql -U ${POSTGRES_USER} ${POSTGRES_DB}
 
 # Обновить код
- git pull
- docker compose -f infra/docker-compose.full.yml --env-file .env up -d --build
+git pull
+docker compose -f infra/docker-compose.full.yml --env-file .env up -d --build
 
 # Остановить
- docker compose -f infra/docker-compose.full.yml down
-
----
-
-## SLA timestamps (orders)
-В базе фиксируются временные метки статусов заказов:
-`accepted_at`, `in_progress_at`, `ready_at`, `served_at`, `closed_at`, `cancelled_at`.
-Они используются для расчёта SLA в мотивации официантов.
+docker compose -f infra/docker-compose.full.yml down
 ```
 
 ---
 
-## 9) Staff‑app (Flutter) — деплой/доставка
+## 9.1) SLA timestamps (orders)
+В базе фиксируются временные метки статусов заказов:
+`accepted_at`, `in_progress_at`, `ready_at`, `served_at`, `closed_at`, `cancelled_at`.
+Они используются для расчёта SLA в мотивации официантов.
+
+---
+
+## 10) Staff‑app (Flutter) — деплой/доставка
 
 ### Вариант A — Web (самый простой)
 1) На локальной машине:
@@ -247,8 +281,10 @@ flutter build apk --dart-define=API_BASE=https://YOUR_DOMAIN
 
 ---
 
-## 10) Рекомендации по бэкапам
-- Делайте ежедневный cron‑бэкап `pg_dump`.\n- Храните минимум 7‑14 дней.\n- Проверяйте восстановление раз в неделю.
+## 11) Рекомендации по бэкапам
+- Делайте ежедневный cron‑бэкап `pg_dump`.
+- Храните минимум 7‑14 дней.
+- Проверяйте восстановление раз в неделю.
 
 ### Пример cron + ротация
 1) Создайте папку:
@@ -295,7 +331,7 @@ crontab -e
 
 ---
 
-## 10.1) Ротация логов контейнеров
+## 11.1) Ротация логов контейнеров
 Чтобы логи не заполнили диск, в `infra/docker-compose.full.yml` включена ротация:
 ```
 logging:
@@ -308,7 +344,7 @@ logging:
 
 ---
 
-## 11) Проверка, что .env применяется
+## 12) Проверка, что .env применяется
 
 После запуска контейнеров:
 ```
@@ -319,12 +355,12 @@ docker compose -f infra/docker-compose.full.yml --env-file .env exec backend pri
 
 ---
 
-## 12) Rate limit через Redis (опционально)
+## 13) Rate limit через Redis (опционально)
 
 По умолчанию лимиты работают **в памяти** (подходит для одного сервера).  
 Если вы планируете несколько инстансов — включите Redis.
 
-### 12.1 В `.env`
+### 13.1 В `.env`
 ```
 RATE_LIMIT_REDIS_ENABLED=true
 RATE_LIMIT_REDIS_HOST=redis
@@ -332,7 +368,7 @@ RATE_LIMIT_REDIS_PORT=6379
 RATE_LIMIT_REDIS_PASSWORD=
 ```
 
-### 12.2 Запуск с Redis
+### 13.2 Запуск с Redis
 ```
 docker compose -f infra/docker-compose.full.yml --env-file .env --profile redis up -d --build
 ```

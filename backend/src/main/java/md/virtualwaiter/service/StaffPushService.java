@@ -17,6 +17,8 @@ import md.virtualwaiter.repo.WaiterCallRepo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
+import md.virtualwaiter.util.PayloadGuard;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -41,6 +43,7 @@ public class StaffPushService {
   private final BillRequestRepo billRequestRepo;
   private final CafeTableRepo tableRepo;
   private final PushProperties pushProperties;
+  private final int maxLogPayloadChars;
   private final ObjectMapper objectMapper = new ObjectMapper();
   private final HttpClient httpClient = HttpClient.newHttpClient();
 
@@ -51,7 +54,8 @@ public class StaffPushService {
     WaiterCallRepo waiterCallRepo,
     BillRequestRepo billRequestRepo,
     CafeTableRepo tableRepo,
-    PushProperties pushProperties
+    PushProperties pushProperties,
+    @Value("${app.log.maxPayloadChars:2000}") int maxLogPayloadChars
   ) {
     this.tokenRepo = tokenRepo;
     this.staffUserRepo = staffUserRepo;
@@ -60,6 +64,7 @@ public class StaffPushService {
     this.billRequestRepo = billRequestRepo;
     this.tableRepo = tableRepo;
     this.pushProperties = pushProperties;
+    this.maxLogPayloadChars = maxLogPayloadChars;
   }
 
   public void notifyBranch(long branchId, String type, long refId) {
@@ -90,9 +95,9 @@ public class StaffPushService {
 
     if (targets.isEmpty()) return;
 
-    String provider = pushProperties.provider == null ? "LOG" : pushProperties.provider.toUpperCase(Locale.ROOT);
+    String provider = pushProperties.getProvider() == null ? "LOG" : pushProperties.getProvider().toUpperCase(Locale.ROOT);
     for (StaffDeviceToken t : targets) {
-      if ("FCM_LEGACY".equals(provider) && pushProperties.fcmServerKey != null && !pushProperties.fcmServerKey.isBlank()) {
+      if ("FCM_LEGACY".equals(provider) && pushProperties.getFcmServerKey() != null && !pushProperties.getFcmServerKey().isBlank()) {
         sendFcmLegacy(t, branchId, type, refId, tableId);
       } else {
         log.info("[PUSH] branch={} token={} platform={} type={} refId={} tableId={}", branchId, t.token, t.platform, type, refId, tableId);
@@ -150,24 +155,24 @@ public class StaffPushService {
         "title", "Virtual Waiter",
         "body", type + " #" + refId
       ));
-      if (pushProperties.dryRun) {
+      if (pushProperties.isDryRun()) {
         payload.put("dry_run", true);
       }
 
       String body = objectMapper.writeValueAsString(payload);
-      if (pushProperties.maxPayloadBytes > 0 && body.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > pushProperties.maxPayloadBytes) {
-        log.warn("[FCM] payload too large ({} bytes > {}), skip send", body.getBytes(java.nio.charset.StandardCharsets.UTF_8).length, pushProperties.maxPayloadBytes);
+      if (pushProperties.getMaxPayloadBytes() > 0 && body.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > pushProperties.getMaxPayloadBytes()) {
+        log.warn("[FCM] payload too large ({} bytes > {}), skip send", body.getBytes(java.nio.charset.StandardCharsets.UTF_8).length, pushProperties.getMaxPayloadBytes());
         return;
       }
       HttpRequest req = HttpRequest.newBuilder()
-        .uri(URI.create(pushProperties.fcmApiUrl))
-        .header("Authorization", "key=" + pushProperties.fcmServerKey)
+        .uri(URI.create(pushProperties.getFcmApiUrl()))
+        .header("Authorization", "key=" + pushProperties.getFcmServerKey())
         .header("Content-Type", "application/json")
         .POST(HttpRequest.BodyPublishers.ofString(body))
         .build();
       HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
       if (resp.statusCode() >= 400) {
-        log.warn("[FCM] status={} body={}", resp.statusCode(), resp.body());
+        log.warn("[FCM] status={} body={}", resp.statusCode(), PayloadGuard.truncate(resp.body(), maxLogPayloadChars));
       }
     } catch (Exception e) {
       log.warn("[FCM] send failed: {}", e.getMessage());

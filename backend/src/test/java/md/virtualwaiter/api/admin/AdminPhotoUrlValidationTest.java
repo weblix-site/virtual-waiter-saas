@@ -19,6 +19,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
+import java.nio.charset.StandardCharsets;
+import java.util.Locale;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -92,25 +94,27 @@ class AdminPhotoUrlValidationTest {
 
   @Test
   void rejectsBadPhotoUrlScheme() throws Exception {
-    String body = """
-      {"categoryId": %d, "nameRu": "Item", "priceCents": 100, "photoUrls": "ftp://bad/img.jpg"}
-      """.formatted(cat.id);
+    String body = String.format(Locale.ROOT,
+      "{\"categoryId\": %d, \"nameRu\": \"Item\", \"priceCents\": 100, \"photoUrls\": \"ftp://bad/img.jpg\"}",
+      cat.id
+    );
     mvc.perform(post("/api/admin/menu/items")
         .contentType(MediaType.APPLICATION_JSON)
         .content(body)
-        .header("Authorization", "Basic " + java.util.Base64.getEncoder().encodeToString("admin:pass".getBytes())))
+        .header("Authorization", "Basic " + java.util.Base64.getEncoder().encodeToString("admin:pass".getBytes(StandardCharsets.UTF_8))))
       .andExpect(status().isBadRequest());
   }
 
   @Test
   void acceptsGoodPhotoUrl() throws Exception {
-    String body = """
-      {"categoryId": %d, "nameRu": "Item", "priceCents": 100, "photoUrls": "https://cdn.example.com/img.jpg"}
-      """.formatted(cat.id);
+    String body = String.format(Locale.ROOT,
+      "{\"categoryId\": %d, \"nameRu\": \"Item\", \"priceCents\": 100, \"photoUrls\": \"https://cdn.example.com/img.jpg\"}",
+      cat.id
+    );
     mvc.perform(post("/api/admin/menu/items")
         .contentType(MediaType.APPLICATION_JSON)
         .content(body)
-        .header("Authorization", "Basic " + java.util.Base64.getEncoder().encodeToString("admin:pass".getBytes())))
+        .header("Authorization", "Basic " + java.util.Base64.getEncoder().encodeToString("admin:pass".getBytes(StandardCharsets.UTF_8))))
       .andExpect(status().isOk());
   }
 
@@ -122,7 +126,7 @@ class AdminPhotoUrlValidationTest {
     mvc.perform(patch("/api/admin/staff/" + admin.id)
         .contentType(MediaType.APPLICATION_JSON)
         .content(body)
-        .header("Authorization", "Basic " + java.util.Base64.getEncoder().encodeToString("admin:pass".getBytes())))
+        .header("Authorization", "Basic " + java.util.Base64.getEncoder().encodeToString("admin:pass".getBytes(StandardCharsets.UTF_8))))
       .andExpect(status().isBadRequest());
   }
 }

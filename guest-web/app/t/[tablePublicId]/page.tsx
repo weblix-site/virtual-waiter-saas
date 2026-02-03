@@ -90,6 +90,43 @@ type BillOptionsResponse = {
   tableItems: BillOptionsItem[];
   payCashEnabled?: boolean;
   payTerminalEnabled?: boolean;
+  onlinePayEnabled?: boolean;
+  onlinePayProvider?: string | null;
+  onlinePayCurrencyCode?: string | null;
+};
+
+type BillItemLine = {
+  orderItemId: number;
+  name: string;
+  qty: number;
+  unitPriceCents: number;
+  lineTotalCents: number;
+};
+
+type BillRequestResponse = {
+  billRequestId: number;
+  status: string;
+  paymentMethod: string;
+  mode: string;
+  subtotalCents: number;
+  discountCents: number;
+  discountCode?: string | null;
+  discountLabel?: string | null;
+  serviceFeePercent?: number | null;
+  serviceFeeCents?: number | null;
+  taxPercent?: number | null;
+  taxCents?: number | null;
+  tipsPercent?: number | null;
+  tipsAmountCents: number;
+  totalCents: number;
+  items: BillItemLine[];
+};
+
+type LoyaltyProfileResponse = {
+  phone: string | null;
+  pointsBalance: number;
+  favorites: { menuItemId: number; name: string; qtyTotal: number }[];
+  offers: { id: number; title: string; body?: string | null; discountCode?: string | null }[];
 };
 
 type ModOption = { id: number; name: string; priceCents: number };
@@ -132,10 +169,16 @@ export default function TablePage({ params, searchParams }: any) {
   const [billOptions, setBillOptions] = useState<BillOptionsResponse | null>(null);
   const [billMode, setBillMode] = useState<'MY' | 'SELECTED' | 'WHOLE_TABLE'>('MY');
   const [selectedItemIds, setSelectedItemIds] = useState<number[]>([]);
-  const [billPayMethod, setBillPayMethod] = useState<'CASH' | 'TERMINAL'>('CASH');
+  const [billPayMethod, setBillPayMethod] = useState<'CASH' | 'TERMINAL' | 'ONLINE'>('CASH');
   const [billTipsPercent, setBillTipsPercent] = useState<number | ''>('');
+  const [billPromoCode, setBillPromoCode] = useState('');
+  const [billSummary, setBillSummary] = useState<BillRequestResponse | null>(null);
   const [billLoading, setBillLoading] = useState(false);
   const [billOptionsLoading, setBillOptionsLoading] = useState(false);
+  const [onlineProvider, setOnlineProvider] = useState<string>("");
+  const [paymentIntentId, setPaymentIntentId] = useState<number | null>(null);
+  const [paymentRedirecting, setPaymentRedirecting] = useState(false);
+  const [paymentConfirming, setPaymentConfirming] = useState(false);
   const [party, setParty] = useState<{ partyId: number; pin: string; expiresAt: string } | null>(null);
   const [modifiersByItem, setModifiersByItem] = useState<Record<number, MenuItemModifiersResponse>>({});
   const [modOpenByItem, setModOpenByItem] = useState<Record<number, boolean>>({});
@@ -164,6 +207,8 @@ export default function TablePage({ params, searchParams }: any) {
   const [branchReviewSending, setBranchReviewSending] = useState(false);
   const [branchReviewSent, setBranchReviewSent] = useState(false);
   const [branchReviewError, setBranchReviewError] = useState<string | null>(null);
+  const [loyaltyProfile, setLoyaltyProfile] = useState<LoyaltyProfileResponse | null>(null);
+  const [loyaltyLoading, setLoyaltyLoading] = useState(false);
 
   const cartTotalCents = useMemo(() => cart.reduce((sum, l) => sum + l.item.priceCents * l.qty, 0), [cart]);
   const myChargesCents = useMemo(() => (billOptions?.myItems ?? []).reduce((sum, it) => sum + it.lineTotalCents, 0), [billOptions]);
@@ -190,12 +235,59 @@ export default function TablePage({ params, searchParams }: any) {
   useEffect(() => {
     if (!billOptions) return;
     if (billPayMethod === 'CASH' && billOptions.payCashEnabled === false) {
-      setBillPayMethod(billOptions.payTerminalEnabled === false ? 'CASH' : 'TERMINAL');
+      if (billOptions.payTerminalEnabled === false) {
+        setBillPayMethod(billOptions.onlinePayEnabled ? 'ONLINE' : 'CASH');
+      } else {
+        setBillPayMethod('TERMINAL');
+      }
     }
     if (billPayMethod === 'TERMINAL' && billOptions.payTerminalEnabled === false) {
-      setBillPayMethod(billOptions.payCashEnabled === false ? 'TERMINAL' : 'CASH');
+      if (billOptions.payCashEnabled === false) {
+        setBillPayMethod(billOptions.onlinePayEnabled ? 'ONLINE' : 'TERMINAL');
+      } else {
+        setBillPayMethod('CASH');
+      }
     }
-  }, [billOptions, billPayMethod]);
+    if (billPayMethod === 'ONLINE' && !billOptions.onlinePayEnabled) {
+      if (billOptions.payCashEnabled !== false) setBillPayMethod('CASH');
+      else if (billOptions.payTerminalEnabled !== false) setBillPayMethod('TERMINAL');
+    }
+    if (billOptions.onlinePayEnabled && billOptions.onlinePayProvider && !onlineProvider) {
+      setOnlineProvider(billOptions.onlinePayProvider);
+    }
+  }, [billOptions, billPayMethod, onlineProvider]);
+
+  const sessionHeaders = useCallback((): Record<string, string> => {
+    const headers: Record<string, string> = {};
+    if (session?.sessionSecret) headers["X-Session-Secret"] = session.sessionSecret;
+    return headers;
+  }, [session?.sessionSecret]);
+
+  const loadLoyaltyProfile = useCallback(async () => {
+    if (!session) return;
+    if (!session.isVerified) {
+      setLoyaltyProfile(null);
+      return;
+    }
+    setLoyaltyLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/public/loyalty/profile?guestSessionId=${session.guestSessionId}`, {
+        headers: { ...sessionHeaders() },
+      });
+      if (!res.ok) throw new Error(await readApiError(res, t(lang, "errorGeneric")));
+      const body: LoyaltyProfileResponse = await res.json();
+      setLoyaltyProfile(body);
+    } catch {
+      setLoyaltyProfile(null);
+    } finally {
+      setLoyaltyLoading(false);
+    }
+  }, [lang, session, sessionHeaders]);
+
+  useEffect(() => {
+    if (!session) return;
+    loadLoyaltyProfile();
+  }, [session, loadLoyaltyProfile]);
 
   async function addToCart(item: MenuItem) {
     setOrderId(null);
@@ -273,12 +365,6 @@ export default function TablePage({ params, searchParams }: any) {
     return cart.some((l) => missingRequiredGroups(l.item.id, l.modifierOptionIds ?? []).length > 0);
   }, [cart, missingRequiredGroups]);
 
-  const sessionHeaders = useCallback((): Record<string, string> => {
-    const headers: Record<string, string> = {};
-    if (session?.sessionSecret) headers["X-Session-Secret"] = session.sessionSecret;
-    return headers;
-  }, [session?.sessionSecret]);
-
   const refreshBillOptions = useCallback(async () => {
     if (!session) return;
     setBillOptionsLoading(true);
@@ -339,8 +425,9 @@ export default function TablePage({ params, searchParams }: any) {
         headers: { ...sessionHeaders() },
       });
       if (!res.ok) throw new Error(await readApiError(res, `Bill status failed (${res.status})`));
-      const body = await res.json();
+      const body: BillRequestResponse = await res.json();
       setBillStatus(body.status);
+      setBillSummary(body);
     } catch (e: any) {
       setBillError(e?.message ?? t(lang, "billRequestFailed"));
     } finally {
@@ -405,10 +492,11 @@ export default function TablePage({ params, searchParams }: any) {
           headers: { ...sessionHeaders() },
         });
         if (lastBillRes.ok) {
-          const last = await lastBillRes.json();
+          const last: BillRequestResponse = await lastBillRes.json();
           if (!cancelled) {
             setBillRequestId(last.billRequestId);
             setBillStatus(last.status);
+            setBillSummary(last);
           }
         }
       } catch (e: any) {
@@ -444,6 +532,16 @@ export default function TablePage({ params, searchParams }: any) {
     return () => clearInterval(id);
   }, [orderId, refreshOrderStatus, session]);
 
+  const loadChat = useCallback(async () => {
+    if (!session) return;
+    const res = await fetch(`${API_BASE}/api/public/chat/messages?guestSessionId=${session.guestSessionId}`, {
+      headers: { ...sessionHeaders() },
+    });
+    if (res.ok) {
+      setChatMessages(await res.json());
+    }
+  }, [session, sessionHeaders]);
+
   useEffect(() => {
     if (!session) return;
     loadChat();
@@ -451,7 +549,7 @@ export default function TablePage({ params, searchParams }: any) {
       loadChat();
     }, 8000);
     return () => clearInterval(id);
-  }, [session]);
+  }, [session, loadChat]);
 
   useEffect(() => {
     if (!session) return;
@@ -648,16 +746,6 @@ export default function TablePage({ params, searchParams }: any) {
     }
   }
 
-  async function loadChat() {
-    if (!session) return;
-    const res = await fetch(`${API_BASE}/api/public/chat/messages?guestSessionId=${session.guestSessionId}`, {
-      headers: { ...sessionHeaders() },
-    });
-    if (res.ok) {
-      setChatMessages(await res.json());
-    }
-  }
-
   async function sendChat() {
     if (!session) return;
     const msg = chatMessage.trim();
@@ -790,6 +878,9 @@ export default function TablePage({ params, searchParams }: any) {
       if (billMode === 'SELECTED' && selectedItemIds.length === 0) {
         throw new Error(t(lang, "billSelectItems"));
       }
+      if (billPayMethod === 'ONLINE' && !onlineProvider) {
+        throw new Error(t(lang, "onlinePayNotReady"));
+      }
       const payload: any = {
         guestSessionId: session.guestSessionId,
         mode: billMode,
@@ -797,6 +888,7 @@ export default function TablePage({ params, searchParams }: any) {
       };
       if (billMode === 'SELECTED') payload.orderItemIds = selectedItemIds;
       if (billTipsPercent !== "") payload.tipsPercent = billTipsPercent;
+      if (billPromoCode.trim()) payload.promoCode = billPromoCode.trim();
 
       const res = await fetch(`${API_BASE}/api/public/bill-request/create`, {
         method: "POST",
@@ -806,14 +898,94 @@ export default function TablePage({ params, searchParams }: any) {
       if (!res.ok) {
         throw new Error(await readApiError(res, `${t(lang, "billRequestFailed")} (${res.status})`));
       }
-      const body = await res.json().catch(() => ({}));
+      const body: BillRequestResponse = await res.json().catch(() => ({} as BillRequestResponse));
       setBillRequestId(body.billRequestId);
       setBillStatus(body.status);
+      setBillSummary(body);
       alert(t(lang, "billRequested"));
     } catch (e: any) {
       setBillError(e?.message ?? t(lang, "billRequestFailed"));
     } finally {
       setBillLoading(false);
+    }
+  }
+
+  async function startOnlinePayment() {
+    if (!session || !billRequestId) return;
+    if (!onlineProvider) {
+      setBillError(t(lang, "onlinePayNotReady"));
+      return;
+    }
+    setBillError(null);
+    setPaymentRedirecting(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/public/payments/create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...sessionHeaders() },
+        body: JSON.stringify({
+          guestSessionId: session.guestSessionId,
+          billRequestId,
+          provider: onlineProvider,
+          returnUrl: window.location.href,
+        }),
+      });
+      if (!res.ok) {
+        throw new Error(await readApiError(res, `${t(lang, "billRequestFailed")} (${res.status})`));
+      }
+      const body = await res.json();
+      const intentId = Number(body.intentId);
+      if (!Number.isNaN(intentId)) {
+        setPaymentIntentId(intentId);
+        try {
+          localStorage.setItem("vw_last_intent_id", String(intentId));
+        } catch {
+          // ignore storage errors
+        }
+      }
+      if (body.redirectUrl) {
+        window.location.href = body.redirectUrl;
+      }
+    } catch (e: any) {
+      setBillError(e?.message ?? t(lang, "billRequestFailed"));
+    } finally {
+      setPaymentRedirecting(false);
+    }
+  }
+
+  async function confirmOnlinePayment() {
+    if (!session) return;
+    let intentId = paymentIntentId;
+    if (!intentId) {
+      try {
+        const saved = localStorage.getItem("vw_last_intent_id");
+        if (saved) intentId = Number(saved);
+      } catch {
+        // ignore
+      }
+    }
+    if (!intentId || Number.isNaN(intentId)) {
+      setBillError(t(lang, "onlinePayNotReady"));
+      return;
+    }
+    setBillError(null);
+    setPaymentConfirming(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/public/payments/confirm`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...sessionHeaders() },
+        body: JSON.stringify({ guestSessionId: session.guestSessionId, intentId }),
+      });
+      if (!res.ok) {
+        throw new Error(await readApiError(res, `${t(lang, "billRequestFailed")} (${res.status})`));
+      }
+      const body = await res.json();
+      if (body.status && String(body.status).toUpperCase() === "PAID") {
+        setBillStatus("PAID_CONFIRMED");
+      }
+    } catch (e: any) {
+      setBillError(e?.message ?? t(lang, "billRequestFailed"));
+    } finally {
+      setPaymentConfirming(false);
     }
   }
 
@@ -1114,6 +1286,56 @@ export default function TablePage({ params, searchParams }: any) {
             </div>
           )}
         </div>
+      </section>
+
+      <section style={{ marginTop: 14, border: "1px solid #eee", borderRadius: 12, padding: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <strong>{t(lang, "loyaltyTitle")}</strong>
+          <button onClick={loadLoyaltyProfile} disabled={loyaltyLoading} style={{ padding: "6px 10px" }}>
+            {loyaltyLoading ? t(lang, "loading") : t(lang, "billRefresh")}
+          </button>
+        </div>
+        {!session?.isVerified ? (
+          <div style={{ marginTop: 8, color: "#666", fontSize: 12 }}>{t(lang, "loyaltyUnavailable")}</div>
+        ) : (
+          <div style={{ marginTop: 8 }}>
+            <div style={{ fontWeight: 600 }}>{t(lang, "loyaltyPoints")}: {loyaltyProfile?.pointsBalance ?? 0}</div>
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>{t(lang, "favoriteItems")}</div>
+              {(loyaltyProfile?.favorites?.length ?? 0) === 0 ? (
+                <div style={{ color: "#666", fontSize: 12 }}>{t(lang, "noFavorites")}</div>
+              ) : (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {loyaltyProfile?.favorites?.map((f) => (
+                    <span key={f.menuItemId} style={{ border: "1px solid #ddd", borderRadius: 999, padding: "4px 8px", fontSize: 12 }}>
+                      {f.name} × {f.qtyTotal}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>{t(lang, "personalOffers")}</div>
+              {(loyaltyProfile?.offers?.length ?? 0) === 0 ? (
+                <div style={{ color: "#666", fontSize: 12 }}>{t(lang, "noOffers")}</div>
+              ) : (
+                <div style={{ display: "grid", gap: 8 }}>
+                  {loyaltyProfile?.offers?.map((o) => (
+                    <div key={o.id} style={{ border: "1px solid #eee", borderRadius: 8, padding: 8 }}>
+                      <div style={{ fontWeight: 600 }}>{o.title}</div>
+                      {o.body && <div style={{ fontSize: 12, color: "#555", marginTop: 4 }}>{o.body}</div>}
+                      {o.discountCode && (
+                        <div style={{ marginTop: 6, fontSize: 12 }}>
+                          {t(lang, "promoCode")}: <strong>{o.discountCode}</strong>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </section>
 
       <div style={{ marginTop: 12, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
@@ -1534,7 +1756,40 @@ export default function TablePage({ params, searchParams }: any) {
                 onChange={() => setBillPayMethod('TERMINAL')}
               /> {t(lang, "terminal")}
             </label>
+            {billOptions.onlinePayEnabled && (
+              <label>
+                <input
+                  type="radio"
+                  checked={billPayMethod === 'ONLINE'}
+                  onChange={() => setBillPayMethod('ONLINE')}
+                /> {t(lang, "onlinePay")}
+              </label>
+            )}
           </div>
+
+          {billOptions.onlinePayEnabled && billPayMethod === 'ONLINE' && (
+            <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <label style={{ minWidth: 120 }}>{t(lang, "onlineProvider")}</label>
+              <select
+                value={onlineProvider}
+                onChange={(e) => setOnlineProvider(e.target.value)}
+                disabled={!!billOptions.onlinePayProvider}
+                style={{ minWidth: 180 }}
+              >
+                <option value="">{t(lang, "onlinePaySelectProvider")}</option>
+                {(!billOptions.onlinePayProvider || billOptions.onlinePayProvider === "MAIB") && (
+                  <option value="MAIB">{t(lang, "providerMaib")}</option>
+                )}
+                {(!billOptions.onlinePayProvider || billOptions.onlinePayProvider === "PAYNET") && (
+                  <option value="PAYNET">{t(lang, "providerPaynet")}</option>
+                )}
+                {(!billOptions.onlinePayProvider || billOptions.onlinePayProvider === "MIA") && (
+                  <option value="MIA">{t(lang, "providerMia")}</option>
+                )}
+              </select>
+              <div style={{ fontSize: 12, color: "#6b7280" }}>{t(lang, "onlinePayProviderHint")}</div>
+            </div>
+          )}
 
           {billOptions.tipsEnabled && (
             <div style={{ marginTop: 12 }}>
@@ -1552,6 +1807,56 @@ export default function TablePage({ params, searchParams }: any) {
                 <button onClick={() => setBillTipsPercent('')} style={{ padding: "6px 10px", border: "1px solid #ddd", borderRadius: 8 }}>
                   {t(lang, "none")}
                 </button>
+              </div>
+            </div>
+          )}
+
+          <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <label style={{ minWidth: 120 }}>{t(lang, "promoCode")}</label>
+            <input
+              value={billPromoCode}
+              onChange={(e) => setBillPromoCode(e.target.value)}
+              placeholder={t(lang, "promoCodePlaceholder")}
+              style={{ padding: "6px 10px", border: "1px solid #ddd", borderRadius: 8, minWidth: 180 }}
+            />
+          </div>
+
+          {billSummary && (
+            <div style={{ marginTop: 12, borderTop: "1px dashed #eee", paddingTop: 8, fontSize: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span>{t(lang, "subtotal")}</span>
+                <span>{money(billSummary.subtotalCents, currencyCode)}</span>
+              </div>
+              {billSummary.discountCents > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span>
+                    {t(lang, "discount")}
+                    {billSummary.discountLabel || billSummary.discountCode ? ` (${billSummary.discountLabel || billSummary.discountCode})` : ""}
+                  </span>
+                  <span>-{money(billSummary.discountCents, currencyCode)}</span>
+                </div>
+              )}
+              {(billSummary.serviceFeeCents ?? 0) > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span>{t(lang, "serviceFee")}</span>
+                  <span>{money(billSummary.serviceFeeCents ?? 0, currencyCode)}</span>
+                </div>
+              )}
+              {(billSummary.taxCents ?? 0) > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span>{t(lang, "tax")}</span>
+                  <span>{money(billSummary.taxCents ?? 0, currencyCode)}</span>
+                </div>
+              )}
+              {billSummary.tipsAmountCents > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span>{t(lang, "tips")}</span>
+                  <span>{money(billSummary.tipsAmountCents, currencyCode)}</span>
+                </div>
+              )}
+              <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 600, marginTop: 6 }}>
+                <span>{t(lang, "total")}</span>
+                <span>{money(billSummary.totalCents, currencyCode)}</span>
               </div>
             </div>
           )}
@@ -1581,6 +1886,16 @@ export default function TablePage({ params, searchParams }: any) {
                   <button onClick={cancelBillRequest} disabled={billLoading} style={{ padding: "6px 10px" }}>
                     {t(lang, "billCancel")}
                   </button>
+                )}
+                {billStatus === "CREATED" && billSummary?.paymentMethod === "ONLINE" && (
+                  <>
+                    <button onClick={startOnlinePayment} disabled={paymentRedirecting} style={{ padding: "6px 10px" }}>
+                      {paymentRedirecting ? t(lang, "loading") : t(lang, "onlinePayStart")}
+                    </button>
+                    <button onClick={confirmOnlinePayment} disabled={paymentConfirming} style={{ padding: "6px 10px" }}>
+                      {paymentConfirming ? t(lang, "loading") : t(lang, "onlinePayConfirm")}
+                    </button>
+                  </>
                 )}
                 {billStatus === "PAID_CONFIRMED" && (
                   <button onClick={closeBillRequest} disabled={billLoading} style={{ padding: "6px 10px" }}>

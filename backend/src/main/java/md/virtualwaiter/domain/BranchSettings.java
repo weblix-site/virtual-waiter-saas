@@ -46,6 +46,30 @@ public class BranchSettings {
   @Column(name = "tips_percentages")
   public String tipsPercentages;
 
+  @Column(name = "service_fee_percent")
+  public Integer serviceFeePercent;
+
+  @Column(name = "tax_percent")
+  public Integer taxPercent;
+
+  @Column(name = "inventory_enabled")
+  public Boolean inventoryEnabled;
+
+  @Column(name = "loyalty_enabled")
+  public Boolean loyaltyEnabled;
+
+  @Column(name = "loyalty_points_per_100cents")
+  public Integer loyaltyPointsPer100Cents;
+
+  @Column(name = "online_pay_enabled")
+  public Boolean onlinePayEnabled;
+
+  @Column(name = "online_pay_provider")
+  public String onlinePayProvider;
+
+  @Column(name = "online_pay_currency_code")
+  public String onlinePayCurrencyCode;
+
   @Column(name = "pay_cash_enabled")
   public Boolean payCashEnabled;
 

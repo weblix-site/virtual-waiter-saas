@@ -2,6 +2,7 @@ package md.virtualwaiter.security;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -10,6 +11,7 @@ import java.time.Instant;
 import java.util.Base64;
 
 @Service
+@SuppressFBWarnings(value = "CT_CONSTRUCTOR_THROW", justification = "Fail fast when secret is missing")
 public class AuthTokenService {
   private final byte[] secret;
 

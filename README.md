@@ -14,6 +14,7 @@
 - OTP по SMS (feature flag)
 - Party PIN (объединение гостей)
 - Оффлайн‑оплата: наличные/терминал
+- Онлайн‑оплата: MAIB/Paynet/MIA (через провайдера, по счёту)
 - План зала (Halls/Plans), шаблоны, импорт/экспорт JSON, версии
 - Статистика и аудит (админ/супер‑админ)
 - Валюты: управляются супер‑админом, выбираются для филиалов
@@ -123,3 +124,10 @@ docker compose -f infra/docker-compose.full.yml --env-file .env up -d --build
 - `staff-app/` — Flutter приложение
 - `infra/` — docker‑compose
 - `scripts/` — проверки и smoke‑тесты
+## Онлайн‑оплата (MAIB/Paynet/MIA)
+- Включается в админке: **Settings → Online payments enabled**.
+- Для филиала выбирается один провайдер (MAIB / Paynet / MIA) и валюта онлайн‑платежей.
+- Гость оплачивает онлайн **весь счёт** или **частично** (свои/выбранные позиции) — через стандартный `BillRequest`.
+- Webhook для провайдеров: `POST /api/public/payments/webhook/{provider}`.
+- Для webhook используется подпись `X-Signature` = HMAC‑SHA256 (hex) от тела запроса.
+- Секреты webhook: `APP_PAYMENTS_MAIB_WEBHOOK_SECRET`, `APP_PAYMENTS_PAYNET_WEBHOOK_SECRET`, `APP_PAYMENTS_MIA_WEBHOOK_SECRET`.

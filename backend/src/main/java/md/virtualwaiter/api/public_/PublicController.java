@@ -2,6 +2,7 @@ package md.virtualwaiter.api.public_;
 
 import md.virtualwaiter.domain.BillRequest;
 import md.virtualwaiter.domain.BillRequestItem;
+import md.virtualwaiter.domain.BranchDiscount;
 import md.virtualwaiter.domain.BranchReview;
 import md.virtualwaiter.domain.CafeTable;
 import md.virtualwaiter.domain.ChatMessage;
@@ -18,6 +19,8 @@ import md.virtualwaiter.domain.StaffUser;
 import md.virtualwaiter.domain.TableParty;
 import md.virtualwaiter.domain.WaiterCall;
 import md.virtualwaiter.security.QrSignatureService;
+import md.virtualwaiter.domain.PaymentIntent;
+import md.virtualwaiter.domain.PaymentTransaction;
 import md.virtualwaiter.repo.CafeTableRepo;
 import md.virtualwaiter.repo.GuestSessionRepo;
 import md.virtualwaiter.repo.MenuCategoryRepo;
@@ -28,6 +31,7 @@ import md.virtualwaiter.repo.WaiterCallRepo;
 import md.virtualwaiter.repo.TablePartyRepo;
 import md.virtualwaiter.repo.BillRequestRepo;
 import md.virtualwaiter.repo.BillRequestItemRepo;
+import md.virtualwaiter.repo.BranchDiscountRepo;
 import md.virtualwaiter.repo.ModifierGroupRepo;
 import md.virtualwaiter.repo.ModifierOptionRepo;
 import md.virtualwaiter.repo.MenuItemModifierGroupRepo;
@@ -35,17 +39,24 @@ import md.virtualwaiter.repo.StaffUserRepo;
 import md.virtualwaiter.repo.ChatMessageRepo;
 import md.virtualwaiter.repo.BranchReviewRepo;
 import md.virtualwaiter.repo.StaffReviewRepo;
+import md.virtualwaiter.repo.PaymentIntentRepo;
+import md.virtualwaiter.repo.PaymentTransactionRepo;
 import md.virtualwaiter.otp.OtpService;
 import md.virtualwaiter.service.BranchSettingsService;
 import md.virtualwaiter.service.PartyService;
 import md.virtualwaiter.service.NotificationEventService;
 import md.virtualwaiter.service.RateLimitService;
+import md.virtualwaiter.service.InventoryService;
+import md.virtualwaiter.service.LoyaltyService;
 import md.virtualwaiter.config.BillProperties;
+import md.virtualwaiter.payments.PaymentProvider;
+import md.virtualwaiter.payments.PaymentProviderRegistry;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -57,8 +68,9 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
-import java.util.Locale;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -67,9 +79,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Random;
 import java.util.Set;
-import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 
 @RestController
@@ -86,6 +96,10 @@ public class PublicController {
   private final TablePartyRepo partyRepo;
   private final BillRequestRepo billRequestRepo;
   private final BillRequestItemRepo billRequestItemRepo;
+  private final BranchDiscountRepo branchDiscountRepo;
+  private final PaymentIntentRepo paymentIntentRepo;
+  private final PaymentTransactionRepo paymentTransactionRepo;
+  private final PaymentProviderRegistry paymentProviderRegistry;
   private final ModifierGroupRepo modifierGroupRepo;
   private final ModifierOptionRepo modifierOptionRepo;
   private final MenuItemModifierGroupRepo menuItemModifierGroupRepo;
@@ -99,6 +113,8 @@ public class PublicController {
   private final NotificationEventService notificationEventService;
   private final PartyService partyService;
   private final RateLimitService rateLimitService;
+  private final InventoryService inventoryService;
+  private final LoyaltyService loyaltyService;
   private final int otpLimitMax;
   private final int otpLimitWindowSeconds;
   private final int otpVerifyLimitMax;
@@ -128,6 +144,10 @@ public class PublicController {
     TablePartyRepo partyRepo,
     BillRequestRepo billRequestRepo,
     BillRequestItemRepo billRequestItemRepo,
+    BranchDiscountRepo branchDiscountRepo,
+    PaymentIntentRepo paymentIntentRepo,
+    PaymentTransactionRepo paymentTransactionRepo,
+    PaymentProviderRegistry paymentProviderRegistry,
     ModifierGroupRepo modifierGroupRepo,
     ModifierOptionRepo modifierOptionRepo,
     MenuItemModifierGroupRepo menuItemModifierGroupRepo,
@@ -141,6 +161,8 @@ public class PublicController {
     NotificationEventService notificationEventService,
     PartyService partyService,
     RateLimitService rateLimitService,
+    InventoryService inventoryService,
+    LoyaltyService loyaltyService,
     BillProperties billProperties,
     @Value("${app.rateLimit.otp.maxRequests:5}") int otpLimitMax,
     @Value("${app.rateLimit.otp.windowSeconds:300}") int otpLimitWindowSeconds,
@@ -169,6 +191,10 @@ public class PublicController {
     this.partyRepo = partyRepo;
     this.billRequestRepo = billRequestRepo;
     this.billRequestItemRepo = billRequestItemRepo;
+    this.branchDiscountRepo = branchDiscountRepo;
+    this.paymentIntentRepo = paymentIntentRepo;
+    this.paymentTransactionRepo = paymentTransactionRepo;
+    this.paymentProviderRegistry = paymentProviderRegistry;
     this.modifierGroupRepo = modifierGroupRepo;
     this.modifierOptionRepo = modifierOptionRepo;
     this.menuItemModifierGroupRepo = menuItemModifierGroupRepo;
@@ -182,6 +208,8 @@ public class PublicController {
     this.notificationEventService = notificationEventService;
     this.partyService = partyService;
     this.rateLimitService = rateLimitService;
+    this.inventoryService = inventoryService;
+    this.loyaltyService = loyaltyService;
     this.otpLimitMax = otpLimitMax;
     this.otpLimitWindowSeconds = otpLimitWindowSeconds;
     this.otpVerifyLimitMax = otpVerifyLimitMax;
@@ -690,7 +718,6 @@ public class PublicController {
     CafeTable table = tableRepo.findById(s.tableId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
     BranchSettingsService.Resolved settings = settingsService.resolveForBranch(table.branchId);
-    TableParty activeParty = partyService.getActivePartyOrNull(s, table.id, Instant.now());
     if (settings.requireOtpForFirstOrder() && !s.isVerified) {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "OTP required before first order");
     }
@@ -723,6 +750,7 @@ public class PublicController {
     o.createdByUa = getUserAgent(httpReq);
     o = orderRepo.save(o);
 
+    List<OrderItem> savedItems = new ArrayList<>();
     for (CreateOrderItemReq i : req.items) {
       MenuItem mi = menu.get(i.menuItemId);
       ModSelection sel = parseAndValidateModifiers(mi.id, i.modifiersJson);
@@ -739,11 +767,13 @@ public class PublicController {
       oi.qty = i.qty;
       oi.comment = i.comment;
       oi.modifiersJson = sel.rawJson;
-      orderItemRepo.save(oi);
+      savedItems.add(orderItemRepo.save(oi));
     }
 
     s.lastOrderAt = now;
     sessionRepo.save(s);
+
+    inventoryService.applyOrderItems(table.branchId, savedItems);
 
     notificationEventService.emit(table.branchId, "ORDER_NEW", o.id);
 
@@ -815,7 +845,6 @@ public class PublicController {
     CafeTable table = tableRepo.findById(s.tableId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
     BranchSettingsService.Resolved settings = settingsService.resolveForBranch(table.branchId);
-    TableParty activeParty = partyService.getActivePartyOrNull(s, table.id, Instant.now());
     if (settings.requireOtpForFirstOrder() && !s.isVerified) {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "OTP required before joining a party");
     }
@@ -877,7 +906,6 @@ public class PublicController {
     CafeTable table = tableRepo.findById(s.tableId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
     BranchSettingsService.Resolved settings = settingsService.resolveForBranch(table.branchId);
-    TableParty activeParty = partyService.getActivePartyOrNull(s, table.id, Instant.now());
     if (settings.requireOtpForFirstOrder() && !s.isVerified) {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "OTP required before joining a party");
     }
@@ -929,7 +957,7 @@ public class PublicController {
   }
 
   private static String generatePin4() {
-    int v = new java.util.Random().nextInt(10000);
+    int v = java.util.concurrent.ThreadLocalRandom.current().nextInt(10000);
     return String.format(java.util.Locale.ROOT, "%04d", v);
   }
 
@@ -1226,7 +1254,10 @@ public class PublicController {
     List<BillOptionsItem> myItems,
     List<BillOptionsItem> tableItems,
     boolean payCashEnabled,
-    boolean payTerminalEnabled
+    boolean payTerminalEnabled,
+    boolean onlinePayEnabled,
+    String onlinePayProvider,
+    String onlinePayCurrencyCode
   ) {}
 
   @GetMapping("/bill-options")
@@ -1305,7 +1336,10 @@ public class PublicController {
       myItems,
       tableItems,
       settings.payCashEnabled(),
-      settings.payTerminalEnabled()
+      settings.payTerminalEnabled(),
+      settings.onlinePayEnabled(),
+      settings.onlinePayProvider(),
+      settings.onlinePayCurrencyCode()
     );
   }
 
@@ -1313,8 +1347,9 @@ public class PublicController {
     @NotNull Long guestSessionId,
     @NotBlank String mode, // MY | SELECTED | WHOLE_TABLE
     List<Long> orderItemIds, // for SELECTED
-    @NotBlank String paymentMethod, // CASH | TERMINAL
-    Integer tipsPercent
+    @NotBlank String paymentMethod, // CASH | TERMINAL | ONLINE
+    Integer tipsPercent,
+    String promoCode
   ) {}
 
   public record BillItemLine(long orderItemId, String name, int qty, int unitPriceCents, int lineTotalCents) {}
@@ -1325,11 +1360,89 @@ public class PublicController {
     String paymentMethod,
     String mode,
     int subtotalCents,
+    int discountCents,
+    String discountCode,
+    String discountLabel,
+    Integer serviceFeePercent,
+    int serviceFeeCents,
+    Integer taxPercent,
+    int taxCents,
     Integer tipsPercent,
     int tipsAmountCents,
     int totalCents,
     List<BillItemLine> items
   ) {}
+
+  private record ResolvedDiscount(String code, String label, int amountCents, Long discountId) {}
+
+  private ResolvedDiscount resolveDiscount(long branchId, String promoCode, Instant now, int subtotalCents) {
+    String code = promoCode == null ? null : promoCode.trim();
+    if (code != null && !code.isEmpty()) {
+      BranchDiscount d = branchDiscountRepo.findFirstByBranchIdAndCodeIgnoreCase(branchId, code)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Promo code not found"));
+      if (!d.active) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Promo code inactive");
+      if (d.startsAt != null && now.isBefore(d.startsAt)) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Promo code not active");
+      }
+      if (d.endsAt != null && now.isAfter(d.endsAt)) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Promo code expired");
+      }
+      if (d.maxUses != null && d.usedCount >= d.maxUses) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Promo code exhausted");
+      }
+      if (!"COUPON".equalsIgnoreCase(d.scope)) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Promo code invalid");
+      }
+      int amount = calculateDiscountCents(subtotalCents, d);
+      if (amount <= 0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Promo code invalid");
+      return new ResolvedDiscount(d.code, d.label, amount, d.id);
+    }
+
+    List<BranchDiscount> happyHours = branchDiscountRepo.findByBranchIdAndScopeAndActiveTrue(branchId, "HAPPY_HOUR");
+    if (happyHours.isEmpty()) return null;
+    ResolvedDiscount best = null;
+    for (BranchDiscount d : happyHours) {
+      if (!isDiscountWindowActive(d, now)) continue;
+      int amount = calculateDiscountCents(subtotalCents, d);
+      if (amount <= 0) continue;
+      if (best == null || amount > best.amountCents) {
+        best = new ResolvedDiscount(d.code, d.label, amount, d.id);
+      }
+    }
+    return best;
+  }
+
+  private boolean isDiscountWindowActive(BranchDiscount d, Instant now) {
+    if (d.startsAt != null && now.isBefore(d.startsAt)) return false;
+    if (d.endsAt != null && now.isAfter(d.endsAt)) return false;
+    if (d.startMinute == null || d.endMinute == null) return false;
+    int offset = d.tzOffsetMinutes == null ? 0 : d.tzOffsetMinutes;
+    LocalDateTime local = LocalDateTime.ofInstant(now.plusSeconds(offset * 60L), ZoneOffset.UTC);
+    int minute = local.getHour() * 60 + local.getMinute();
+    if (d.daysMask != null) {
+      int bit = 1 << (local.getDayOfWeek().getValue() - 1);
+      if ((d.daysMask & bit) == 0) return false;
+    }
+    int start = d.startMinute;
+    int end = d.endMinute;
+    if (start <= end) {
+      return minute >= start && minute <= end;
+    }
+    return minute >= start || minute <= end;
+  }
+
+  private int calculateDiscountCents(int subtotalCents, BranchDiscount d) {
+    if (subtotalCents <= 0) return 0;
+    if ("PERCENT".equalsIgnoreCase(d.type)) {
+      if (d.value <= 0 || d.value > 100) return 0;
+      return (int) Math.round(subtotalCents * (d.value / 100.0));
+    }
+    if ("FIXED".equalsIgnoreCase(d.type)) {
+      if (d.value <= 0) return 0;
+      return Math.min(d.value, subtotalCents);
+    }
+    return 0;
+  }
 
   @PostMapping("/bill-request/create")
   public BillRequestResponse createBillRequest(@Valid @RequestBody CreateBillRequest req, jakarta.servlet.http.HttpServletRequest httpReq) {
@@ -1350,7 +1463,7 @@ public class PublicController {
 
     String mode = req.mode == null ? "" : req.mode.trim().toUpperCase(Locale.ROOT);
     String pay = req.paymentMethod == null ? "" : req.paymentMethod.trim().toUpperCase(Locale.ROOT);
-    if (!Set.of("CASH","TERMINAL").contains(pay)) {
+    if (!Set.of("CASH","TERMINAL","ONLINE").contains(pay)) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported paymentMethod");
     }
     if ("CASH".equals(pay) && !settings.payCashEnabled()) {
@@ -1358,6 +1471,14 @@ public class PublicController {
     }
     if ("TERMINAL".equals(pay) && !settings.payTerminalEnabled()) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Terminal payment is disabled");
+    }
+    if ("ONLINE".equals(pay)) {
+      if (!settings.onlinePayEnabled()) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Online payment disabled");
+      }
+      if (settings.onlinePayProvider() == null || settings.onlinePayProvider().isBlank()) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Online payment provider required");
+      }
     }
     if (!Set.of("MY","SELECTED","WHOLE_TABLE").contains(mode)) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported mode");
@@ -1448,6 +1569,27 @@ public class PublicController {
       lines.add(new BillItemLine(oi.id, oi.nameSnapshot, oi.qty, oi.unitPriceCents, lineTotal));
     }
 
+    ResolvedDiscount resolvedDiscount = resolveDiscount(table.branchId, req.promoCode, now, subtotal);
+    int discountCents = 0;
+    String discountCode = null;
+    String discountLabel = null;
+    if (resolvedDiscount != null) {
+      discountCents = Math.min(resolvedDiscount.amountCents, subtotal);
+      discountCode = resolvedDiscount.code;
+      discountLabel = resolvedDiscount.label;
+    }
+
+    int discountedSubtotal = Math.max(0, subtotal - discountCents);
+
+    int serviceFeePercent = Math.max(0, settings.serviceFeePercent());
+    int taxPercent = Math.max(0, settings.taxPercent());
+    int serviceFeeCents = serviceFeePercent > 0
+      ? (int) Math.round(discountedSubtotal * (serviceFeePercent / 100.0))
+      : 0;
+    int taxCents = taxPercent > 0
+      ? (int) Math.round((discountedSubtotal + serviceFeeCents) * (taxPercent / 100.0))
+      : 0;
+
     Integer tipsPercent = req.tipsPercent;
     int tipsAmount = 0;
     if (tipsPercent != null) {
@@ -1457,7 +1599,7 @@ public class PublicController {
       if (!settings.tipsPercentages().contains(tipsPercent)) {
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported tips percent");
       }
-      tipsAmount = (int) Math.round(subtotal * (tipsPercent / 100.0));
+      tipsAmount = (int) Math.round(discountedSubtotal * (tipsPercent / 100.0));
     }
 
     BillRequest br = new BillRequest();
@@ -1467,9 +1609,16 @@ public class PublicController {
     br.mode = mode;
     br.paymentMethod = pay;
     br.subtotalCents = subtotal;
+    br.discountCents = discountCents;
+    br.discountCode = discountCode;
+    br.discountLabel = discountLabel;
+    br.serviceFeePercent = serviceFeePercent;
+    br.serviceFeeCents = serviceFeeCents;
+    br.taxPercent = taxPercent;
+    br.taxCents = taxCents;
     br.tipsPercent = tipsPercent;
     br.tipsAmountCents = tipsAmount;
-    br.totalCents = subtotal + tipsAmount;
+    br.totalCents = discountedSubtotal + serviceFeeCents + taxCents + tipsAmount;
     br.createdByIp = getClientIp(httpReq);
     br.createdByUa = getUserAgent(httpReq);
 
@@ -1477,6 +1626,13 @@ public class PublicController {
     s.lastBillRequestAt = now;
     sessionRepo.save(s);
     notificationEventService.emit(table.branchId, "BILL_REQUEST", br.id);
+    if (resolvedDiscount != null && discountCode != null) {
+      BranchDiscount d = branchDiscountRepo.findById(resolvedDiscount.discountId).orElse(null);
+      if (d != null && d.maxUses != null) {
+        d.usedCount = Math.min(d.usedCount + 1, d.maxUses);
+        branchDiscountRepo.save(d);
+      }
+    }
 
     for (OrderItem oi : selected) {
       BillRequestItem bri = new BillRequestItem();
@@ -1490,7 +1646,24 @@ public class PublicController {
       orderItemRepo.save(oi);
     }
 
-    return new BillRequestResponse(br.id, br.status, br.paymentMethod, br.mode, br.subtotalCents, br.tipsPercent, br.tipsAmountCents, br.totalCents, lines);
+    return new BillRequestResponse(
+      br.id,
+      br.status,
+      br.paymentMethod,
+      br.mode,
+      br.subtotalCents,
+      br.discountCents,
+      br.discountCode,
+      br.discountLabel,
+      br.serviceFeePercent,
+      br.serviceFeeCents,
+      br.taxPercent,
+      br.taxCents,
+      br.tipsPercent,
+      br.tipsAmountCents,
+      br.totalCents,
+      lines
+    );
   }
 
   @GetMapping("/bill-request/{id}")
@@ -1515,7 +1688,24 @@ public class PublicController {
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Order item missing: " + it.orderItemId));
       lines.add(new BillItemLine(oi.id, oi.nameSnapshot, oi.qty, oi.unitPriceCents, it.lineTotalCents));
     }
-    return new BillRequestResponse(br.id, br.status, br.paymentMethod, br.mode, br.subtotalCents, br.tipsPercent, br.tipsAmountCents, br.totalCents, lines);
+    return new BillRequestResponse(
+      br.id,
+      br.status,
+      br.paymentMethod,
+      br.mode,
+      br.subtotalCents,
+      br.discountCents,
+      br.discountCode,
+      br.discountLabel,
+      br.serviceFeePercent,
+      br.serviceFeeCents,
+      br.taxPercent,
+      br.taxCents,
+      br.tipsPercent,
+      br.tipsAmountCents,
+      br.totalCents,
+      lines
+    );
   }
 
   @GetMapping("/bill-request/latest")
@@ -1538,7 +1728,24 @@ public class PublicController {
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Order item missing: " + it.orderItemId));
       lines.add(new BillItemLine(oi.id, oi.nameSnapshot, oi.qty, oi.unitPriceCents, it.lineTotalCents));
     }
-    return new BillRequestResponse(br.id, br.status, br.paymentMethod, br.mode, br.subtotalCents, br.tipsPercent, br.tipsAmountCents, br.totalCents, lines);
+    return new BillRequestResponse(
+      br.id,
+      br.status,
+      br.paymentMethod,
+      br.mode,
+      br.subtotalCents,
+      br.discountCents,
+      br.discountCode,
+      br.discountLabel,
+      br.serviceFeePercent,
+      br.serviceFeeCents,
+      br.taxPercent,
+      br.taxCents,
+      br.tipsPercent,
+      br.tipsAmountCents,
+      br.totalCents,
+      lines
+    );
   }
 
   public record CancelBillRequestResponse(long billRequestId, String status) {}
@@ -1607,6 +1814,234 @@ public class PublicController {
     br.status = "CLOSED";
     billRequestRepo.save(br);
     return new CloseBillRequestResponse(br.id, br.status);
+  }
+
+  public record CreateOnlinePaymentRequest(
+    @NotNull Long guestSessionId,
+    @NotNull Long billRequestId,
+    @NotBlank String provider,
+    String returnUrl,
+    String cancelUrl
+  ) {}
+
+  public record OnlinePaymentResponse(
+    long intentId,
+    String status,
+    String provider,
+    String redirectUrl
+  ) {}
+
+  @PostMapping("/payments/create")
+  public OnlinePaymentResponse createOnlinePayment(
+    @Valid @RequestBody CreateOnlinePaymentRequest req,
+    jakarta.servlet.http.HttpServletRequest httpReq
+  ) {
+    GuestSession s = sessionRepo.findById(req.guestSessionId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
+    requireSessionSecret(s, httpReq);
+    BillRequest br = billRequestRepo.findById(req.billRequestId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "BillRequest not found"));
+    if (!Objects.equals(br.guestSessionId, s.id)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bill request does not belong to session");
+    }
+    if (!"ONLINE".equalsIgnoreCase(br.paymentMethod)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported paymentMethod");
+    }
+    if (!"CREATED".equalsIgnoreCase(br.status)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Bill request is not active");
+    }
+    CafeTable table = tableRepo.findById(s.tableId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
+    BranchSettingsService.Resolved settings = settingsService.resolveForBranch(table.branchId);
+    if (!settings.onlinePayEnabled()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Online payment disabled");
+    }
+    String providerCode = req.provider.trim().toUpperCase(Locale.ROOT);
+    if (!providerCode.equalsIgnoreCase(settings.onlinePayProvider())) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported payment provider");
+    }
+    PaymentProvider provider = paymentProviderRegistry.resolve(providerCode);
+    if (provider == null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported payment provider");
+    }
+    int amount = br.totalCents;
+    if (amount <= 0) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Amount invalid");
+    }
+    PaymentIntent intent = new PaymentIntent();
+    intent.branchId = table.branchId;
+    intent.tableId = table.id;
+    intent.guestSessionId = s.id;
+    intent.billRequestId = br.id;
+    intent.provider = providerCode;
+    intent.status = "CREATED";
+    intent.amountCents = amount;
+    intent.currencyCode = settings.onlinePayCurrencyCode();
+    intent.returnUrl = req.returnUrl;
+    intent.cancelUrl = req.cancelUrl;
+    intent = paymentIntentRepo.save(intent);
+
+    PaymentProvider.ProviderCreateResult result;
+    try {
+      result = provider.create(intent);
+    } catch (UnsupportedOperationException ex) {
+      throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED, ex.getMessage());
+    }
+    intent.providerRef = result.providerRef();
+    intent.status = result.status() == null ? "PENDING" : result.status();
+    intent.updatedAt = Instant.now();
+    paymentIntentRepo.save(intent);
+
+    PaymentTransaction tx = new PaymentTransaction();
+    tx.intentId = intent.id;
+    tx.provider = providerCode;
+    tx.status = intent.status;
+    tx.amountCents = amount;
+    tx.providerRef = intent.providerRef;
+    paymentTransactionRepo.save(tx);
+
+    return new OnlinePaymentResponse(intent.id, intent.status, providerCode, result.redirectUrl());
+  }
+
+  public record ConfirmOnlinePaymentRequest(@NotNull Long guestSessionId, @NotNull Long intentId) {}
+
+  @PostMapping("/payments/confirm")
+  public OnlinePaymentResponse confirmOnlinePayment(
+    @Valid @RequestBody ConfirmOnlinePaymentRequest req,
+    jakarta.servlet.http.HttpServletRequest httpReq
+  ) {
+    GuestSession s = sessionRepo.findById(req.guestSessionId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
+    requireSessionSecret(s, httpReq);
+    PaymentIntent intent = paymentIntentRepo.findById(req.intentId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Payment intent not found"));
+    if (!Objects.equals(intent.guestSessionId, s.id)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Payment intent does not belong to session");
+    }
+    PaymentProvider provider = paymentProviderRegistry.resolve(intent.provider);
+    if (provider == null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported payment provider");
+    }
+    PaymentProvider.ProviderCaptureResult result;
+    try {
+      result = provider.capture(intent);
+    } catch (UnsupportedOperationException ex) {
+      throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED, ex.getMessage());
+    }
+    intent.status = result.status() == null ? intent.status : result.status();
+    intent.updatedAt = Instant.now();
+    paymentIntentRepo.save(intent);
+
+    PaymentTransaction tx = new PaymentTransaction();
+    tx.intentId = intent.id;
+    tx.provider = intent.provider;
+    tx.status = intent.status;
+    tx.amountCents = intent.amountCents;
+    tx.providerRef = intent.providerRef;
+    tx.providerPayload = null;
+    paymentTransactionRepo.save(tx);
+
+    if ("PAID".equalsIgnoreCase(intent.status)) {
+      BillRequest br = billRequestRepo.findById(intent.billRequestId).orElse(null);
+      if (br != null && "CREATED".equalsIgnoreCase(br.status)) {
+        br.status = "PAID_CONFIRMED";
+        br.confirmedAt = Instant.now();
+        billRequestRepo.save(br);
+        loyaltyService.applyBillPaid(br);
+      }
+    }
+
+    return new OnlinePaymentResponse(intent.id, intent.status, intent.provider, null);
+  }
+
+  @PostMapping("/payments/webhook/{provider}")
+  public ResponseEntity<String> handlePaymentWebhook(
+    @PathVariable String provider,
+    @RequestBody(required = false) String body,
+    @RequestHeader Map<String, String> headers
+  ) {
+    PaymentProvider p = paymentProviderRegistry.resolve(provider);
+    if (p == null) {
+      return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("unknown provider");
+    }
+    PaymentProvider.ProviderWebhookResult result;
+    try {
+      result = p.handleWebhook(body, headers);
+    } catch (UnsupportedOperationException ex) {
+      return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body("not implemented");
+    } catch (RuntimeException ex) {
+      return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("invalid payload");
+    }
+    if (result == null || result.providerRef() == null || result.providerRef().isBlank()) {
+      return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("providerRef required");
+    }
+    PaymentIntent intent = paymentIntentRepo.findByProviderAndProviderRef(p.code(), result.providerRef()).orElse(null);
+    if (intent == null) {
+      return ResponseEntity.ok("ignored");
+    }
+    if (result.amountCents() != null && result.amountCents() != intent.amountCents) {
+      return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("amount_mismatch");
+    }
+    if (result.currencyCode() != null && !result.currencyCode().isBlank()) {
+      String cc = result.currencyCode().trim().toUpperCase(Locale.ROOT);
+      if (!cc.equalsIgnoreCase(intent.currencyCode)) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("currency_mismatch");
+      }
+    }
+    PaymentTransaction lastTx = paymentTransactionRepo.findTopByIntentIdOrderByIdDesc(intent.id).orElse(null);
+    String nextStatus = result.status() == null ? intent.status : result.status();
+    if (lastTx != null && lastTx.status != null
+      && lastTx.status.equalsIgnoreCase(nextStatus)
+      && Objects.equals(lastTx.providerRef, intent.providerRef)
+      && lastTx.amountCents == intent.amountCents
+    ) {
+      return ResponseEntity.ok("duplicate");
+    }
+    intent.status = nextStatus;
+    intent.updatedAt = Instant.now();
+    paymentIntentRepo.save(intent);
+
+    PaymentTransaction tx = new PaymentTransaction();
+    tx.intentId = intent.id;
+    tx.provider = intent.provider;
+    tx.status = intent.status;
+    tx.amountCents = intent.amountCents;
+    tx.providerRef = intent.providerRef;
+    paymentTransactionRepo.save(tx);
+
+    if ("PAID".equalsIgnoreCase(intent.status)) {
+      BillRequest br = billRequestRepo.findById(intent.billRequestId).orElse(null);
+      if (br != null && "CREATED".equalsIgnoreCase(br.status)) {
+        br.status = "PAID_CONFIRMED";
+        br.confirmedAt = Instant.now();
+        billRequestRepo.save(br);
+        loyaltyService.applyBillPaid(br);
+      }
+    }
+
+    return ResponseEntity.ok("ok");
+  }
+
+  // --- Loyalty / CRM ---
+  public record LoyaltyProfileResponse(
+    String phone,
+    int pointsBalance,
+    List<LoyaltyService.FavoriteItemDto> favorites,
+    List<LoyaltyService.OfferDto> offers
+  ) {}
+
+  @GetMapping("/loyalty/profile")
+  public LoyaltyProfileResponse getLoyaltyProfile(
+    @RequestParam("guestSessionId") long guestSessionId,
+    jakarta.servlet.http.HttpServletRequest httpReq
+  ) {
+    GuestSession s = sessionRepo.findById(guestSessionId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
+    requireSessionSecret(s, httpReq);
+    CafeTable table = tableRepo.findById(s.tableId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
+    LoyaltyService.LoyaltyProfile p = loyaltyService.getProfile(table.branchId, s.verifiedPhone);
+    return new LoyaltyProfileResponse(p.phone(), p.pointsBalance(), p.favorites(), p.offers());
   }
 
 }

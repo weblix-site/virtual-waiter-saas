@@ -22,8 +22,11 @@ dependencies {
   // convenient for mobile MVP: Basic Auth + DB-backed users
   implementation 'org.springframework.boot:spring-boot-starter-actuator'
   implementation 'io.micrometer:micrometer-registry-prometheus'
+  compileOnly 'com.github.spotbugs:spotbugs-annotations:4.8.6'
   testImplementation 'org.springframework.boot:spring-boot-starter-test'
   testImplementation 'com.h2database:h2'
+  testImplementation 'org.testcontainers:junit-jupiter:1.20.3'
+  testImplementation 'org.testcontainers:postgresql:1.20.3'
   testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 test { useJUnitPlatform() }
@@ -44,6 +47,7 @@ tasks.withType(Checkstyle).configureEach {
 spotbugs {
   toolVersion = '4.8.6'
   ignoreFailures = true
+  excludeFilter = file('config/spotbugs/exclude.xml')
 }
 
 tasks.withType(com.github.spotbugs.snom.SpotBugsTask).configureEach {

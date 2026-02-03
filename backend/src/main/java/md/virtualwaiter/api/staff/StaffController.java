@@ -31,6 +31,7 @@ import md.virtualwaiter.repo.HallPlanRepo;
 import md.virtualwaiter.security.QrSignatureService;
 import md.virtualwaiter.service.PartyService;
 import md.virtualwaiter.service.StatsService;
+import md.virtualwaiter.service.LoyaltyService;
 import md.virtualwaiter.config.BillProperties;
 import md.virtualwaiter.service.StaffNotificationService;
 import md.virtualwaiter.repo.NotificationEventRepo;
@@ -88,6 +89,7 @@ public class StaffController {
   private final PartyService partyService;
   private final BillProperties billProperties;
   private final StatsService statsService;
+  private final LoyaltyService loyaltyService;
 
   public StaffController(
     StaffUserRepo staffUserRepo,
@@ -111,7 +113,8 @@ public class StaffController {
     StaffDeviceTokenRepo staffDeviceTokenRepo,
     PartyService partyService,
     BillProperties billProperties,
-    StatsService statsService
+    StatsService statsService,
+    LoyaltyService loyaltyService
   ) {
     this.staffUserRepo = staffUserRepo;
     this.chatMessageRepo = chatMessageRepo;
@@ -135,6 +138,7 @@ public class StaffController {
     this.partyService = partyService;
     this.billProperties = billProperties;
     this.statsService = statsService;
+    this.loyaltyService = loyaltyService;
   }
 
   private boolean expireBillIfNeeded(BillRequest br) {
@@ -1110,6 +1114,7 @@ public class StaffController {
     br.confirmedAt = java.time.Instant.now();
     br.confirmedByStaffId = staff.id;
     billRequestRepo.save(br);
+    loyaltyService.applyBillPaid(br);
 
     // Close order items
     List<BillRequestItem> items = billRequestItemRepo.findByBillRequestId(br.id);

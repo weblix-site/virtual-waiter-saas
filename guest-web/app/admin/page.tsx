@@ -36,6 +36,35 @@ const dict: Record<string, Record<Lang, string>> = {
   staffBulkDone: { ru: "Изменения применены", ro: "Modificările au fost aplicate", en: "Changes applied" },
   staffBulkError: { ru: "Ошибка массового изменения", ro: "Eroare la modificarea în masă", en: "Bulk update failed" },
   staffReviews: { ru: "Отзывы официантов", ro: "Recenzii chelneri", en: "Waiter reviews" },
+  discounts: { ru: "Скидки и промокоды", ro: "Reduceri și coduri promo", en: "Discounts & promo codes" },
+  discountScope: { ru: "Тип", ro: "Tip", en: "Scope" },
+  discountScopeCoupon: { ru: "Промокод", ro: "Cod promo", en: "Coupon" },
+  discountScopeHappyHour: { ru: "Happy‑hour", ro: "Happy‑hour", en: "Happy hour" },
+  discountCode: { ru: "Код", ro: "Cod", en: "Code" },
+  discountType: { ru: "Модель", ro: "Model", en: "Type" },
+  discountTypePercent: { ru: "Процент", ro: "Procent", en: "Percent" },
+  discountTypeFixed: { ru: "Фикс (центы)", ro: "Fix (cenți)", en: "Fixed (cents)" },
+  discountValue: { ru: "Значение", ro: "Valoare", en: "Value" },
+  discountLabel: { ru: "Описание", ro: "Descriere", en: "Label" },
+  discountActive: { ru: "Активно", ro: "Activ", en: "Active" },
+  discountMaxUses: { ru: "Лимит использований", ro: "Limită utilizări", en: "Max uses" },
+  discountUsedCount: { ru: "Использований", ro: "Utilizări", en: "Used count" },
+  discountStartsAt: { ru: "Старт", ro: "Start", en: "Starts at" },
+  discountEndsAt: { ru: "Окончание", ro: "Sfârșit", en: "Ends at" },
+  discountDaysMask: { ru: "Дни (битмаска)", ro: "Zile (bitmask)", en: "Days (bitmask)" },
+  discountStartMinute: { ru: "Начало (мин.)", ro: "Start (min.)", en: "Start minute" },
+  discountEndMinute: { ru: "Конец (мин.)", ro: "Sfârșit (min.)", en: "End minute" },
+  discountTzOffset: { ru: "TZ offset (мин.)", ro: "TZ offset (min.)", en: "TZ offset (min.)" },
+  discountAdd: { ru: "Добавить скидку", ro: "Adaugă reducere", en: "Add discount" },
+  discountSave: { ru: "Сохранить", ro: "Salvează", en: "Save" },
+  discountCancelEdit: { ru: "Отменить редактирование", ro: "Anulează editarea", en: "Cancel edit" },
+  discountNoData: { ru: "Скидок нет", ro: "Nu există reduceri", en: "No discounts" },
+  discountPresetWeekdays: { ru: "Пн–Пт", ro: "Lun–Vin", en: "Mon–Fri" },
+  discountPresetWeekend: { ru: "Выходные", ro: "Weekend", en: "Weekend" },
+  discountPresetEveryday: { ru: "Каждый день", ro: "Zilnic", en: "Everyday" },
+  discountInvalid: { ru: "Проверьте поля скидки", ro: "Verificați câmpurile reducerii", en: "Check discount fields" },
+  discountCopyCode: { ru: "Скопировать код", ro: "Copiază cod", en: "Copy code" },
+  discountCopied: { ru: "Код скопирован", ro: "Cod copiat", en: "Code copied" },
   loadReviews: { ru: "Загрузить отзывы", ro: "Încarcă recenzii", en: "Load reviews" },
   noReviews: { ru: "Отзывов пока нет", ro: "Nu există recenzii", en: "No reviews yet" },
   branchReviews: { ru: "Отзывы о заведении", ro: "Recenzii despre local", en: "Venue reviews" },
@@ -70,6 +99,49 @@ const dict: Record<string, Record<Lang, string>> = {
   allowPayOtherGuestsItems: { ru: "Оплата чужих позиций", ro: "Plată pentru alții", en: "Pay other guests items" },
   allowPayWholeTable: { ru: "Оплатить весь стол", ro: "Plătește toată masa", en: "Pay whole table" },
   tipsEnabled: { ru: "Чаевые включены", ro: "Bacșiș activ", en: "Tips enabled" },
+  serviceFeePercent: { ru: "Сервисный сбор (%)", ro: "Taxă serviciu (%)", en: "Service fee (%)" },
+  taxPercent: { ru: "Налог (%)", ro: "Taxă (%)", en: "Tax (%)" },
+  onlinePayEnabled: { ru: "Онлайн‑оплата включена", ro: "Plata online activă", en: "Online payments enabled" },
+  onlinePayProvider: { ru: "Провайдер онлайн‑оплаты", ro: "Furnizor plăți online", en: "Online payment provider" },
+  onlinePayCurrency: { ru: "Валюта онлайн‑оплаты", ro: "Monedă plăți online", en: "Online payment currency" },
+  onlinePayProviderHint: { ru: "Оплата только через провайдера", ro: "Plata doar prin furnizor", en: "Payment only via provider" },
+  loyaltyEnabled: { ru: "Лояльность включена", ro: "Loialitate activă", en: "Loyalty enabled" },
+  loyaltyPointsPer100: { ru: "Баллы за 1.00", ro: "Puncte per 1.00", en: "Points per 1.00" },
+  loyaltyTitle: { ru: "Лояльность / CRM", ro: "Loialitate / CRM", en: "Loyalty / CRM" },
+  loyaltyPhone: { ru: "Телефон гостя", ro: "Telefon oaspete", en: "Guest phone" },
+  loyaltyLoad: { ru: "Загрузить", ro: "Încarcă", en: "Load" },
+  loyaltyPoints: { ru: "Баллы", ro: "Puncte", en: "Points" },
+  loyaltyFavorites: { ru: "Любимые блюда", ro: "Feluri preferate", en: "Favorite items" },
+  loyaltyOffers: { ru: "Персональные предложения", ro: "Oferte personale", en: "Personal offers" },
+  loyaltyOfferTitle: { ru: "Заголовок", ro: "Titlu", en: "Title" },
+  loyaltyOfferBody: { ru: "Описание", ro: "Descriere", en: "Description" },
+  loyaltyOfferCode: { ru: "Промокод", ro: "Cod promo", en: "Promo code" },
+  loyaltyOfferStartsAt: { ru: "Начало (ISO)", ro: "Început (ISO)", en: "Starts (ISO)" },
+  loyaltyOfferEndsAt: { ru: "Конец (ISO)", ro: "Sfârșit (ISO)", en: "Ends (ISO)" },
+  loyaltyOfferActive: { ru: "Активно", ro: "Activ", en: "Active" },
+  loyaltyOfferCreate: { ru: "Создать предложение", ro: "Creează ofertă", en: "Create offer" },
+  loyaltyOfferSave: { ru: "Сохранить", ro: "Salvează", en: "Save" },
+  loyaltyOfferDelete: { ru: "Удалить", ro: "Șterge", en: "Delete" },
+  noFavorites: { ru: "Пока нет любимых блюд", ro: "Încă nu există favorite", en: "No favorites yet" },
+  noOffers: { ru: "Нет активных предложений", ro: "Nu sunt oferte active", en: "No active offers" },
+  inventoryTitle: { ru: "Склад / Инвентарь", ro: "Stoc / Inventar", en: "Inventory" },
+  inventoryEnabled: { ru: "Склад включен", ro: "Stoc activ", en: "Inventory enabled" },
+  inventoryNameRu: { ru: "Название (RU)", ro: "Denumire (RU)", en: "Name (RU)" },
+  inventoryNameRo: { ru: "Название (RO)", ro: "Denumire (RO)", en: "Name (RO)" },
+  inventoryNameEn: { ru: "Название (EN)", ro: "Denumire (EN)", en: "Name (EN)" },
+  inventoryUnit: { ru: "Ед.", ro: "Unitate", en: "Unit" },
+  inventoryQty: { ru: "Остаток", ro: "Stoc", en: "On hand" },
+  inventoryMinQty: { ru: "Мин. остаток", ro: "Minim", en: "Min qty" },
+  inventoryActive: { ru: "Активно", ro: "Activ", en: "Active" },
+  inventoryAdd: { ru: "Добавить позицию", ro: "Adaugă poziție", en: "Add item" },
+  inventorySave: { ru: "Сохранить", ro: "Salvează", en: "Save" },
+  inventoryDelete: { ru: "Удалить", ro: "Șterge", en: "Delete" },
+  inventoryLowStock: { ru: "Низкий остаток", ro: "Stoc scăzut", en: "Low stock" },
+  inventoryIngredientsTitle: { ru: "Рецептура", ro: "Rețetă", en: "Recipe" },
+  inventorySelectItem: { ru: "Выберите блюдо", ro: "Selectează fel", en: "Select menu item" },
+  inventoryAddIngredient: { ru: "Добавить ингредиент", ro: "Adaugă ingredient", en: "Add ingredient" },
+  inventoryQtyPerItem: { ru: "Расход на порцию", ro: "Consum per porție", en: "Qty per item" },
+  inventoryNoIngredients: { ru: "Нет ингредиентов", ro: "Nu există ingrediente", en: "No ingredients" },
   payCashEnabled: { ru: "Наличные доступны", ro: "Numerar activ", en: "Cash enabled" },
   payTerminalEnabled: { ru: "Терминал доступен", ro: "Terminal activ", en: "Terminal enabled" },
   currency: { ru: "Валюта", ro: "Valută", en: "Currency" },
@@ -354,6 +426,19 @@ const dict: Record<string, Record<Lang, string>> = {
 
 const t = (lang: Lang, key: string) => dict[key]?.[lang] ?? key;
 
+const toLocalInput = (iso?: string | null) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
+const fromLocalInput = (v: string) => {
+  if (!v) return null;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+};
+
 type Category = {
   id: number;
   nameRu: string;
@@ -461,6 +546,45 @@ type BranchReview = {
   createdAt?: string | null;
 };
 
+type DiscountDto = {
+  id: number;
+  branchId: number;
+  scope: string;
+  code?: string | null;
+  type: string;
+  value: number;
+  label?: string | null;
+  active: boolean;
+  maxUses?: number | null;
+  usedCount: number;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  daysMask?: number | null;
+  startMinute?: number | null;
+  endMinute?: number | null;
+  tzOffsetMinutes?: number | null;
+};
+
+type InventoryItemDto = {
+  id: number;
+  nameRu: string;
+  nameRo?: string | null;
+  nameEn?: string | null;
+  unit: string;
+  qtyOnHand: number;
+  minQty: number;
+  isActive: boolean;
+};
+
+type IngredientView = {
+  inventoryItemId: number;
+  nameRu: string;
+  nameRo?: string | null;
+  nameEn?: string | null;
+  unit: string;
+  qtyPerItem: number;
+};
+
 type BranchSettings = {
   branchId: number;
   requireOtpForFirstOrder: boolean;
@@ -474,6 +598,14 @@ type BranchSettings = {
   allowPayWholeTable: boolean;
   tipsEnabled: boolean;
   tipsPercentages: number[];
+  serviceFeePercent?: number;
+  taxPercent?: number;
+  inventoryEnabled?: boolean;
+  loyaltyEnabled?: boolean;
+  loyaltyPointsPer100Cents?: number;
+  onlinePayEnabled?: boolean;
+  onlinePayProvider?: string | null;
+  onlinePayCurrencyCode?: string | null;
   payCashEnabled: boolean;
   payTerminalEnabled: boolean;
   currencyCode?: string;
@@ -694,6 +826,22 @@ export default function AdminPage() {
     favoriteItems: "",
   });
   const [settings, setSettings] = useState<BranchSettings | null>(null);
+  const [loyaltyPhone, setLoyaltyPhone] = useState("");
+  const [loyaltyProfile, setLoyaltyProfile] = useState<{
+    phone: string | null;
+    pointsBalance: number;
+    favorites: { menuItemId: number; name: string; qtyTotal: number }[];
+    offers: { id: number; title: string; body?: string | null; discountCode?: string | null; startsAt?: string | null; endsAt?: string | null; isActive: boolean }[];
+  } | null>(null);
+  const [loyaltyLoading, setLoyaltyLoading] = useState(false);
+  const [newOffer, setNewOffer] = useState({
+    title: "",
+    body: "",
+    discountCode: "",
+    startsAt: "",
+    endsAt: "",
+    isActive: true,
+  });
   const [modGroups, setModGroups] = useState<ModifierGroup[]>([]);
   const [modOptions, setModOptions] = useState<Record<number, ModifierOption[]>>({});
   const [itemModGroups, setItemModGroups] = useState<Record<number, ItemModifierGroup[]>>({});
@@ -730,6 +878,24 @@ export default function AdminPage() {
   const [branchReviewHallId, setBranchReviewHallId] = useState<number | "">("");
   const [branchReviewExportFrom, setBranchReviewExportFrom] = useState("");
   const [branchReviewExportTo, setBranchReviewExportTo] = useState("");
+  const [discounts, setDiscounts] = useState<DiscountDto[]>([]);
+  const [discountsLoading, setDiscountsLoading] = useState(false);
+  const [newDiscountScope, setNewDiscountScope] = useState("COUPON");
+  const [newDiscountCode, setNewDiscountCode] = useState("");
+  const [newDiscountType, setNewDiscountType] = useState("PERCENT");
+  const [newDiscountValue, setNewDiscountValue] = useState(10);
+  const [newDiscountLabel, setNewDiscountLabel] = useState("");
+  const [newDiscountActive, setNewDiscountActive] = useState(true);
+  const [newDiscountMaxUses, setNewDiscountMaxUses] = useState("");
+  const [newDiscountStartsAt, setNewDiscountStartsAt] = useState("");
+  const [newDiscountEndsAt, setNewDiscountEndsAt] = useState("");
+  const [newDiscountDaysMask, setNewDiscountDaysMask] = useState("");
+  const [newDiscountStartMinute, setNewDiscountStartMinute] = useState("");
+  const [newDiscountEndMinute, setNewDiscountEndMinute] = useState("");
+  const [newDiscountTzOffset, setNewDiscountTzOffset] = useState("");
+  const [discountError, setDiscountError] = useState<string | null>(null);
+  const [editingDiscountId, setEditingDiscountId] = useState<number | null>(null);
+  const [editDiscount, setEditDiscount] = useState<Partial<DiscountDto>>({});
   const [chatExportFrom, setChatExportFrom] = useState("");
   const [chatExportTo, setChatExportTo] = useState("");
   const [chatExportWaiterId, setChatExportWaiterId] = useState<number | "">("");
@@ -745,6 +911,26 @@ export default function AdminPage() {
   const [partyExpiringMinutes, setPartyExpiringMinutes] = useState(30);
   const [adminFiltersDirty, setAdminFiltersDirty] = useState(false);
   const [adminFiltersCount, setAdminFiltersCount] = useState(0);
+
+  const [inventoryItems, setInventoryItems] = useState<InventoryItemDto[]>([]);
+  const [newInventoryNameRu, setNewInventoryNameRu] = useState("");
+  const [newInventoryNameRo, setNewInventoryNameRo] = useState("");
+  const [newInventoryNameEn, setNewInventoryNameEn] = useState("");
+  const [newInventoryUnit, setNewInventoryUnit] = useState("pcs");
+  const [newInventoryQty, setNewInventoryQty] = useState("0");
+  const [newInventoryMinQty, setNewInventoryMinQty] = useState("0");
+  const [newInventoryActive, setNewInventoryActive] = useState(true);
+  const [editingInventoryId, setEditingInventoryId] = useState<number | null>(null);
+  const [editInventoryNameRu, setEditInventoryNameRu] = useState("");
+  const [editInventoryNameRo, setEditInventoryNameRo] = useState("");
+  const [editInventoryNameEn, setEditInventoryNameEn] = useState("");
+  const [editInventoryUnit, setEditInventoryUnit] = useState("pcs");
+  const [editInventoryQty, setEditInventoryQty] = useState("0");
+  const [editInventoryMinQty, setEditInventoryMinQty] = useState("0");
+  const [editInventoryActive, setEditInventoryActive] = useState(true);
+  const [recipeItemId, setRecipeItemId] = useState<number | "">("");
+  const [recipeRows, setRecipeRows] = useState<{ inventoryItemId: number; qtyPerItem: string }[]>([]);
+  const [recipeLoading, setRecipeLoading] = useState(false);
 
   const [newCatNameRu, setNewCatNameRu] = useState("");
   const [newCatSort, setNewCatSort] = useState(0);
@@ -1083,7 +1269,7 @@ export default function AdminPage() {
     if (!authReady) return;
     setError(null);
     try {
-      const [catsRes, itemsRes, tablesRes, staffRes, settingsRes, modGroupsRes, partiesRes, hallsRes, currenciesRes] = await Promise.all([
+      const [catsRes, itemsRes, tablesRes, staffRes, settingsRes, modGroupsRes, partiesRes, hallsRes, currenciesRes, discountsRes, inventoryRes] = await Promise.all([
         api("/api/admin/menu/categories"),
         api("/api/admin/menu/items"),
         api("/api/admin/tables"),
@@ -1093,6 +1279,8 @@ export default function AdminPage() {
         api(`/api/admin/parties?status=${encodeURIComponent(partyStatusFilter)}`),
         api("/api/admin/halls"),
         api("/api/admin/currencies"),
+        api("/api/admin/discounts"),
+        api("/api/admin/inventory/items"),
       ]);
       setCategories(await catsRes.json());
       setItems(await itemsRes.json());
@@ -1105,6 +1293,8 @@ export default function AdminPage() {
       const hallsBody = await hallsRes.json();
       setHalls(hallsBody);
       setCurrencies(await currenciesRes.json());
+      setDiscounts(await discountsRes.json());
+      setInventoryItems(await inventoryRes.json());
       if (!hallId && hallsBody.length > 0) {
         setHallId(hallsBody[0].id);
       }
@@ -1113,6 +1303,18 @@ export default function AdminPage() {
       }
     } catch (e: any) {
       setError(e?.message ?? "Load error");
+    }
+  }
+
+  async function loadDiscounts() {
+    setDiscountsLoading(true);
+    try {
+      const res = await api("/api/admin/discounts");
+      setDiscounts(await res.json());
+    } catch (e: any) {
+      setError(e?.message ?? "Discounts load error");
+    } finally {
+      setDiscountsLoading(false);
     }
   }
 
@@ -1892,6 +2094,14 @@ export default function AdminPage() {
         allowPayWholeTable: settings.allowPayWholeTable,
         tipsEnabled: settings.tipsEnabled,
         tipsPercentages: settings.tipsPercentages,
+        serviceFeePercent: settings.serviceFeePercent,
+        taxPercent: settings.taxPercent,
+        inventoryEnabled: settings.inventoryEnabled,
+        loyaltyEnabled: settings.loyaltyEnabled,
+        loyaltyPointsPer100Cents: settings.loyaltyPointsPer100Cents,
+        onlinePayEnabled: settings.onlinePayEnabled,
+        onlinePayProvider: settings.onlinePayProvider,
+        onlinePayCurrencyCode: settings.onlinePayCurrencyCode,
         payCashEnabled: settings.payCashEnabled,
         payTerminalEnabled: settings.payTerminalEnabled,
         currencyCode: settings.currencyCode,
@@ -1899,6 +2109,138 @@ export default function AdminPage() {
       }),
     });
     loadAll();
+  }
+
+  async function loadLoyalty() {
+    if (!loyaltyPhone.trim()) return;
+    setLoyaltyLoading(true);
+    try {
+      const qs = new URLSearchParams({ phone: loyaltyPhone.trim() });
+      const res = await api(`/api/admin/loyalty/profile?${qs.toString()}`);
+      const profile = await res.json();
+      setLoyaltyProfile(profile);
+    } finally {
+      setLoyaltyLoading(false);
+    }
+  }
+
+  async function createInventoryItem() {
+    if (!newInventoryNameRu.trim()) return;
+    await api("/api/admin/inventory/items", {
+      method: "POST",
+      body: JSON.stringify({
+        nameRu: newInventoryNameRu.trim(),
+        nameRo: newInventoryNameRo.trim() || null,
+        nameEn: newInventoryNameEn.trim() || null,
+        unit: newInventoryUnit.trim() || "pcs",
+        qtyOnHand: Number(newInventoryQty) || 0,
+        minQty: Number(newInventoryMinQty) || 0,
+        isActive: newInventoryActive,
+      }),
+    });
+    setNewInventoryNameRu("");
+    setNewInventoryNameRo("");
+    setNewInventoryNameEn("");
+    setNewInventoryUnit("pcs");
+    setNewInventoryQty("0");
+    setNewInventoryMinQty("0");
+    setNewInventoryActive(true);
+    loadAll();
+  }
+
+  function startEditInventory(it: InventoryItemDto) {
+    setEditingInventoryId(it.id);
+    setEditInventoryNameRu(it.nameRu ?? "");
+    setEditInventoryNameRo(it.nameRo ?? "");
+    setEditInventoryNameEn(it.nameEn ?? "");
+    setEditInventoryUnit(it.unit ?? "pcs");
+    setEditInventoryQty(String(it.qtyOnHand ?? 0));
+    setEditInventoryMinQty(String(it.minQty ?? 0));
+    setEditInventoryActive(!!it.isActive);
+  }
+
+  async function saveInventoryEdit() {
+    if (!editingInventoryId) return;
+    await api(`/api/admin/inventory/items/${editingInventoryId}`, {
+      method: "PUT",
+      body: JSON.stringify({
+        nameRu: editInventoryNameRu.trim() || undefined,
+        nameRo: editInventoryNameRo.trim() || null,
+        nameEn: editInventoryNameEn.trim() || null,
+        unit: editInventoryUnit.trim() || "pcs",
+        qtyOnHand: Number(editInventoryQty) || 0,
+        minQty: Number(editInventoryMinQty) || 0,
+        isActive: editInventoryActive,
+      }),
+    });
+    setEditingInventoryId(null);
+    loadAll();
+  }
+
+  async function deleteInventoryItem(id: number) {
+    await api(`/api/admin/inventory/items/${id}`, { method: "DELETE" });
+    loadAll();
+  }
+
+  async function loadRecipe(itemId: number) {
+    setRecipeLoading(true);
+    try {
+      const res = await api(`/api/admin/menu/items/${itemId}/ingredients`);
+      const body: IngredientView[] = await res.json();
+      setRecipeRows(body.map((r) => ({ inventoryItemId: r.inventoryItemId, qtyPerItem: String(r.qtyPerItem) })));
+    } finally {
+      setRecipeLoading(false);
+    }
+  }
+
+  async function saveRecipe() {
+    if (!recipeItemId) return;
+    const payload = recipeRows
+      .map((r) => ({ inventoryItemId: r.inventoryItemId, qtyPerItem: Number(r.qtyPerItem) || 0 }))
+      .filter((r) => r.inventoryItemId && r.qtyPerItem > 0);
+    await api(`/api/admin/menu/items/${recipeItemId}/ingredients`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+    await loadRecipe(Number(recipeItemId));
+  }
+
+  async function createOffer() {
+    if (!loyaltyPhone.trim() || !newOffer.title.trim()) return;
+    await api("/api/admin/loyalty/offers", {
+      method: "POST",
+      body: JSON.stringify({
+        phone: loyaltyPhone.trim(),
+        title: newOffer.title.trim(),
+        body: newOffer.body.trim() || null,
+        discountCode: newOffer.discountCode.trim() || null,
+        startsAt: newOffer.startsAt.trim() || null,
+        endsAt: newOffer.endsAt.trim() || null,
+        isActive: newOffer.isActive,
+      }),
+    });
+    setNewOffer({ title: "", body: "", discountCode: "", startsAt: "", endsAt: "", isActive: true });
+    await loadLoyalty();
+  }
+
+  async function updateOffer(id: number, patch: Partial<typeof newOffer>) {
+    await api(`/api/admin/loyalty/offers/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        title: patch.title,
+        body: patch.body,
+        discountCode: patch.discountCode,
+        startsAt: patch.startsAt,
+        endsAt: patch.endsAt,
+        isActive: patch.isActive,
+      }),
+    });
+    await loadLoyalty();
+  }
+
+  async function deleteOffer(id: number) {
+    await api(`/api/admin/loyalty/offers/${id}`, { method: "DELETE" });
+    await loadLoyalty();
   }
 
   async function loadStats() {
@@ -2021,6 +2363,141 @@ export default function AdminPage() {
     a.download = "chat-export.csv";
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  async function addDiscount() {
+    setDiscountError(null);
+    const scope = newDiscountScope;
+    const type = newDiscountType;
+    const value = Number(newDiscountValue);
+    const daysMask = newDiscountDaysMask === "" ? null : Number(newDiscountDaysMask);
+    const startMinute = newDiscountStartMinute === "" ? null : Number(newDiscountStartMinute);
+    const endMinute = newDiscountEndMinute === "" ? null : Number(newDiscountEndMinute);
+    const tzOffset = newDiscountTzOffset === "" ? null : Number(newDiscountTzOffset);
+    if (!value || value <= 0 || (type === "PERCENT" && value > 100)) {
+      setDiscountError(t(lang, "discountInvalid"));
+      return;
+    }
+    if (scope === "COUPON" && !newDiscountCode.trim()) {
+      setDiscountError(t(lang, "discountInvalid"));
+      return;
+    }
+    if (scope === "HAPPY_HOUR") {
+      if (startMinute == null || endMinute == null) {
+        setDiscountError(t(lang, "discountInvalid"));
+        return;
+      }
+      if (startMinute < 0 || startMinute > 1439 || endMinute < 0 || endMinute > 1439) {
+        setDiscountError(t(lang, "discountInvalid"));
+        return;
+      }
+      if (daysMask != null && (daysMask < 1 || daysMask > 127)) {
+        setDiscountError(t(lang, "discountInvalid"));
+        return;
+      }
+      if (tzOffset != null && (tzOffset < -840 || tzOffset > 840)) {
+        setDiscountError(t(lang, "discountInvalid"));
+        return;
+      }
+    }
+    const payload: any = {
+      scope,
+      code: newDiscountCode.trim() || null,
+      type,
+      value,
+      label: newDiscountLabel.trim() || null,
+      active: newDiscountActive,
+      maxUses: newDiscountMaxUses === "" ? null : Number(newDiscountMaxUses),
+      startsAt: fromLocalInput(newDiscountStartsAt),
+      endsAt: fromLocalInput(newDiscountEndsAt),
+      daysMask,
+      startMinute,
+      endMinute,
+      tzOffsetMinutes: tzOffset,
+    };
+    await api("/api/admin/discounts", { method: "POST", body: JSON.stringify(payload) });
+    setNewDiscountCode("");
+    setNewDiscountLabel("");
+    setNewDiscountMaxUses("");
+    setNewDiscountStartsAt("");
+    setNewDiscountEndsAt("");
+    setNewDiscountDaysMask("");
+    setNewDiscountStartMinute("");
+    setNewDiscountEndMinute("");
+    setNewDiscountTzOffset("");
+    await loadDiscounts();
+  }
+
+  function startEditDiscount(d: DiscountDto) {
+    setEditingDiscountId(d.id);
+    setEditDiscount({
+      ...d,
+      startsAt: toLocalInput(d.startsAt),
+      endsAt: toLocalInput(d.endsAt),
+    });
+  }
+
+  async function saveDiscountEdit() {
+    if (!editingDiscountId) return;
+    setDiscountError(null);
+    const scope = String(editDiscount.scope ?? "");
+    const type = String(editDiscount.type ?? "");
+    const value = Number(editDiscount.value ?? 0);
+    const startMinute = editDiscount.startMinute ?? null;
+    const endMinute = editDiscount.endMinute ?? null;
+    const daysMask = editDiscount.daysMask ?? null;
+    const tzOffset = editDiscount.tzOffsetMinutes ?? null;
+    if (!value || value <= 0 || (type === "PERCENT" && value > 100)) {
+      setDiscountError(t(lang, "discountInvalid"));
+      return;
+    }
+    if (scope === "COUPON" && !String(editDiscount.code ?? "").trim()) {
+      setDiscountError(t(lang, "discountInvalid"));
+      return;
+    }
+    if (scope === "HAPPY_HOUR") {
+      if (startMinute == null || endMinute == null) {
+        setDiscountError(t(lang, "discountInvalid"));
+        return;
+      }
+      if (startMinute < 0 || startMinute > 1439 || endMinute < 0 || endMinute > 1439) {
+        setDiscountError(t(lang, "discountInvalid"));
+        return;
+      }
+      if (daysMask != null && (daysMask < 1 || daysMask > 127)) {
+        setDiscountError(t(lang, "discountInvalid"));
+        return;
+      }
+      if (tzOffset != null && (tzOffset < -840 || tzOffset > 840)) {
+        setDiscountError(t(lang, "discountInvalid"));
+        return;
+      }
+    }
+    const payload: any = {
+      scope: editDiscount.scope,
+      code: editDiscount.code ?? null,
+      type: editDiscount.type,
+      value: editDiscount.value,
+      label: editDiscount.label ?? null,
+      active: editDiscount.active,
+      maxUses: editDiscount.maxUses ?? null,
+      usedCount: editDiscount.usedCount ?? 0,
+      startsAt: fromLocalInput(String(editDiscount.startsAt ?? "")),
+      endsAt: fromLocalInput(String(editDiscount.endsAt ?? "")),
+      daysMask: editDiscount.daysMask ?? null,
+      startMinute: editDiscount.startMinute ?? null,
+      endMinute: editDiscount.endMinute ?? null,
+      tzOffsetMinutes: editDiscount.tzOffsetMinutes ?? null,
+    };
+    await api(`/api/admin/discounts/${editingDiscountId}`, { method: "PUT", body: JSON.stringify(payload) });
+    setEditingDiscountId(null);
+    setEditDiscount({});
+    await loadDiscounts();
+  }
+
+  async function deleteDiscount(id: number) {
+    await api(`/api/admin/discounts/${id}`, { method: "DELETE" });
+    await loadDiscounts();
   }
 
   async function saveEditedCategory() {
@@ -2216,6 +2693,38 @@ export default function AdminPage() {
             <label><input type="checkbox" checked={settings.allowPayOtherGuestsItems} onChange={(e) => setSettings({ ...settings, allowPayOtherGuestsItems: e.target.checked })} /> {t(lang, "allowPayOtherGuestsItems")}</label>
             <label><input type="checkbox" checked={settings.allowPayWholeTable} onChange={(e) => setSettings({ ...settings, allowPayWholeTable: e.target.checked })} /> {t(lang, "allowPayWholeTable")}</label>
             <label><input type="checkbox" checked={settings.tipsEnabled} onChange={(e) => setSettings({ ...settings, tipsEnabled: e.target.checked })} /> {t(lang, "tipsEnabled")}</label>
+            <label>{t(lang, "serviceFeePercent")} <input value={settings.serviceFeePercent ?? 0} onChange={(e) => setSettings({ ...settings, serviceFeePercent: Number(e.target.value) })} /></label>
+            <label>{t(lang, "taxPercent")} <input value={settings.taxPercent ?? 0} onChange={(e) => setSettings({ ...settings, taxPercent: Number(e.target.value) })} /></label>
+            <label><input type="checkbox" checked={!!settings.inventoryEnabled} onChange={(e) => setSettings({ ...settings, inventoryEnabled: e.target.checked })} /> {t(lang, "inventoryEnabled")}</label>
+            <label><input type="checkbox" checked={!!settings.loyaltyEnabled} onChange={(e) => setSettings({ ...settings, loyaltyEnabled: e.target.checked })} /> {t(lang, "loyaltyEnabled")}</label>
+            <label>{t(lang, "loyaltyPointsPer100")} <input value={settings.loyaltyPointsPer100Cents ?? 1} onChange={(e) => setSettings({ ...settings, loyaltyPointsPer100Cents: Number(e.target.value) })} /></label>
+            <label><input type="checkbox" checked={!!settings.onlinePayEnabled} onChange={(e) => setSettings({ ...settings, onlinePayEnabled: e.target.checked })} /> {t(lang, "onlinePayEnabled")}</label>
+            <label>
+              {t(lang, "onlinePayProvider")}
+              <select
+                value={settings.onlinePayProvider ?? ""}
+                onChange={(e) => setSettings({ ...settings, onlinePayProvider: e.target.value })}
+              >
+                <option value="">{t(lang, "onlinePayProviderHint")}</option>
+                <option value="MAIB">MAIB</option>
+                <option value="PAYNET">Paynet</option>
+                <option value="MIA">MIA</option>
+              </select>
+            </label>
+            <label>
+              {t(lang, "onlinePayCurrency")}
+              <select
+                value={settings.onlinePayCurrencyCode ?? settings.currencyCode ?? "MDL"}
+                onChange={(e) => setSettings({ ...settings, onlinePayCurrencyCode: e.target.value })}
+              >
+                {currencies.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.code} — {c.name}
+                  </option>
+                ))}
+                {currencies.length === 0 && <option value="MDL">MDL</option>}
+              </select>
+            </label>
             <label><input type="checkbox" checked={settings.payCashEnabled} onChange={(e) => setSettings({ ...settings, payCashEnabled: e.target.checked })} /> {t(lang, "payCashEnabled")}</label>
             <label><input type="checkbox" checked={settings.payTerminalEnabled} onChange={(e) => setSettings({ ...settings, payTerminalEnabled: e.target.checked })} /> {t(lang, "payTerminalEnabled")}</label>
             <label>
@@ -2255,6 +2764,372 @@ export default function AdminPage() {
           </div>
         )}
         <button onClick={saveSettings} style={{ marginTop: 12, padding: "8px 12px" }}>{t(lang, "saveSettings")}</button>
+      </section>
+
+      <section style={{ marginTop: 24 }}>
+        <h2>{t(lang, "loyaltyTitle")}</h2>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <label>{t(lang, "loyaltyPhone")}</label>
+          <input value={loyaltyPhone} onChange={(e) => setLoyaltyPhone(e.target.value)} placeholder="+373..." />
+          <button onClick={loadLoyalty} disabled={loyaltyLoading}>{loyaltyLoading ? t(lang, "loading") : t(lang, "loyaltyLoad")}</button>
+        </div>
+        {loyaltyProfile && (
+          <div style={{ marginTop: 12, border: "1px solid #eee", borderRadius: 10, padding: 12 }}>
+            <div style={{ fontWeight: 600 }}>{t(lang, "loyaltyPoints")}: {loyaltyProfile.pointsBalance}</div>
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>{t(lang, "loyaltyFavorites")}</div>
+              {loyaltyProfile.favorites.length === 0 ? (
+                <div style={{ color: "#666", fontSize: 12 }}>{t(lang, "noFavorites")}</div>
+              ) : (
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {loyaltyProfile.favorites.map((f) => (
+                    <span key={f.menuItemId} style={{ border: "1px solid #ddd", borderRadius: 999, padding: "4px 8px", fontSize: 12 }}>
+                      {f.name} × {f.qtyTotal}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>{t(lang, "loyaltyOffers")}</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 10 }}>
+                <label>{t(lang, "loyaltyOfferTitle")} <input value={newOffer.title} onChange={(e) => setNewOffer({ ...newOffer, title: e.target.value })} /></label>
+                <label>{t(lang, "loyaltyOfferBody")} <input value={newOffer.body} onChange={(e) => setNewOffer({ ...newOffer, body: e.target.value })} /></label>
+                <label>{t(lang, "loyaltyOfferCode")} <input value={newOffer.discountCode} onChange={(e) => setNewOffer({ ...newOffer, discountCode: e.target.value })} /></label>
+                <label>{t(lang, "loyaltyOfferStartsAt")} <input value={newOffer.startsAt} onChange={(e) => setNewOffer({ ...newOffer, startsAt: e.target.value })} /></label>
+                <label>{t(lang, "loyaltyOfferEndsAt")} <input value={newOffer.endsAt} onChange={(e) => setNewOffer({ ...newOffer, endsAt: e.target.value })} /></label>
+                <label><input type="checkbox" checked={newOffer.isActive} onChange={(e) => setNewOffer({ ...newOffer, isActive: e.target.checked })} /> {t(lang, "loyaltyOfferActive")}</label>
+              </div>
+              <button onClick={createOffer} style={{ marginTop: 8, padding: "6px 10px" }}>{t(lang, "loyaltyOfferCreate")}</button>
+              {loyaltyProfile.offers.length === 0 ? (
+                <div style={{ color: "#666", fontSize: 12, marginTop: 6 }}>{t(lang, "noOffers")}</div>
+              ) : (
+                <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+                  {loyaltyProfile.offers.map((o) => (
+                    <div key={o.id} style={{ border: "1px solid #eee", borderRadius: 8, padding: 8 }}>
+                      <div style={{ fontWeight: 600 }}>{o.title}</div>
+                      {o.body && <div style={{ fontSize: 12, color: "#555", marginTop: 4 }}>{o.body}</div>}
+                      {o.discountCode && <div style={{ fontSize: 12, marginTop: 4 }}>{t(lang, "loyaltyOfferCode")}: <strong>{o.discountCode}</strong></div>}
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+                        <button onClick={() => updateOffer(o.id, { isActive: !o.isActive })} style={{ padding: "4px 8px" }}>
+                          {o.isActive ? t(lang, "loyaltyOfferSave") : t(lang, "loyaltyOfferSave")}
+                        </button>
+                        <button onClick={() => deleteOffer(o.id)} style={{ padding: "4px 8px" }}>
+                          {t(lang, "loyaltyOfferDelete")}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section style={{ marginTop: 24 }}>
+        <h2>{t(lang, "discounts")}</h2>
+        {discountError && <div style={{ color: "#b11e46", marginBottom: 8 }}>{discountError}</div>}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+          <label>
+            {t(lang, "discountScope")}
+            <select value={newDiscountScope} onChange={(e) => setNewDiscountScope(e.target.value)}>
+              <option value="COUPON">{t(lang, "discountScopeCoupon")}</option>
+              <option value="HAPPY_HOUR">{t(lang, "discountScopeHappyHour")}</option>
+            </select>
+          </label>
+          <label>
+            {t(lang, "discountCode")}
+            <input value={newDiscountCode} onChange={(e) => setNewDiscountCode(e.target.value)} placeholder="WELCOME10" />
+          </label>
+          <label>
+            {t(lang, "discountType")}
+            <select value={newDiscountType} onChange={(e) => setNewDiscountType(e.target.value)}>
+              <option value="PERCENT">{t(lang, "discountTypePercent")}</option>
+              <option value="FIXED">{t(lang, "discountTypeFixed")}</option>
+            </select>
+          </label>
+          <label>
+            {t(lang, "discountValue")}
+            <input
+              type="number"
+              min={1}
+              max={newDiscountType === "PERCENT" ? 100 : undefined}
+              value={newDiscountValue}
+              onChange={(e) => setNewDiscountValue(Number(e.target.value))}
+            />
+          </label>
+          <label>
+            {t(lang, "discountLabel")}
+            <input value={newDiscountLabel} onChange={(e) => setNewDiscountLabel(e.target.value)} />
+          </label>
+          <label>
+            {t(lang, "discountMaxUses")}
+            <input type="number" min={1} value={newDiscountMaxUses} onChange={(e) => setNewDiscountMaxUses(e.target.value)} />
+          </label>
+          <label>
+            {t(lang, "discountStartsAt")}
+            <input type="datetime-local" value={newDiscountStartsAt} onChange={(e) => setNewDiscountStartsAt(e.target.value)} />
+          </label>
+          <label>
+            {t(lang, "discountEndsAt")}
+            <input type="datetime-local" value={newDiscountEndsAt} onChange={(e) => setNewDiscountEndsAt(e.target.value)} />
+          </label>
+          <label>
+            {t(lang, "discountDaysMask")}
+            <input type="number" min={1} max={127} value={newDiscountDaysMask} onChange={(e) => setNewDiscountDaysMask(e.target.value)} />
+          </label>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <span style={{ fontSize: 12, color: "#6b7280" }}>{t(lang, "discountDaysMask")}:</span>
+            <button type="button" onClick={() => setNewDiscountDaysMask("31")}>{t(lang, "discountPresetWeekdays")}</button>
+            <button type="button" onClick={() => setNewDiscountDaysMask("96")}>{t(lang, "discountPresetWeekend")}</button>
+            <button type="button" onClick={() => setNewDiscountDaysMask("127")}>{t(lang, "discountPresetEveryday")}</button>
+          </div>
+          <label>
+            {t(lang, "discountStartMinute")}
+            <input type="number" min={0} max={1439} value={newDiscountStartMinute} onChange={(e) => setNewDiscountStartMinute(e.target.value)} />
+          </label>
+          <label>
+            {t(lang, "discountEndMinute")}
+            <input type="number" min={0} max={1439} value={newDiscountEndMinute} onChange={(e) => setNewDiscountEndMinute(e.target.value)} />
+          </label>
+          <label>
+            {t(lang, "discountTzOffset")}
+            <input type="number" min={-840} max={840} value={newDiscountTzOffset} onChange={(e) => setNewDiscountTzOffset(e.target.value)} />
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input type="checkbox" checked={newDiscountActive} onChange={(e) => setNewDiscountActive(e.target.checked)} />
+            {t(lang, "discountActive")}
+          </label>
+        </div>
+        <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button onClick={addDiscount}>{t(lang, "discountAdd")}</button>
+          <button onClick={loadDiscounts} disabled={discountsLoading}>{t(lang, "refresh")}</button>
+        </div>
+
+        {discounts.length === 0 ? (
+          <div style={{ marginTop: 10, color: "#666" }}>{t(lang, "discountNoData")}</div>
+        ) : (
+          <div style={{ marginTop: 12, overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>ID</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "discountScope")}</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "discountCode")}</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "discountType")}</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "discountValue")}</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "discountLabel")}</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "discountActive")}</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "discountMaxUses")}</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "discountUsedCount")}</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "discountStartsAt")}</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "discountEndsAt")}</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "discountDaysMask")}</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "discountStartMinute")}</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "discountEndMinute")}</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "discountTzOffset")}</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "action")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {discounts.map((d) => {
+                  const editing = editingDiscountId === d.id;
+                  return (
+                    <tr key={d.id}>
+                      <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{d.id}</td>
+                      <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>
+                        {editing ? (
+                          <select value={editDiscount.scope ?? d.scope} onChange={(e) => setEditDiscount({ ...editDiscount, scope: e.target.value })}>
+                            <option value="COUPON">{t(lang, "discountScopeCoupon")}</option>
+                            <option value="HAPPY_HOUR">{t(lang, "discountScopeHappyHour")}</option>
+                          </select>
+                        ) : (
+                          d.scope
+                        )}
+                      </td>
+                      <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>
+                        {editing ? (
+                          <input value={String(editDiscount.code ?? "")} onChange={(e) => setEditDiscount({ ...editDiscount, code: e.target.value })} />
+                        ) : (
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                            <span>{d.code ?? "-"}</span>
+                            {d.code && (
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  await navigator.clipboard?.writeText(d.code ?? "");
+                                  alert(t(lang, "discountCopied"));
+                                }}
+                                style={{ padding: "2px 6px", fontSize: 12 }}
+                              >
+                                {t(lang, "discountCopyCode")}
+                              </button>
+                            )}
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>
+                        {editing ? (
+                          <select value={editDiscount.type ?? d.type} onChange={(e) => setEditDiscount({ ...editDiscount, type: e.target.value })}>
+                            <option value="PERCENT">{t(lang, "discountTypePercent")}</option>
+                            <option value="FIXED">{t(lang, "discountTypeFixed")}</option>
+                          </select>
+                        ) : (
+                          d.type
+                        )}
+                      </td>
+                      <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>
+                        {editing ? (
+                          <input
+                            type="number"
+                            min={1}
+                            max={(editDiscount.type ?? d.type) === "PERCENT" ? 100 : undefined}
+                            value={Number(editDiscount.value ?? d.value)}
+                            onChange={(e) => setEditDiscount({ ...editDiscount, value: Number(e.target.value) })}
+                          />
+                        ) : (
+                          d.value
+                        )}
+                      </td>
+                      <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>
+                        {editing ? (
+                          <input value={String(editDiscount.label ?? "")} onChange={(e) => setEditDiscount({ ...editDiscount, label: e.target.value })} />
+                        ) : (
+                          d.label ?? "-"
+                        )}
+                      </td>
+                      <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>
+                        {editing ? (
+                          <input
+                            type="checkbox"
+                            checked={!!(editDiscount.active ?? d.active)}
+                            onChange={(e) => setEditDiscount({ ...editDiscount, active: e.target.checked })}
+                          />
+                        ) : (
+                          d.active ? t(lang, "active") : t(lang, "inactive")
+                        )}
+                      </td>
+                      <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>
+                        {editing ? (
+                          <input
+                            type="number"
+                            min={1}
+                            value={editDiscount.maxUses ?? d.maxUses ?? ""}
+                            onChange={(e) => setEditDiscount({ ...editDiscount, maxUses: e.target.value === "" ? null : Number(e.target.value) })}
+                          />
+                        ) : (
+                          d.maxUses ?? "-"
+                        )}
+                      </td>
+                      <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>
+                        {editing ? (
+                          <input
+                            type="number"
+                            min={0}
+                            value={editDiscount.usedCount ?? d.usedCount ?? 0}
+                            onChange={(e) => setEditDiscount({ ...editDiscount, usedCount: Number(e.target.value) })}
+                          />
+                        ) : (
+                          d.usedCount
+                        )}
+                      </td>
+                      <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>
+                        {editing ? (
+                          <input
+                            type="datetime-local"
+                            value={String(editDiscount.startsAt ?? "")}
+                            onChange={(e) => setEditDiscount({ ...editDiscount, startsAt: e.target.value })}
+                          />
+                        ) : (
+                          d.startsAt ?? "-"
+                        )}
+                      </td>
+                      <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>
+                        {editing ? (
+                          <input
+                            type="datetime-local"
+                            value={String(editDiscount.endsAt ?? "")}
+                            onChange={(e) => setEditDiscount({ ...editDiscount, endsAt: e.target.value })}
+                          />
+                        ) : (
+                          d.endsAt ?? "-"
+                        )}
+                      </td>
+                      <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>
+                        {editing ? (
+                          <input
+                            type="number"
+                            min={1}
+                            max={127}
+                            value={editDiscount.daysMask ?? d.daysMask ?? ""}
+                            onChange={(e) => setEditDiscount({ ...editDiscount, daysMask: e.target.value === "" ? null : Number(e.target.value) })}
+                          />
+                        ) : (
+                          d.daysMask ?? "-"
+                        )}
+                      </td>
+                      <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>
+                        {editing ? (
+                          <input
+                            type="number"
+                            min={0}
+                            max={1439}
+                            value={editDiscount.startMinute ?? d.startMinute ?? ""}
+                            onChange={(e) => setEditDiscount({ ...editDiscount, startMinute: e.target.value === "" ? null : Number(e.target.value) })}
+                          />
+                        ) : (
+                          d.startMinute ?? "-"
+                        )}
+                      </td>
+                      <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>
+                        {editing ? (
+                          <input
+                            type="number"
+                            min={0}
+                            max={1439}
+                            value={editDiscount.endMinute ?? d.endMinute ?? ""}
+                            onChange={(e) => setEditDiscount({ ...editDiscount, endMinute: e.target.value === "" ? null : Number(e.target.value) })}
+                          />
+                        ) : (
+                          d.endMinute ?? "-"
+                        )}
+                      </td>
+                      <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>
+                        {editing ? (
+                          <input
+                            type="number"
+                            min={-840}
+                            max={840}
+                            value={editDiscount.tzOffsetMinutes ?? d.tzOffsetMinutes ?? ""}
+                            onChange={(e) => setEditDiscount({ ...editDiscount, tzOffsetMinutes: e.target.value === "" ? null : Number(e.target.value) })}
+                          />
+                        ) : (
+                          d.tzOffsetMinutes ?? "-"
+                        )}
+                      </td>
+                      <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0", display: "flex", gap: 6 }}>
+                        {editing ? (
+                          <>
+                            <button onClick={saveDiscountEdit}>{t(lang, "discountSave")}</button>
+                            <button onClick={() => { setEditingDiscountId(null); setEditDiscount({}); }}>
+                              {t(lang, "discountCancelEdit")}
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button onClick={() => startEditDiscount(d)}>{t(lang, "edit")}</button>
+                            <button onClick={() => deleteDiscount(d.id)}>{t(lang, "delete")}</button>
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       <section style={{ marginTop: 24 }}>
@@ -2889,6 +3764,110 @@ export default function AdminPage() {
               <button onClick={() => toggleStopList(it)}>{it.isStopList ? t(lang, "enable") : t(lang, "stopList")}</button>
             </div>
           ))}
+        </div>
+      </section>
+
+      <section style={{ marginTop: 24 }}>
+        <h2>{t(lang, "inventoryTitle")}</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
+          <div>
+            <h3 style={{ marginTop: 0 }}>{t(lang, "inventoryTitle")}</h3>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <input placeholder={t(lang, "inventoryNameRu")} value={newInventoryNameRu} onChange={(e) => setNewInventoryNameRu(e.target.value)} />
+              <input placeholder={t(lang, "inventoryNameRo")} value={newInventoryNameRo} onChange={(e) => setNewInventoryNameRo(e.target.value)} />
+              <input placeholder={t(lang, "inventoryNameEn")} value={newInventoryNameEn} onChange={(e) => setNewInventoryNameEn(e.target.value)} />
+              <input placeholder={t(lang, "inventoryUnit")} value={newInventoryUnit} onChange={(e) => setNewInventoryUnit(e.target.value)} />
+              <input type="number" placeholder={t(lang, "inventoryQty")} value={newInventoryQty} onChange={(e) => setNewInventoryQty(e.target.value)} />
+              <input type="number" placeholder={t(lang, "inventoryMinQty")} value={newInventoryMinQty} onChange={(e) => setNewInventoryMinQty(e.target.value)} />
+              <label><input type="checkbox" checked={newInventoryActive} onChange={(e) => setNewInventoryActive(e.target.checked)} /> {t(lang, "inventoryActive")}</label>
+              <button onClick={createInventoryItem}>{t(lang, "inventoryAdd")}</button>
+            </div>
+            {editingInventoryId && (
+              <div style={{ marginTop: 10, border: "1px dashed #ddd", padding: 10 }}>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <input placeholder={t(lang, "inventoryNameRu")} value={editInventoryNameRu} onChange={(e) => setEditInventoryNameRu(e.target.value)} />
+                  <input placeholder={t(lang, "inventoryNameRo")} value={editInventoryNameRo} onChange={(e) => setEditInventoryNameRo(e.target.value)} />
+                  <input placeholder={t(lang, "inventoryNameEn")} value={editInventoryNameEn} onChange={(e) => setEditInventoryNameEn(e.target.value)} />
+                  <input placeholder={t(lang, "inventoryUnit")} value={editInventoryUnit} onChange={(e) => setEditInventoryUnit(e.target.value)} />
+                  <input type="number" placeholder={t(lang, "inventoryQty")} value={editInventoryQty} onChange={(e) => setEditInventoryQty(e.target.value)} />
+                  <input type="number" placeholder={t(lang, "inventoryMinQty")} value={editInventoryMinQty} onChange={(e) => setEditInventoryMinQty(e.target.value)} />
+                  <label><input type="checkbox" checked={editInventoryActive} onChange={(e) => setEditInventoryActive(e.target.checked)} /> {t(lang, "inventoryActive")}</label>
+                </div>
+                <div style={{ marginTop: 8 }}>
+                  <button onClick={saveInventoryEdit}>{t(lang, "inventorySave")}</button>
+                  <button onClick={() => setEditingInventoryId(null)} style={{ marginLeft: 8 }}>{t(lang, "cancel")}</button>
+                </div>
+              </div>
+            )}
+            <div style={{ marginTop: 10 }}>
+              {inventoryItems.map((it) => (
+                <div key={it.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "6px 0", borderBottom: "1px solid #eee" }}>
+                  <strong>{it.nameRu}</strong>
+                  <span>{it.qtyOnHand} {it.unit}</span>
+                  <span style={{ color: it.qtyOnHand <= it.minQty ? "#b11e46" : "#6b7280" }}>
+                    {t(lang, "inventoryMinQty")}: {it.minQty}
+                  </span>
+                  <span>{it.isActive ? t(lang, "active") : t(lang, "inactive")}</span>
+                  <button onClick={() => startEditInventory(it)}>{t(lang, "edit")}</button>
+                  <button onClick={() => deleteInventoryItem(it.id)}>{t(lang, "inventoryDelete")}</button>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div>
+            <h3 style={{ marginTop: 0 }}>{t(lang, "inventoryIngredientsTitle")}</h3>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <select
+                value={recipeItemId}
+                onChange={(e) => {
+                  const id = e.target.value ? Number(e.target.value) : "";
+                  setRecipeItemId(id);
+                  if (id) loadRecipe(id);
+                }}
+              >
+                <option value="">{t(lang, "inventorySelectItem")}</option>
+                {items.map((it) => (
+                  <option key={it.id} value={it.id}>{it.nameRu}</option>
+                ))}
+              </select>
+              <button
+                onClick={() => setRecipeRows((prev) => [...prev, { inventoryItemId: inventoryItems[0]?.id ?? 0, qtyPerItem: "1" }])}
+                disabled={inventoryItems.length === 0 || !recipeItemId}
+              >
+                {t(lang, "inventoryAddIngredient")}
+              </button>
+              <button onClick={saveRecipe} disabled={!recipeItemId || recipeLoading}>{t(lang, "inventorySave")}</button>
+            </div>
+            {recipeItemId && (
+              <div style={{ marginTop: 10 }}>
+                {recipeRows.length === 0 && (
+                  <div style={{ color: "#666", fontSize: 12 }}>{t(lang, "inventoryNoIngredients")}</div>
+                )}
+                {recipeRows.map((r, idx) => (
+                  <div key={`${r.inventoryItemId}-${idx}`} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
+                    <select
+                      value={r.inventoryItemId}
+                      onChange={(e) => {
+                        const v = Number(e.target.value);
+                        setRecipeRows((prev) => prev.map((row, i) => i === idx ? { ...row, inventoryItemId: v } : row));
+                      }}
+                    >
+                      {inventoryItems.map((it) => (
+                        <option key={it.id} value={it.id}>{it.nameRu}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      placeholder={t(lang, "inventoryQtyPerItem")}
+                      value={r.qtyPerItem}
+                      onChange={(e) => setRecipeRows((prev) => prev.map((row, i) => i === idx ? { ...row, qtyPerItem: e.target.value } : row))}
+                    />
+                    <button onClick={() => setRecipeRows((prev) => prev.filter((_, i) => i !== idx))}>{t(lang, "delete")}</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </section>
 

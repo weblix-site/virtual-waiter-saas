@@ -178,6 +178,14 @@ Steps:
 Expected:
 - Tips applied and shown in totals
 
+### B10.1 Service fee / tax
+Steps:
+1. In admin settings set Service fee (%) and Tax (%) to non‑zero values.
+2. In guest web create a bill request (MY or SELECTED).
+Expected:
+- Bill summary shows Service fee and Tax lines.
+- Total = subtotal − discount + service fee + tax + tips.
+
 ### B11. Guest ↔ Waiter chat
 Steps:
 1. In guest web open chat block and send a message.

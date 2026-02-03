@@ -97,7 +97,7 @@ cd backend
 
 Запустите:
 ```
-./mvnw spring-boot:run
+./gradlew bootRun
 ```
 
 Ожидаемо:
@@ -148,6 +148,22 @@ app:
     hmacSecret: "CHANGE_ME_DEV_SECRET"
 ```
 **Поменяйте на уникальный ключ**, иначе QR‑защита слабая.
+
+### 7.1.1 Обязательные секреты (иначе backend не стартует)
+В `application.yml` значения берутся из переменных окружения:
+- `APP_QR_HMAC_SECRET`
+- `APP_AUTH_COOKIE_SECRET`
+
+Пример (PowerShell):
+```
+$env:APP_QR_HMAC_SECRET="CHANGE_ME_DEV_SECRET"
+$env:APP_AUTH_COOKIE_SECRET="CHANGE_ME_AUTH_SECRET"
+```
+
+После этого запускайте backend:
+```
+./gradlew bootRun
+```
 
 ### 7.2 OTP (SMS)
 В текущей версии используется mock‑провайдер, SMS не отправляются реально.
