@@ -60,7 +60,7 @@ jobs:
         with:
           validate-wrappers: false
       - name: Start postgres
-        run: docker compose -f infra/docker-compose.yml up -d postgres
+        run: docker compose -f infra/docker-compose.yml up -d --force-recreate postgres
       - name: Start backend
         run: |
           export SPRING_DATASOURCE_URL="jdbc:postgresql://localhost:5432/vw"

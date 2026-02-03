@@ -32,7 +32,7 @@ ensure_backend() {
   fi
   if command -v docker >/dev/null 2>&1; then
     echo "==> Start postgres (docker compose)"
-    docker compose -f "$COMPOSE_FILE" up -d postgres >/dev/null
+    docker compose -f "$COMPOSE_FILE" up -d --force-recreate postgres >/dev/null
     DB_CONTAINER="$(docker compose -f "$COMPOSE_FILE" ps -q postgres)"
     if [[ -z "$DB_CONTAINER" ]]; then
       echo "Postgres container not found."

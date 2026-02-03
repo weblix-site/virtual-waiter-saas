@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:14
+    image: postgres:13
     environment:
       POSTGRES_DB: vw
       POSTGRES_USER: vw
