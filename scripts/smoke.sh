@@ -15,6 +15,7 @@ DB_USER="${DB_USER:-vw}"
 DB_PASS="${DB_PASS:-vw}"
 DB_PORT="${DB_PORT:-5432}"
 COMPOSE_FILE="${COMPOSE_FILE:-infra/docker-compose.yml}"
+LOG_FILE="${SMOKE_BACKEND_LOG:-/tmp/vw_smoke_backend.log}"
 
 BACKEND_PID=""
 
@@ -51,7 +52,9 @@ ensure_backend() {
     export SPRING_DATASOURCE_URL="jdbc:postgresql://localhost:${DB_PORT}/${DB_NAME}"
     export SPRING_DATASOURCE_USERNAME="$DB_USER"
     export SPRING_DATASOURCE_PASSWORD="$DB_PASS"
-    ./backend/gradlew -p backend bootRun --args="--spring.main.banner-mode=off" >/tmp/vw_smoke_backend.log 2>&1 &
+    mkdir -p "$(dirname "$LOG_FILE")"
+    : > "$LOG_FILE"
+    ./backend/gradlew -p backend bootRun --args="--spring.main.banner-mode=off" >"$LOG_FILE" 2>&1 &
     BACKEND_PID=$!
   else
     echo "backend/gradlew not found."
@@ -59,13 +62,23 @@ ensure_backend() {
   fi
 
   echo "==> Wait for backend"
-  for i in {1..60}; do
+  for i in {1..120}; do
     if curl -fsS "${API_BASE}/actuator/health" >/dev/null 2>&1; then
       return 0
     fi
+    if [[ -n "${BACKEND_PID}" ]] && ! kill -0 "${BACKEND_PID}" >/dev/null 2>&1; then
+      echo "Backend process exited early. Logs:"
+      tail -n 200 "$LOG_FILE" || true
+      exit 1
+    fi
     sleep 1
   done
-  echo "Backend did not become ready. Check /tmp/vw_smoke_backend.log"
+  echo "Backend did not become ready. Logs:"
+  tail -n 200 "$LOG_FILE" || true
+  if [[ -n "${DB_CONTAINER:-}" ]]; then
+    echo "==> Postgres logs:"
+    docker logs "$DB_CONTAINER" | tail -n 200 || true
+  fi
   exit 1
 }
 
