@@ -26,6 +26,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
+if [[ -n "${JAVA_HOME_17_X64:-}" ]]; then
+  export JAVA_HOME="${JAVA_HOME_17_X64}"
+  export PATH="${JAVA_HOME}/bin:${PATH}"
+fi
+
 ensure_backend() {
   if curl -fsS "${API_BASE}/actuator/health" >/dev/null 2>&1; then
     return 0

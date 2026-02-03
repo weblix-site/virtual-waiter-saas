@@ -14,6 +14,11 @@ if ! command -v docker >/dev/null 2>&1; then
   exit 1
 fi
 
+if [[ -n "${JAVA_HOME_17_X64:-}" ]]; then
+  export JAVA_HOME="${JAVA_HOME_17_X64}"
+  export PATH="${JAVA_HOME}/bin:${PATH}"
+fi
+
 echo "==> Start postgres (docker compose)"
 docker compose -f "$COMPOSE_FILE" up -d --force-recreate postgres >/dev/null
 DB_CONTAINER="$(docker compose -f "$COMPOSE_FILE" ps -q postgres)"
