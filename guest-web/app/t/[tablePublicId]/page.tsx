@@ -58,6 +58,12 @@ type StartSessionResponse = {
   currencyCode?: string;
   waiterName?: string | null;
   waiterPhotoUrl?: string | null;
+  waiterRating?: number | null;
+  waiterRecommended?: boolean | null;
+  waiterExperienceYears?: number | null;
+  waiterFavoriteItems?: string[] | null;
+  waiterAvgRating?: number | null;
+  waiterReviewsCount?: number | null;
 };
 
 type BillOptionsItem = {
@@ -144,6 +150,20 @@ export default function TablePage({ params, searchParams }: any) {
   const [ordersExpanded, setOrdersExpanded] = useState(true);
   const [waiterCallActive, setWaiterCallActive] = useState(false);
   const [waiterCallStatus, setWaiterCallStatus] = useState<string | null>(null);
+  const [waiterPhotoFailed, setWaiterPhotoFailed] = useState(false);
+  const [waiterReviewRating, setWaiterReviewRating] = useState(5);
+  const [waiterReviewComment, setWaiterReviewComment] = useState("");
+  const [waiterReviewSending, setWaiterReviewSending] = useState(false);
+  const [waiterReviewSent, setWaiterReviewSent] = useState(false);
+  const [waiterReviewError, setWaiterReviewError] = useState<string | null>(null);
+  const [chatMessages, setChatMessages] = useState<{ id: number; senderRole: string; message: string; createdAt?: string | null }[]>([]);
+  const [chatMessage, setChatMessage] = useState("");
+  const [chatSending, setChatSending] = useState(false);
+  const [branchReviewRating, setBranchReviewRating] = useState(5);
+  const [branchReviewComment, setBranchReviewComment] = useState("");
+  const [branchReviewSending, setBranchReviewSending] = useState(false);
+  const [branchReviewSent, setBranchReviewSent] = useState(false);
+  const [branchReviewError, setBranchReviewError] = useState<string | null>(null);
 
   const cartTotalCents = useMemo(() => cart.reduce((sum, l) => sum + l.item.priceCents * l.qty, 0), [cart]);
   const myChargesCents = useMemo(() => (billOptions?.myItems ?? []).reduce((sum, it) => sum + it.lineTotalCents, 0), [billOptions]);
@@ -405,6 +425,10 @@ export default function TablePage({ params, searchParams }: any) {
   }, [tablePublicId, requestLocale, sig, ts, hasUrlLang, lang, rawLang, refreshBillOptions, searchParams, sessionHeaders]);
 
   useEffect(() => {
+    setWaiterPhotoFailed(false);
+  }, [session?.waiterPhotoUrl]);
+
+  useEffect(() => {
     if (!billRequestId || !session) return;
     const id = setInterval(() => {
       refreshBillStatus();
@@ -419,6 +443,15 @@ export default function TablePage({ params, searchParams }: any) {
     }, 10000);
     return () => clearInterval(id);
   }, [orderId, refreshOrderStatus, session]);
+
+  useEffect(() => {
+    if (!session) return;
+    loadChat();
+    const id = setInterval(() => {
+      loadChat();
+    }, 8000);
+    return () => clearInterval(id);
+  }, [session]);
 
   useEffect(() => {
     if (!session) return;
@@ -580,6 +613,90 @@ export default function TablePage({ params, searchParams }: any) {
       alert(t(lang, "waiterCallCancelled"));
     } catch (e: any) {
       alert(e?.message ?? t(lang, "errorGeneric"));
+    }
+  }
+
+  async function submitWaiterReview() {
+    if (!session) return;
+    if (!session.waiterName) {
+      setWaiterReviewError(t(lang, "waiterNotAssigned"));
+      return;
+    }
+    setWaiterReviewSending(true);
+    setWaiterReviewError(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/public/waiter-review`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...sessionHeaders(),
+        },
+        body: JSON.stringify({
+          guestSessionId: session.guestSessionId,
+          rating: waiterReviewRating,
+          comment: waiterReviewComment,
+        }),
+      });
+      if (!res.ok) {
+        throw new Error(await readApiError(res, t(lang, "waiterReviewFailed")));
+      }
+      setWaiterReviewSent(true);
+    } catch (e: any) {
+      setWaiterReviewError(e?.message ?? t(lang, "waiterReviewFailed"));
+    } finally {
+      setWaiterReviewSending(false);
+    }
+  }
+
+  async function loadChat() {
+    if (!session) return;
+    const res = await fetch(`${API_BASE}/api/public/chat/messages?guestSessionId=${session.guestSessionId}`, {
+      headers: { ...sessionHeaders() },
+    });
+    if (res.ok) {
+      setChatMessages(await res.json());
+    }
+  }
+
+  async function sendChat() {
+    if (!session) return;
+    const msg = chatMessage.trim();
+    if (!msg) return;
+    setChatSending(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/public/chat/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...sessionHeaders() },
+        body: JSON.stringify({ guestSessionId: session.guestSessionId, message: msg }),
+      });
+      if (!res.ok) throw new Error(await readApiError(res, t(lang, "errorGeneric")));
+      setChatMessage("");
+      await loadChat();
+    } finally {
+      setChatSending(false);
+    }
+  }
+
+  async function submitBranchReview() {
+    if (!session) return;
+    setBranchReviewSending(true);
+    setBranchReviewError(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/public/branch-review`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...sessionHeaders() },
+        body: JSON.stringify({
+          guestSessionId: session.guestSessionId,
+          rating: branchReviewRating,
+          comment: branchReviewComment,
+        }),
+      });
+      if (!res.ok) throw new Error(await readApiError(res, t(lang, "branchReviewFailed")));
+      setBranchReviewSent(true);
+    } catch (e: any) {
+      setBranchReviewError(e?.message ?? t(lang, "branchReviewFailed"));
+    } finally {
+      setBranchReviewSending(false);
     }
   }
 
@@ -822,23 +939,6 @@ export default function TablePage({ params, searchParams }: any) {
         <div>
           <h1 style={{ margin: 0 }}>{t(lang, "table")} #{session?.tableNumber}</h1>
           <div style={{ color: "#666" }}>{t(lang, "session")}: {session?.guestSessionId}</div>
-          {session?.waiterName && (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
-              {session.waiterPhotoUrl && (
-                <Image
-                  src={session.waiterPhotoUrl}
-                  alt={session.waiterName}
-                  width={32}
-                  height={32}
-                  style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover" }}
-                  unoptimized
-                />
-              )}
-              <span style={{ color: "#444", fontSize: 14 }}>
-                {t(lang, "waiterLabel")}: {session.waiterName}
-              </span>
-            </div>
-          )}
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <a href={`/t/${tablePublicId}?lang=ru&sig=${encodeURIComponent(sig)}&ts=${encodeURIComponent(ts)}`}>RU</a>
@@ -847,23 +947,176 @@ export default function TablePage({ params, searchParams }: any) {
         </div>
       </div>
 
+      <section style={{ marginTop: 14, border: "1px solid #eee", borderRadius: 12, padding: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <strong>{t(lang, "waiterSection")}</strong>
+          {waiterCallActive && (
+            <span style={{ fontSize: 12, color: "#666" }}>
+              {t(lang, "waiterCallStatus")}: {waiterCallStatus === "ACKNOWLEDGED"
+                ? t(lang, "waiterCallAcknowledged")
+                : t(lang, "waiterCallPending")}
+            </span>
+          )}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 10, flexWrap: "wrap" }}>
+          <div style={{
+            width: 56,
+            height: 56,
+            borderRadius: "50%",
+            background: "#f3f4f6",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            overflow: "hidden"
+          }}>
+            {session?.waiterPhotoUrl && !waiterPhotoFailed ? (
+              <Image
+                src={session.waiterPhotoUrl}
+                alt={session.waiterName ?? "Waiter"}
+                width={56}
+                height={56}
+                style={{ width: 56, height: 56, objectFit: "cover" }}
+                unoptimized
+                onError={() => setWaiterPhotoFailed(true)}
+              />
+            ) : (
+              <span style={{ color: "#9ca3af", fontSize: 12 }}>{t(lang, "waiterLabel")}</span>
+            )}
+          </div>
+          <div style={{ minWidth: 180 }}>
+            <div style={{ fontWeight: 600 }}>
+              {session?.waiterName ? session.waiterName : t(lang, "waiterNotAssigned")}
+            </div>
+            <div style={{ fontSize: 12, color: "#666" }}>{t(lang, "waiterLabel")}</div>
+            {(session?.waiterRecommended || session?.waiterRating != null || session?.waiterExperienceYears != null || (session?.waiterFavoriteItems && session.waiterFavoriteItems.length > 0)) && (
+              <div style={{ marginTop: 6, fontSize: 12, color: "#4b5563" }}>
+                {session?.waiterRecommended && (
+                  <span style={{ display: "inline-block", padding: "2px 6px", borderRadius: 999, background: "#ecfeff", color: "#0f766e", marginRight: 6 }}>
+                    {t(lang, "waiterRecommended")}
+                  </span>
+                )}
+                {session?.waiterRating != null && (
+                  <div>{t(lang, "waiterRating")}: {session.waiterRating}/5</div>
+                )}
+                {session?.waiterAvgRating != null && (
+                  <div>
+                    {t(lang, "waiterAvgRating")}: {session.waiterAvgRating.toFixed(1)}/5
+                    {session.waiterReviewsCount != null ? ` (${session.waiterReviewsCount})` : ""}
+                  </div>
+                )}
+                {session?.waiterExperienceYears != null && (
+                  <div>{t(lang, "waiterExperienceYears")}: {session.waiterExperienceYears} {t(lang, "yearsShort")}</div>
+                )}
+                {session?.waiterFavoriteItems && session.waiterFavoriteItems.length > 0 && (
+                  <div>{t(lang, "waiterFavoriteItems")}: {session.waiterFavoriteItems.join(", ")}</div>
+                )}
+              </div>
+            )}
+          </div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            {!waiterCallActive ? (
+              <button onClick={callWaiter} style={{ padding: "10px 14px" }}>
+                {t(lang, "callWaiter")}
+              </button>
+            ) : (
+              <button onClick={cancelWaiterCall} style={{ padding: "10px 14px" }}>
+                {t(lang, "cancelWaiterCall")}
+              </button>
+            )}
+          </div>
+        </div>
+        {session?.waiterName && (
+          <div style={{ marginTop: 12, borderTop: "1px dashed #eee", paddingTop: 10 }}>
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>{t(lang, "waiterReviewTitle")}</div>
+            {waiterReviewSent ? (
+              <div style={{ color: "#059669", fontSize: 12 }}>{t(lang, "waiterReviewThanks")}</div>
+            ) : (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <label style={{ fontSize: 12 }}>{t(lang, "waiterReviewRate")}</label>
+                <select value={waiterReviewRating} onChange={(e) => setWaiterReviewRating(Number(e.target.value))}>
+                  {[1,2,3,4,5].map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+                <input
+                  placeholder={t(lang, "waiterReviewComment")}
+                  value={waiterReviewComment}
+                  onChange={(e) => setWaiterReviewComment(e.target.value)}
+                  style={{ minWidth: 240 }}
+                />
+                <button onClick={submitWaiterReview} disabled={waiterReviewSending}>
+                  {waiterReviewSending ? t(lang, "sending") : t(lang, "waiterReviewSubmit")}
+                </button>
+                {waiterReviewError && <span style={{ color: "#dc2626", fontSize: 12 }}>{waiterReviewError}</span>}
+              </div>
+            )}
+          </div>
+        )}
+        {session?.waiterName && (
+          <div style={{ marginTop: 12, borderTop: "1px dashed #eee", paddingTop: 10 }}>
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>{t(lang, "chatTitle")}</div>
+            <div style={{ maxHeight: 160, overflowY: "auto", border: "1px solid #eee", borderRadius: 8, padding: 8 }}>
+              {chatMessages.length === 0 ? (
+                <div style={{ color: "#666", fontSize: 12 }}>{t(lang, "chatEmpty")}</div>
+              ) : (
+                chatMessages.map((m) => (
+                  <div key={m.id} style={{ marginBottom: 6, textAlign: m.senderRole === "GUEST" ? "right" : "left" }}>
+                    <span
+                      style={{
+                        display: "inline-block",
+                        padding: "6px 8px",
+                        borderRadius: 10,
+                        background: m.senderRole === "GUEST" ? "#e0f2fe" : "#f3f4f6",
+                        fontSize: 12,
+                      }}
+                    >
+                      {m.message}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <input
+                placeholder={t(lang, "chatPlaceholder")}
+                value={chatMessage}
+                onChange={(e) => setChatMessage(e.target.value)}
+                style={{ flex: 1 }}
+              />
+              <button onClick={sendChat} disabled={chatSending}>
+                {chatSending ? t(lang, "sending") : t(lang, "chatSend")}
+              </button>
+            </div>
+          </div>
+        )}
+        <div style={{ marginTop: 12, borderTop: "1px dashed #eee", paddingTop: 10 }}>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>{t(lang, "branchReviewTitle")}</div>
+          {branchReviewSent ? (
+            <div style={{ color: "#059669", fontSize: 12 }}>{t(lang, "branchReviewThanks")}</div>
+          ) : (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <label style={{ fontSize: 12 }}>{t(lang, "branchReviewRate")}</label>
+              <select value={branchReviewRating} onChange={(e) => setBranchReviewRating(Number(e.target.value))}>
+                {[1,2,3,4,5].map((n) => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+              <input
+                placeholder={t(lang, "branchReviewComment")}
+                value={branchReviewComment}
+                onChange={(e) => setBranchReviewComment(e.target.value)}
+                style={{ minWidth: 240 }}
+              />
+              <button onClick={submitBranchReview} disabled={branchReviewSending}>
+                {branchReviewSending ? t(lang, "sending") : t(lang, "branchReviewSubmit")}
+              </button>
+              {branchReviewError && <span style={{ color: "#dc2626", fontSize: 12 }}>{branchReviewError}</span>}
+            </div>
+          )}
+        </div>
+      </section>
+
       <div style={{ marginTop: 12, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-        {!waiterCallActive ? (
-          <button onClick={callWaiter} style={{ padding: "10px 14px" }}>
-            {t(lang, "callWaiter")}
-          </button>
-        ) : (
-          <button onClick={cancelWaiterCall} style={{ padding: "10px 14px" }}>
-            {t(lang, "cancelWaiterCall")}
-          </button>
-        )}
-        {waiterCallActive && (
-          <span style={{ fontSize: 12, color: "#666" }}>
-            {waiterCallStatus === "ACKNOWLEDGED"
-              ? t(lang, "waiterCallAcknowledged")
-              : t(lang, "waiterCallPending")}
-          </span>
-        )}
 
         {billOptions?.enablePartyPin && (
           <>

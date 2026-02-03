@@ -22,6 +22,10 @@ const dict: Record<string, Record<Lang, string>> = {
   langRo: { ru: "Румынский", ro: "Română", en: "Romanian" },
   langEn: { ru: "Английский", ro: "Engleză", en: "English" },
   staffGlobal: { ru: "Персонал (глобально)", ro: "Personal (global)", en: "Staff (global)" },
+  profileFilter: { ru: "Профиль", ro: "Profil", en: "Profile" },
+  profileAny: { ru: "Любой", ro: "Oricare", en: "Any" },
+  profileFilled: { ru: "Заполнен", ro: "Completat", en: "Filled" },
+  profileEmpty: { ru: "Пустой", ro: "Gol", en: "Empty" },
   active: { ru: "Активен", ro: "Activ", en: "Active" },
   inactive: { ru: "Неактивен", ro: "Inactiv", en: "Inactive" },
   allStatuses: { ru: "Все статусы", ro: "Toate statusurile", en: "All statuses" },
@@ -44,7 +48,13 @@ const dict: Record<string, Record<Lang, string>> = {
   genderFemale: { ru: "Женский", ro: "Feminin", en: "Female" },
   genderOther: { ru: "Другое", ro: "Altul", en: "Other" },
   photoUrl: { ru: "Фото (URL)", ro: "Foto (URL)", en: "Photo URL" },
+  rating: { ru: "Рейтинг (0–5)", ro: "Rating (0–5)", en: "Rating (0–5)" },
+  recommended: { ru: "Рекомендуемый", ro: "Recomandat", en: "Recommended" },
+  experienceYears: { ru: "Стаж (лет)", ro: "Experiență (ani)", en: "Experience (years)" },
+  favoriteItems: { ru: "Любимые блюда (через запятую)", ro: "Feluri preferate (separate prin virgulă)", en: "Favorite items (comma-separated)" },
   invalidAge: { ru: "Неверный возраст (0–120)", ro: "Vârstă invalidă (0–120)", en: "Invalid age (0–120)" },
+  invalidRating: { ru: "Неверный рейтинг (0–5)", ro: "Rating invalid (0–5)", en: "Invalid rating (0–5)" },
+  invalidExperience: { ru: "Неверный стаж (0–80)", ro: "Experiență invalidă (0–80)", en: "Invalid experience (0–80)" },
   createStaff: { ru: "Создать сотрудника", ro: "Creează personal", en: "Create staff" },
   role: { ru: "Роль", ro: "Rol", en: "Role" },
   currencies: { ru: "Валюты", ro: "Valute", en: "Currencies" },
@@ -111,6 +121,8 @@ const dict: Record<string, Record<Lang, string>> = {
   zoneName: { ru: "Название зоны", ro: "Nume zonă", en: "Zone name" },
   addZone: { ru: "Добавить зону", ro: "Adaugă zonă", en: "Add zone" },
   stats: { ru: "Статистика", ro: "Statistici", en: "Stats" },
+  branchReviewsAvg: { ru: "Средний рейтинг", ro: "Rating mediu", en: "Average rating" },
+  branchReviewsCount: { ru: "Кол-во отзывов", ro: "Număr recenzii", en: "Reviews count" },
   fromDate: { ru: "С", ro: "De la", en: "From" },
   toDate: { ru: "По", ro: "Până la", en: "To" },
   load: { ru: "Загрузить", ro: "Încarcă", en: "Load" },
@@ -155,6 +167,10 @@ type StaffUser = {
   age?: number | null;
   gender?: string | null;
   photoUrl?: string | null;
+  rating?: number | null;
+  recommended?: boolean | null;
+  experienceYears?: number | null;
+  favoriteItems?: string | null;
 };
 
 type StatsSummary = {
@@ -166,6 +182,8 @@ type StatsSummary = {
   grossCents: number;
   tipsCents: number;
   activeTablesCount: number;
+  avgBranchRating?: number;
+  branchReviewsCount?: number;
 };
 
 type BranchSummaryRow = {
@@ -301,6 +319,7 @@ export default function SuperAdminPage() {
   const [newStaffUser, setNewStaffUser] = useState("");
   const [newStaffPass, setNewStaffPass] = useState("");
   const [newStaffRole, setNewStaffRole] = useState("ADMIN");
+  const [staffProfileFilter, setStaffProfileFilter] = useState("");
   const [editingStaffId, setEditingStaffId] = useState<number | null>(null);
   const [editStaffRole, setEditStaffRole] = useState("ADMIN");
   const [editStaffActive, setEditStaffActive] = useState(true);
@@ -309,6 +328,10 @@ export default function SuperAdminPage() {
   const [editStaffAge, setEditStaffAge] = useState("");
   const [editStaffGender, setEditStaffGender] = useState("");
   const [editStaffPhotoUrl, setEditStaffPhotoUrl] = useState("");
+  const [editStaffRating, setEditStaffRating] = useState("");
+  const [editStaffRecommended, setEditStaffRecommended] = useState(false);
+  const [editStaffExperienceYears, setEditStaffExperienceYears] = useState("");
+  const [editStaffFavoriteItems, setEditStaffFavoriteItems] = useState("");
   const [currencies, setCurrencies] = useState<CurrencyDto[]>([]);
   const [newCurrencyCode, setNewCurrencyCode] = useState("");
   const [newCurrencyName, setNewCurrencyName] = useState("");
@@ -317,6 +340,7 @@ export default function SuperAdminPage() {
   useEffect(() => {
     const u = localStorage.getItem("superUser") ?? "";
     const l = (localStorage.getItem("superLang") ?? "ru") as Lang;
+    const pf = localStorage.getItem("superStaffProfileFilter") ?? "";
     if (u) {
       setUsername(u);
       setAuthReady(true);
@@ -324,11 +348,22 @@ export default function SuperAdminPage() {
     if (l === "ru" || l === "ro" || l === "en") {
       setLang(l);
     }
+    if (pf === "FILLED" || pf === "EMPTY") {
+      setStaffProfileFilter(pf);
+    }
   }, []);
 
   useEffect(() => {
     localStorage.setItem("superLang", lang);
   }, [lang]);
+
+  useEffect(() => {
+    if (staffProfileFilter) {
+      localStorage.setItem("superStaffProfileFilter", staffProfileFilter);
+    } else {
+      localStorage.removeItem("superStaffProfileFilter");
+    }
+  }, [staffProfileFilter]);
 
   async function api(path: string, init?: RequestInit) {
     const res = await fetch(`${API_BASE}${path}`, {
@@ -360,6 +395,14 @@ export default function SuperAdminPage() {
     if (!id) return "#9aa0a6";
     return waiterPalette[id % waiterPalette.length];
   };
+
+  const filteredStaff = useMemo(() => {
+    if (!staffProfileFilter) return staff;
+    return staff.filter((s) => {
+      const hasProfile = !!(s.firstName || s.lastName || s.age != null || s.gender || s.photoUrl);
+      return staffProfileFilter === "FILLED" ? hasProfile : !hasProfile;
+    });
+  }, [staff, staffProfileFilter]);
 
   const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
   const snap = useCallback((v: number, step = 2) => (snapEnabled ? Math.round(v / step) * step : v), [snapEnabled]);
@@ -985,6 +1028,16 @@ export default function SuperAdminPage() {
       setError(t(lang, "invalidAge"));
       return;
     }
+    const ratingVal = editStaffRating.trim() ? Number(editStaffRating.trim()) : null;
+    if (ratingVal != null && (Number.isNaN(ratingVal) || ratingVal < 0 || ratingVal > 5)) {
+      setError(t(lang, "invalidRating"));
+      return;
+    }
+    const expVal = editStaffExperienceYears.trim() ? Number(editStaffExperienceYears.trim()) : null;
+    if (expVal != null && (Number.isNaN(expVal) || expVal < 0 || expVal > 80)) {
+      setError(t(lang, "invalidExperience"));
+      return;
+    }
     await api(`/api/super/staff/${id}`, {
       method: "PATCH",
       body: JSON.stringify({
@@ -995,6 +1048,10 @@ export default function SuperAdminPage() {
         age: ageVal,
         gender: editStaffGender,
         photoUrl: editStaffPhotoUrl,
+        rating: Number.isNaN(ratingVal) ? null : ratingVal,
+        recommended: editStaffRecommended,
+        experienceYears: Number.isNaN(expVal) ? null : expVal,
+        favoriteItems: editStaffFavoriteItems,
       }),
     });
     setEditingStaffId(null);
@@ -1191,8 +1248,18 @@ export default function SuperAdminPage() {
           </select>
           <button onClick={createStaff} disabled={!branchId}>{t(lang, "createStaff")}</button>
         </div>
+        <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <select value={staffProfileFilter} onChange={(e) => setStaffProfileFilter(e.target.value)}>
+            <option value="">{t(lang, "profileFilter")}: {t(lang, "profileAny")}</option>
+            <option value="FILLED">{t(lang, "profileFilled")}</option>
+            <option value="EMPTY">{t(lang, "profileEmpty")}</option>
+          </select>
+          <span style={{ fontSize: 12, color: "#667085" }}>
+            {t(lang, "filteredCount")}: {filteredStaff.length}
+          </span>
+        </div>
         <div style={{ marginTop: 10 }}>
-          {staff.map((s) => (
+          {filteredStaff.map((s) => (
             <div key={s.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "4px 0" }}>
               <strong>{s.username}</strong>
               <span>{s.role}</span>
@@ -1206,6 +1273,10 @@ export default function SuperAdminPage() {
                 setEditStaffAge(s.age != null ? String(s.age) : "");
                 setEditStaffGender(s.gender ?? "");
                 setEditStaffPhotoUrl(s.photoUrl ?? "");
+                setEditStaffRating(s.rating != null ? String(s.rating) : "");
+                setEditStaffRecommended(!!s.recommended);
+                setEditStaffExperienceYears(s.experienceYears != null ? String(s.experienceYears) : "");
+                setEditStaffFavoriteItems(s.favoriteItems ?? "");
               }}>{t(lang, "edit")}</button>
               <button onClick={() => resetStaffPassword(s.id)}>{t(lang, "resetPassword")}</button>
               <button onClick={() => deleteStaff(s.id)}>{t(lang, "delete")}</button>
@@ -1225,13 +1296,19 @@ export default function SuperAdminPage() {
               <input placeholder={t(lang, "firstName")} value={editStaffFirstName} onChange={(e) => setEditStaffFirstName(e.target.value)} />
               <input placeholder={t(lang, "lastName")} value={editStaffLastName} onChange={(e) => setEditStaffLastName(e.target.value)} />
               <input placeholder={t(lang, "age")} value={editStaffAge} onChange={(e) => setEditStaffAge(e.target.value)} style={{ width: 90 }} />
+              <input placeholder={t(lang, "rating")} value={editStaffRating} onChange={(e) => setEditStaffRating(e.target.value)} style={{ width: 90 }} />
               <select value={editStaffGender} onChange={(e) => setEditStaffGender(e.target.value)}>
                 <option value="">{t(lang, "gender")}</option>
                 <option value="male">{t(lang, "genderMale")}</option>
                 <option value="female">{t(lang, "genderFemale")}</option>
                 <option value="other">{t(lang, "genderOther")}</option>
               </select>
+              <input placeholder={t(lang, "experienceYears")} value={editStaffExperienceYears} onChange={(e) => setEditStaffExperienceYears(e.target.value)} style={{ width: 140 }} />
+              <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <input type="checkbox" checked={editStaffRecommended} onChange={(e) => setEditStaffRecommended(e.target.checked)} /> {t(lang, "recommended")}
+              </label>
               <input placeholder={t(lang, "photoUrl")} value={editStaffPhotoUrl} onChange={(e) => setEditStaffPhotoUrl(e.target.value)} style={{ minWidth: 220 }} />
+              <input placeholder={t(lang, "favoriteItems")} value={editStaffFavoriteItems} onChange={(e) => setEditStaffFavoriteItems(e.target.value)} style={{ minWidth: 220 }} />
               <button onClick={() => updateStaff(editingStaffId)}>{t(lang, "save")}</button>
               <button onClick={() => setEditingStaffId(null)}>{t(lang, "cancel")}</button>
             </div>
@@ -1862,6 +1939,11 @@ export default function SuperAdminPage() {
             <div>{t(lang, "gross")}: {money(stats.grossCents)}</div>
             <div>{t(lang, "tips")}: {money(stats.tipsCents)}</div>
             <div>{t(lang, "activeTables")}: {stats.activeTablesCount}</div>
+            {stats.avgBranchRating != null && (
+              <div>
+                {t(lang, "branchReviewsAvg")}: {stats.avgBranchRating.toFixed(2)} • {t(lang, "branchReviewsCount")}: {stats.branchReviewsCount ?? 0}
+              </div>
+            )}
           </div>
         )}
         {branchStats.length > 0 && (

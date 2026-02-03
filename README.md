@@ -19,6 +19,7 @@
 - Валюты: управляются супер‑админом, выбираются для филиалов
 - Ограничения по IP (rate limits)
 - Локализация UI и ошибок (RU/RO/EN)
+- SLA по заказам: фиксируются timestamps статусов (accepted/in_progress/ready/served/closed/cancelled) и используются в мотивации официантов.
 
 ## Быстрый старт (локально)
 
@@ -95,7 +96,7 @@ Flyway создаёт демо‑данные:
 
 ## Rate limits (по IP)
 Смотри `backend/src/main/resources/application.yml`:
-- OTP, Order, Party, WaiterCall, SessionStart, Menu
+- OTP, Order, Party, WaiterCall, SessionStart, Menu, Chat
 
 ## Docker Compose (полный стек)
 ```bash
@@ -110,6 +111,11 @@ docker compose -f infra/docker-compose.full.yml --env-file .env up -d --build
 - `RUN_HOSTING.md` — запуск на VPS
 - `TESTS.md` — тест‑сценарии
 - `scripts/` — smoke‑скрипты и проверка миграций
+
+## Известные уязвимости (npm audit)
+В `guest-web` остаются известные уязвимости (eslint/next), которые требуют мажорных обновлений.
+Мы их **не обновляли** автоматически, чтобы не сломать проект.
+План: поднять версии зависимостей отдельным PR и пройти регрессионные проверки.
 
 ## Структура репозитория
 - `backend/` — API и миграции

@@ -174,6 +174,13 @@ app:
 1. Зайдите в staff‑app.
 2. Должен появиться новый заказ.
 
+### 8.5 Flutter analyze (staff‑app)
+Если установлен Flutter:
+```
+cd staff-app
+flutter analyze
+```
+
 ---
 
 ## 9) Возможные проблемы

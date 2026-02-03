@@ -3,7 +3,9 @@ package md.virtualwaiter.api.superadmin;
 import md.virtualwaiter.domain.Branch;
 import md.virtualwaiter.domain.StaffUser;
 import md.virtualwaiter.domain.Tenant;
+import md.virtualwaiter.repo.CafeTableRepo;
 import md.virtualwaiter.repo.BranchRepo;
+import md.virtualwaiter.repo.BranchReviewRepo;
 import md.virtualwaiter.repo.StaffUserRepo;
 import md.virtualwaiter.repo.TenantRepo;
 import md.virtualwaiter.service.StatsService;
@@ -18,7 +20,10 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.beans.factory.annotation.Value;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -26,28 +31,45 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.HashSet;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/super")
 public class SuperAdminController {
+  private static final Logger LOG = LoggerFactory.getLogger(SuperAdminController.class);
   private final StaffUserRepo staffUserRepo;
   private final TenantRepo tenantRepo;
   private final BranchRepo branchRepo;
+  private final BranchReviewRepo branchReviewRepo;
+  private final CafeTableRepo tableRepo;
   private final PasswordEncoder passwordEncoder;
   private final StatsService statsService;
+  private final int maxPhotoUrlLength;
+  private final Set<String> allowedPhotoExts;
 
   public SuperAdminController(
     StaffUserRepo staffUserRepo,
     TenantRepo tenantRepo,
     BranchRepo branchRepo,
+    BranchReviewRepo branchReviewRepo,
+    CafeTableRepo tableRepo,
     PasswordEncoder passwordEncoder,
-    StatsService statsService
+    StatsService statsService,
+    @Value("${app.media.maxPhotoUrlLength:512}") int maxPhotoUrlLength,
+    @Value("${app.media.allowedPhotoExts:jpg,jpeg,png,webp,gif}") String allowedPhotoExts
   ) {
     this.staffUserRepo = staffUserRepo;
     this.tenantRepo = tenantRepo;
     this.branchRepo = branchRepo;
+    this.branchReviewRepo = branchReviewRepo;
+    this.tableRepo = tableRepo;
     this.passwordEncoder = passwordEncoder;
     this.statsService = statsService;
+    this.maxPhotoUrlLength = maxPhotoUrlLength;
+    this.allowedPhotoExts = parseExts(allowedPhotoExts);
   }
 
   private StaffUser requireSuper(Authentication auth) {
@@ -176,7 +198,11 @@ public class SuperAdminController {
     String lastName,
     Integer age,
     String gender,
-    String photoUrl
+    String photoUrl,
+    Integer rating,
+    Boolean recommended,
+    Integer experienceYears,
+    String favoriteItems
   ) {}
   public record CreateStaffUserRequest(
     @NotNull Long branchId,
@@ -187,7 +213,11 @@ public class SuperAdminController {
     String lastName,
     Integer age,
     String gender,
-    String photoUrl
+    String photoUrl,
+    Integer rating,
+    Boolean recommended,
+    Integer experienceYears,
+    String favoriteItems
   ) {}
 
   @PostMapping("/staff")
@@ -207,11 +237,16 @@ public class SuperAdminController {
     su.lastName = trimOrNull(req.lastName);
     su.age = sanitizeAge(req.age);
     su.gender = sanitizeGender(req.gender);
-    su.photoUrl = trimOrNull(req.photoUrl);
+    su.photoUrl = sanitizePhotoUrl(req.photoUrl);
+    su.rating = sanitizeRating(req.rating);
+    su.recommended = req.recommended != null ? req.recommended : Boolean.FALSE;
+    su.experienceYears = sanitizeExperienceYears(req.experienceYears);
+    su.favoriteItems = sanitizeFavoriteItems(req.favoriteItems);
     su = staffUserRepo.save(su);
     return new StaffUserDto(
       su.id, su.branchId, su.username, su.role, su.isActive,
-      su.firstName, su.lastName, su.age, su.gender, su.photoUrl
+      su.firstName, su.lastName, su.age, su.gender, su.photoUrl,
+      su.rating, su.recommended, su.experienceYears, su.favoriteItems
     );
   }
 
@@ -223,7 +258,11 @@ public class SuperAdminController {
     String lastName,
     Integer age,
     String gender,
-    String photoUrl
+    String photoUrl,
+    Integer rating,
+    Boolean recommended,
+    Integer experienceYears,
+    String favoriteItems
   ) {}
 
   @PatchMapping("/staff/{id}")
@@ -246,12 +285,37 @@ public class SuperAdminController {
     if (req.lastName != null) su.lastName = trimOrNull(req.lastName);
     if (req.age != null) su.age = sanitizeAge(req.age);
     if (req.gender != null) su.gender = sanitizeGender(req.gender);
-    if (req.photoUrl != null) su.photoUrl = trimOrNull(req.photoUrl);
+    if (req.photoUrl != null) su.photoUrl = sanitizePhotoUrl(req.photoUrl);
+    if (req.rating != null) su.rating = sanitizeRating(req.rating);
+    if (req.recommended != null) su.recommended = req.recommended;
+    if (req.experienceYears != null) su.experienceYears = sanitizeExperienceYears(req.experienceYears);
+    if (req.favoriteItems != null) su.favoriteItems = sanitizeFavoriteItems(req.favoriteItems);
     su = staffUserRepo.save(su);
     return new StaffUserDto(
       su.id, su.branchId, su.username, su.role, su.isActive,
-      su.firstName, su.lastName, su.age, su.gender, su.photoUrl
+      su.firstName, su.lastName, su.age, su.gender, su.photoUrl,
+      su.rating, su.recommended, su.experienceYears, su.favoriteItems
     );
+  }
+
+  private static Integer sanitizeRating(Integer v) {
+    if (v == null) return null;
+    if (v < 0 || v > 5) return null;
+    return v;
+  }
+
+  private static Integer sanitizeExperienceYears(Integer v) {
+    if (v == null) return null;
+    if (v < 0 || v > 80) return null;
+    return v;
+  }
+
+  private static String sanitizeFavoriteItems(String v) {
+    if (v == null) return null;
+    String t = v.trim();
+    if (t.isEmpty()) return null;
+    if (t.length() > 500) t = t.substring(0, 500);
+    return t;
   }
 
   @DeleteMapping("/staff/{id}")
@@ -259,6 +323,7 @@ public class SuperAdminController {
     requireSuper(auth);
     StaffUser su = staffUserRepo.findById(id)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Staff user not found"));
+    tableRepo.clearAssignedWaiter(su.id);
     staffUserRepo.delete(su);
   }
 
@@ -271,7 +336,9 @@ public class SuperAdminController {
     long paidBillsCount,
     long grossCents,
     long tipsCents,
-    long activeTablesCount
+    long activeTablesCount,
+    double avgBranchRating,
+    long branchReviewsCount
   ) {}
 
   public record BranchSummaryRow(
@@ -284,6 +351,16 @@ public class SuperAdminController {
     long tipsCents
   ) {}
 
+  private static class BranchReviewAgg {
+    final double avgRating;
+    final long count;
+
+    BranchReviewAgg(double avgRating, long count) {
+      this.avgRating = avgRating;
+      this.count = count;
+    }
+  }
+
   @GetMapping("/stats/summary")
   public StatsSummaryResponse getSummary(
     @RequestParam(value = "tenantId") Long tenantId,
@@ -295,6 +372,7 @@ public class SuperAdminController {
     Instant fromTs = parseInstantOrDate(from, true);
     Instant toTs = parseInstantOrDate(to, false);
     StatsService.Summary s = statsService.summaryForTenant(tenantId, fromTs, toTs);
+    BranchReviewAgg reviewsAgg = branchReviewAggForTenant(tenantId, fromTs, toTs);
     return new StatsSummaryResponse(
       s.from().toString(),
       s.to().toString(),
@@ -303,8 +381,29 @@ public class SuperAdminController {
       s.paidBillsCount(),
       s.grossCents(),
       s.tipsCents(),
-      s.activeTablesCount()
+      s.activeTablesCount(),
+      reviewsAgg.avgRating,
+      reviewsAgg.count
     );
+  }
+
+  private BranchReviewAgg branchReviewAggForTenant(Long tenantId, Instant fromTs, Instant toTs) {
+    double sum = 0.0;
+    long count = 0;
+    List<Branch> branches = branchRepo.findByTenantId(tenantId);
+    for (Branch b : branches) {
+      List<BranchReview> reviews = branchReviewRepo.findByBranchIdOrderByIdDesc(b.id);
+      for (BranchReview r : reviews) {
+        if (r.createdAt == null) continue;
+        if (r.createdAt.isBefore(fromTs) || r.createdAt.isAfter(toTs)) continue;
+        if (r.rating != null) {
+          sum += r.rating;
+          count++;
+        }
+      }
+    }
+    double avg = count == 0 ? 0.0 : (sum / count);
+    return new BranchReviewAgg(avg, count);
   }
 
   @GetMapping("/stats/branches")
@@ -336,8 +435,9 @@ public class SuperAdminController {
     Instant fromTs = parseInstantOrDate(from, true);
     Instant toTs = parseInstantOrDate(to, false);
     StatsService.Summary s = statsService.summaryForTenant(tenantId, fromTs, toTs);
+    BranchReviewAgg reviewsAgg = branchReviewAggForTenant(tenantId, fromTs, toTs);
     StringBuilder sb = new StringBuilder();
-    sb.append("from,to,orders,calls,paid_bills,gross_cents,tips_cents,active_tables\n");
+    sb.append("from,to,orders,calls,paid_bills,gross_cents,tips_cents,active_tables,avg_branch_rating,branch_reviews_count\n");
     sb.append(s.from()).append(',')
       .append(s.to()).append(',')
       .append(s.ordersCount()).append(',')
@@ -345,7 +445,9 @@ public class SuperAdminController {
       .append(s.paidBillsCount()).append(',')
       .append(s.grossCents()).append(',')
       .append(s.tipsCents()).append(',')
-      .append(s.activeTablesCount()).append('\n');
+      .append(s.activeTablesCount()).append(',')
+      .append(reviewsAgg.avgRating).append(',')
+      .append(reviewsAgg.count).append('\n');
     String filename = "tenant-summary-" + tenantId + ".csv";
     return ResponseEntity.ok()
       .contentType(MediaType.parseMediaType("text/csv"))
@@ -401,6 +503,63 @@ public class SuperAdminController {
     if (v == null) return null;
     String t = v.trim();
     return t.isEmpty() ? null : t;
+  }
+
+  private static Set<String> parseExts(String raw) {
+    if (raw == null) return Set.of();
+    Set<String> out = new HashSet<>();
+    for (String p : raw.split(",")) {
+      String t = p.trim().toLowerCase(Locale.ROOT);
+      if (!t.isEmpty()) out.add(t);
+    }
+    return out;
+  }
+
+  private String sanitizePhotoUrl(String raw) {
+    String url = trimOrNull(raw);
+    if (url == null) return null;
+    if (maxPhotoUrlLength > 0 && url.length() > maxPhotoUrlLength) {
+      logReject("Photo URL too long", url);
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Photo URL too long");
+    }
+    URI uri;
+    try {
+      uri = new URI(url);
+    } catch (URISyntaxException e) {
+      logReject("Invalid photo URL", url);
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid photo URL");
+    }
+    String scheme = uri.getScheme();
+    if (scheme == null || (!scheme.equalsIgnoreCase("http") && !scheme.equalsIgnoreCase("https"))) {
+      logReject("Photo URL must be http/https", url);
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Photo URL must be http/https");
+    }
+    if (uri.getHost() == null || uri.getHost().isBlank()) {
+      logReject("Photo URL host is required", url);
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Photo URL host is required");
+    }
+    String path = uri.getPath();
+    if (path == null || path.isBlank()) {
+      logReject("Photo URL path is required", url);
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Photo URL path is required");
+    }
+    int dot = path.lastIndexOf('.');
+    if (dot < 0 || dot == path.length() - 1) {
+      logReject("Photo URL must include file extension", url);
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Photo URL must include file extension");
+    }
+    String ext = path.substring(dot + 1).toLowerCase(Locale.ROOT);
+    if (!allowedPhotoExts.isEmpty() && !allowedPhotoExts.contains(ext)) {
+      logReject("Unsupported photo type", url);
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported photo type");
+    }
+    return url;
+  }
+
+  private void logReject(String reason, String url) {
+    int max = 200;
+    String safe = url == null ? "" : (url.length() > max ? url.substring(0, max) + "..." : url);
+    LOG.warn("Photo URL rejected: {} (url={})", reason, safe);
   }
 
   private static Integer sanitizeAge(Integer v) {

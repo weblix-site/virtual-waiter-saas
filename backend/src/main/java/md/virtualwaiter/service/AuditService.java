@@ -3,14 +3,20 @@ package md.virtualwaiter.service;
 import md.virtualwaiter.domain.AuditLog;
 import md.virtualwaiter.domain.StaffUser;
 import md.virtualwaiter.repo.AuditLogRepo;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 @Service
 public class AuditService {
+  private static final Logger log = LoggerFactory.getLogger(AuditService.class);
   private final AuditLogRepo repo;
+  private final int maxDetailsChars;
 
-  public AuditService(AuditLogRepo repo) {
+  public AuditService(AuditLogRepo repo, @Value("${app.audit.maxDetailsChars:4000}") int maxDetailsChars) {
     this.repo = repo;
+    this.maxDetailsChars = maxDetailsChars;
   }
 
   public void log(StaffUser actor, String action, String entityType, Long entityId, String detailsJson) {
@@ -24,7 +30,19 @@ public class AuditService {
     a.action = action;
     a.entityType = entityType;
     a.entityId = entityId;
-    a.detailsJson = detailsJson;
+    a.detailsJson = truncate(detailsJson);
     repo.save(a);
+  }
+
+  private String truncate(String detailsJson) {
+    if (detailsJson == null) return null;
+    if (maxDetailsChars <= 0) return null;
+    if (detailsJson.length() <= maxDetailsChars) return detailsJson;
+    log.warn("Audit detailsJson truncated (maxDetailsChars={})", maxDetailsChars);
+    String suffix = "...(truncated)";
+    if (maxDetailsChars <= suffix.length()) {
+      return detailsJson.substring(0, maxDetailsChars);
+    }
+    return detailsJson.substring(0, maxDetailsChars - suffix.length()) + suffix;
   }
 }

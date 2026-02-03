@@ -12,4 +12,6 @@ public class PushProperties {
   public String fcmApiUrl = "https://fcm.googleapis.com/fcm/send";
   /** If true, send with dry_run flag */
   public boolean dryRun = false;
+  /** Max payload size (bytes) */
+  public int maxPayloadBytes = 4096;
 }

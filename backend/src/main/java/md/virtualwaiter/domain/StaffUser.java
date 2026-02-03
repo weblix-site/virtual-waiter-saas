@@ -40,4 +40,16 @@ public class StaffUser {
 
   @Column(name = "photo_url")
   public String photoUrl;
+
+  @Column(name = "rating")
+  public Integer rating;
+
+  @Column(name = "recommended")
+  public Boolean recommended;
+
+  @Column(name = "experience_years")
+  public Integer experienceYears;
+
+  @Column(name = "favorite_items")
+  public String favoriteItems;
 }

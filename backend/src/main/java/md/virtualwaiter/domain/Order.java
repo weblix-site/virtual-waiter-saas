@@ -26,6 +26,24 @@ public class Order {
   @Column(name = "created_at", nullable = false)
   public Instant createdAt = Instant.now();
 
+  @Column(name = "accepted_at")
+  public Instant acceptedAt;
+
+  @Column(name = "in_progress_at")
+  public Instant inProgressAt;
+
+  @Column(name = "ready_at")
+  public Instant readyAt;
+
+  @Column(name = "served_at")
+  public Instant servedAt;
+
+  @Column(name = "closed_at")
+  public Instant closedAt;
+
+  @Column(name = "cancelled_at")
+  public Instant cancelledAt;
+
   @Column(name = "created_by_ip")
   public String createdByIp;
 

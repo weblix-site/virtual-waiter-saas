@@ -23,6 +23,35 @@ const dict: Record<string, Record<Lang, string>> = {
   categories: { ru: "Категории", ro: "Categorii", en: "Categories" },
   items: { ru: "Блюда", ro: "Produse", en: "Items" },
   staff: { ru: "Персонал", ro: "Personal", en: "Staff" },
+  staffBulk: { ru: "Массовое редактирование", ro: "Editare în masă", en: "Bulk edit" },
+  staffSelectAll: { ru: "Выбрать всех", ro: "Selectează tot", en: "Select all" },
+  staffClearSelection: { ru: "Сбросить выбор", ro: "Resetează selecția", en: "Clear selection" },
+  staffSelected: { ru: "Выбрано", ro: "Selectate", en: "Selected" },
+  staffApplyBulk: { ru: "Применить к выбранным", ro: "Aplică la selectați", en: "Apply to selected" },
+  staffNoSelection: { ru: "Не выбраны сотрудники", ro: "Nu sunt selectați", en: "No staff selected" },
+  staffBulkRole: { ru: "Роль (массово)", ro: "Rol (în masă)", en: "Role (bulk)" },
+  staffBulkActive: { ru: "Статус (массово)", ro: "Status (în masă)", en: "Status (bulk)" },
+  staffBulkSkip: { ru: "Не менять", ro: "Nu schimba", en: "Do not change" },
+  staffBulkConfirm: { ru: "Применить изменения ко всем выбранным?", ro: "Aplicați modificările pentru toți selectați?", en: "Apply changes to all selected?" },
+  staffBulkDone: { ru: "Изменения применены", ro: "Modificările au fost aplicate", en: "Changes applied" },
+  staffBulkError: { ru: "Ошибка массового изменения", ro: "Eroare la modificarea în masă", en: "Bulk update failed" },
+  staffReviews: { ru: "Отзывы официантов", ro: "Recenzii chelneri", en: "Waiter reviews" },
+  loadReviews: { ru: "Загрузить отзывы", ro: "Încarcă recenzii", en: "Load reviews" },
+  noReviews: { ru: "Отзывов пока нет", ro: "Nu există recenzii", en: "No reviews yet" },
+  branchReviews: { ru: "Отзывы о заведении", ro: "Recenzii despre local", en: "Venue reviews" },
+  branchReviewsAvg: { ru: "Средний рейтинг", ro: "Rating mediu", en: "Average rating" },
+  branchReviewsCount: { ru: "Кол-во отзывов", ro: "Număr recenzii", en: "Reviews count" },
+  branchReviewsExport: { ru: "Экспорт отзывов", ro: "Export recenzii", en: "Export reviews" },
+  branchReviewsDownload: { ru: "Скачать CSV", ro: "Descarcă CSV", en: "Download CSV" },
+  chatExport: { ru: "Экспорт чатов", ro: "Export chat", en: "Chat export" },
+  chatExportDownload: { ru: "Скачать CSV", ro: "Descarcă CSV", en: "Download CSV" },
+  reviewRating: { ru: "Оценка", ro: "Rating", en: "Rating" },
+  reviewComment: { ru: "Комментарий", ro: "Comentariu", en: "Comment" },
+  reviewCreatedAt: { ru: "Дата", ro: "Data", en: "Date" },
+  reviewGuest: { ru: "Сессия", ro: "Sesiune", en: "Session" },
+  reviewTable: { ru: "Стол", ro: "Masă", en: "Table" },
+  reviewWaiter: { ru: "Официант", ro: "Chelner", en: "Waiter" },
+  reviewLimit: { ru: "Лимит", ro: "Limită", en: "Limit" },
   tables: { ru: "Столы", ro: "Mese", en: "Tables" },
   floorPlan: { ru: "План зала", ro: "Plan sală", en: "Floor Plan" },
   stats: { ru: "Статистика", ro: "Statistici", en: "Stats" },
@@ -59,6 +88,7 @@ const dict: Record<string, Record<Lang, string>> = {
   otpLength: { ru: "Длина OTP", ro: "Lungime OTP", en: "OTP length" },
   otpDevEchoCode: { ru: "Показывать OTP в dev", ro: "Arată OTP în dev", en: "Show OTP in dev" },
   tipsPercentages: { ru: "Проценты чаевых (csv)", ro: "Procente bacșiș (csv)", en: "Tips percentages (csv)" },
+  none: { ru: "Без", ro: "Fără", en: "None" },
   parties: { ru: "Группы (Party)", ro: "Party", en: "Parties" },
   status: { ru: "Статус", ro: "Status", en: "Status" },
   table: { ru: "Стол", ro: "Masă", en: "Table" },
@@ -81,6 +111,12 @@ const dict: Record<string, Record<Lang, string>> = {
   paidBills: { ru: "Оплаченные счета", ro: "Note plătite", en: "Paid bills" },
   gross: { ru: "Выручка", ro: "Brut", en: "Gross" },
   tips: { ru: "Чаевые", ro: "Bacșiș", en: "Tips" },
+  motivation: { ru: "Мотивация официантов", ro: "Motivație chelneri", en: "Waiter motivation" },
+  avgSla: { ru: "Средний SLA (мин)", ro: "SLA mediu (min)", en: "Avg SLA (min)" },
+  badges: { ru: "Награды", ro: "Insigne", en: "Badges" },
+  badgeTopOrders: { ru: "Топ по заказам", ro: "Top comenzi", en: "Top orders" },
+  badgeTopTips: { ru: "Топ по чаевым", ro: "Top bacșiș", en: "Top tips" },
+  badgeBestSla: { ru: "Лучший SLA", ro: "Cel mai bun SLA", en: "Best SLA" },
   activeTables: { ru: "Активные столы", ro: "Mese active", en: "Active tables" },
   day: { ru: "День", ro: "Zi", en: "Day" },
   qty: { ru: "Кол-во", ro: "Cant.", en: "Qty" },
@@ -205,6 +241,7 @@ const dict: Record<string, Record<Lang, string>> = {
   deleteHallBlocked: { ru: "Нельзя удалить зал: есть привязанные столы. Сначала перенесите столы в другой зал.", ro: "Nu se poate șterge sala: există mese alocate. Mutați mesele în altă sală.", en: "Cannot delete hall: tables are assigned. Move tables first." },
   deleteHallFailed: { ru: "Ошибка удаления зала", ro: "Eroare la ștergere sală", en: "Failed to delete hall" },
   zones: { ru: "Зоны", ro: "Zone", en: "Zones" },
+  zoneWaiter: { ru: "Официант зоны", ro: "Chelner zonă", en: "Zone waiter" },
   zoneName: { ru: "Название зоны", ro: "Nume zonă", en: "Zone name" },
   addZone: { ru: "Добавить зону", ro: "Adaugă zonă", en: "Add zone" },
   qrNote: { ru: "QR содержит timestamp. Перегенерируйте перед печатью, если ссылка старая.", ro: "QR include timestamp. Regenerează înainte de tipărire dacă e vechi.", en: "QR links include a timestamp. Re-generate before printing if old." },
@@ -239,8 +276,14 @@ const dict: Record<string, Record<Lang, string>> = {
   genderFemale: { ru: "Женский", ro: "Feminin", en: "Female" },
   genderOther: { ru: "Другое", ro: "Altul", en: "Other" },
   photoUrl: { ru: "Фото (URL)", ro: "Foto (URL)", en: "Photo URL" },
+  rating: { ru: "Рейтинг (0–5)", ro: "Rating (0–5)", en: "Rating (0–5)" },
+  recommended: { ru: "Рекомендуемый", ro: "Recomandat", en: "Recommended" },
+  experienceYears: { ru: "Стаж (лет)", ro: "Experiență (ani)", en: "Experience (years)" },
+  favoriteItems: { ru: "Любимые блюда (через запятую)", ro: "Feluri preferate (separate prin virgulă)", en: "Favorite items (comma-separated)" },
   saveProfile: { ru: "Сохранить профиль", ro: "Salvează profilul", en: "Save profile" },
   invalidAge: { ru: "Неверный возраст (0–120)", ro: "Vârstă invalidă (0–120)", en: "Invalid age (0–120)" },
+  invalidRating: { ru: "Неверный рейтинг (0–5)", ro: "Rating invalid (0–5)", en: "Invalid rating (0–5)" },
+  invalidExperience: { ru: "Неверный стаж (0–80)", ro: "Experiență invalidă (0–80)", en: "Invalid experience (0–80)" },
   filterByUsername: { ru: "Фильтр по логину", ro: "Filtru după utilizator", en: "Filter by username" },
   allRoles: { ru: "Все роли", ro: "Toate rolurile", en: "All roles" },
   resetPassword: { ru: "Сбросить пароль", ro: "Resetează parola", en: "Reset password" },
@@ -393,6 +436,29 @@ type StaffUser = {
   age?: number | null;
   gender?: string | null;
   photoUrl?: string | null;
+  rating?: number | null;
+  recommended?: boolean | null;
+  experienceYears?: number | null;
+  favoriteItems?: string | null;
+};
+
+type StaffReview = {
+  id: number;
+  staffUserId: number;
+  staffUsername: string;
+  tableNumber?: number | null;
+  guestSessionId: number;
+  rating: number;
+  comment?: string | null;
+  createdAt?: string | null;
+};
+
+type BranchReview = {
+  id: number;
+  guestSessionId: number;
+  rating: number;
+  comment?: string | null;
+  createdAt?: string | null;
 };
 
 type BranchSettings = {
@@ -430,6 +496,8 @@ type StatsSummary = {
   grossCents: number;
   tipsCents: number;
   activeTablesCount: number;
+  avgBranchRating?: number;
+  branchReviewsCount?: number;
 };
 
 type StatsDailyRow = {
@@ -439,6 +507,14 @@ type StatsDailyRow = {
   paidBillsCount: number;
   grossCents: number;
   tipsCents: number;
+};
+
+type WaiterMotivationRow = {
+  staffUserId: number;
+  username: string;
+  ordersCount: number;
+  tipsCents: number;
+  avgSlaMinutes?: number | null;
 };
 
 type TopItemRow = {
@@ -555,7 +631,7 @@ export default function AdminPage() {
   const [planPan, setPlanPan] = useState({ x: 0, y: 0 });
   const [panMode, setPanMode] = useState(false);
   const [planBgUrl, setPlanBgUrl] = useState("");
-  const [planZones, setPlanZones] = useState<{ id: string; name: string; x: number; y: number; w: number; h: number; color: string }[]>([]);
+  const [planZones, setPlanZones] = useState<{ id: string; name: string; x: number; y: number; w: number; h: number; color: string; waiterId?: number | null }[]>([]);
   const planRef = useRef<HTMLDivElement | null>(null);
   const [dragWaiterId, setDragWaiterId] = useState<number | null>(null);
   const [dragOverTableId, setDragOverTableId] = useState<number | null>(null);
@@ -602,7 +678,21 @@ export default function AdminPage() {
     age: string;
     gender: string;
     photoUrl: string;
-  }>({ firstName: "", lastName: "", age: "", gender: "", photoUrl: "" });
+    rating: string;
+    recommended: boolean;
+    experienceYears: string;
+    favoriteItems: string;
+  }>({
+    firstName: "",
+    lastName: "",
+    age: "",
+    gender: "",
+    photoUrl: "",
+    rating: "",
+    recommended: false,
+    experienceYears: "",
+    favoriteItems: "",
+  });
   const [settings, setSettings] = useState<BranchSettings | null>(null);
   const [modGroups, setModGroups] = useState<ModifierGroup[]>([]);
   const [modOptions, setModOptions] = useState<Record<number, ModifierOption[]>>({});
@@ -620,12 +710,29 @@ export default function AdminPage() {
   const [daily, setDaily] = useState<StatsDailyRow[]>([]);
   const [topItems, setTopItems] = useState<TopItemRow[]>([]);
   const [topCategories, setTopCategories] = useState<TopCategoryRow[]>([]);
+  const [waiterMotivation, setWaiterMotivation] = useState<WaiterMotivationRow[]>([]);
+  const [waiterMotivationLoading, setWaiterMotivationLoading] = useState(false);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditBeforeId, setAuditBeforeId] = useState<number | "">("");
   const [auditAfterId, setAuditAfterId] = useState<number | "">("");
   const [auditAction, setAuditAction] = useState("");
   const [auditEntityType, setAuditEntityType] = useState("");
+  const [staffReviews, setStaffReviews] = useState<StaffReview[]>([]);
+  const [staffReviewLoading, setStaffReviewLoading] = useState(false);
+  const [staffReviewWaiterId, setStaffReviewWaiterId] = useState<number | "">("");
+  const [staffReviewLimit, setStaffReviewLimit] = useState(50);
+  const [branchReviews, setBranchReviews] = useState<BranchReview[]>([]);
+  const [branchReviewLoading, setBranchReviewLoading] = useState(false);
+  const [branchReviewLimit, setBranchReviewLimit] = useState(50);
+  const [branchReviewSummary, setBranchReviewSummary] = useState<{ avgRating: number; count: number } | null>(null);
+  const [branchReviewTableId, setBranchReviewTableId] = useState<number | "">("");
+  const [branchReviewHallId, setBranchReviewHallId] = useState<number | "">("");
+  const [branchReviewExportFrom, setBranchReviewExportFrom] = useState("");
+  const [branchReviewExportTo, setBranchReviewExportTo] = useState("");
+  const [chatExportFrom, setChatExportFrom] = useState("");
+  const [chatExportTo, setChatExportTo] = useState("");
+  const [chatExportWaiterId, setChatExportWaiterId] = useState<number | "">("");
   const [auditActor, setAuditActor] = useState("");
   const [auditFrom, setAuditFrom] = useState("");
   const [auditTo, setAuditTo] = useState("");
@@ -694,6 +801,16 @@ export default function AdminPage() {
   const [staffFilterText, setStaffFilterText] = useState("");
   const [staffFilterRole, setStaffFilterRole] = useState<string | "">("");
   const [staffFilterActive, setStaffFilterActive] = useState<string | "">("");
+  const [staffSelectedIds, setStaffSelectedIds] = useState<number[]>([]);
+  const [bulkRole, setBulkRole] = useState<string>("__SKIP__");
+  const [bulkActive, setBulkActive] = useState<string>("__SKIP__");
+  const [bulkFirstName, setBulkFirstName] = useState("");
+  const [bulkLastName, setBulkLastName] = useState("");
+  const [bulkAge, setBulkAge] = useState("");
+  const [bulkGender, setBulkGender] = useState("");
+  const [bulkPhotoUrl, setBulkPhotoUrl] = useState("");
+  const [bulkApplying, setBulkApplying] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState(0);
   const [newModGroupNameRu, setNewModGroupNameRu] = useState("");
   const [newModOptionNameRu, setNewModOptionNameRu] = useState("");
   const [newModOptionPrice, setNewModOptionPrice] = useState(0);
@@ -1658,6 +1775,48 @@ export default function AdminPage() {
     loadAll();
   }
 
+  async function applyStaffBulk() {
+    if (staffSelectedIds.length === 0) {
+      alert(t(lang, "staffNoSelection"));
+      return;
+    }
+    const ok = window.confirm(t(lang, "staffBulkConfirm"));
+    if (!ok) return;
+    const patch: any = {};
+    if (bulkRole !== "__SKIP__") patch.role = bulkRole;
+    if (bulkActive !== "__SKIP__") patch.isActive = bulkActive === "ACTIVE";
+    if (bulkFirstName.trim()) patch.firstName = bulkFirstName.trim();
+    if (bulkLastName.trim()) patch.lastName = bulkLastName.trim();
+    if (bulkAge.trim()) patch.age = Number(bulkAge);
+    if (bulkGender) patch.gender = bulkGender;
+    if (bulkPhotoUrl.trim()) patch.photoUrl = bulkPhotoUrl.trim();
+    if (Object.keys(patch).length === 0) return;
+    setBulkApplying(true);
+    setBulkProgress(0);
+    try {
+      const res = await api(`/api/admin/staff/bulk`, {
+        method: "POST",
+        body: JSON.stringify({ ids: staffSelectedIds, patch }),
+      });
+      const body = await res.json().catch(() => ({}));
+      setBulkProgress(body?.updated ?? staffSelectedIds.length);
+      alert(t(lang, "staffBulkDone"));
+      setBulkRole("__SKIP__");
+      setBulkActive("__SKIP__");
+      setBulkFirstName("");
+      setBulkLastName("");
+      setBulkAge("");
+      setBulkGender("");
+      setBulkPhotoUrl("");
+      setStaffSelectedIds([]);
+      loadAll();
+    } catch (e: any) {
+      alert(e?.message ?? t(lang, "staffBulkError"));
+    } finally {
+      setBulkApplying(false);
+    }
+  }
+
   async function resetStaffPassword(su: StaffUser) {
     const pass = prompt("New password");
     if (!pass) return;
@@ -1676,6 +1835,10 @@ export default function AdminPage() {
       age: su.age != null ? String(su.age) : "",
       gender: su.gender ?? "",
       photoUrl: su.photoUrl ?? "",
+      rating: su.rating != null ? String(su.rating) : "",
+      recommended: !!su.recommended,
+      experienceYears: su.experienceYears != null ? String(su.experienceYears) : "",
+      favoriteItems: su.favoriteItems ?? "",
     });
   }
 
@@ -1683,6 +1846,16 @@ export default function AdminPage() {
     const ageVal = profileDraft.age.trim() ? Number(profileDraft.age.trim()) : null;
     if (ageVal != null && (Number.isNaN(ageVal) || ageVal < 0 || ageVal > 120)) {
       alert(t(lang, "invalidAge"));
+      return;
+    }
+    const ratingVal = profileDraft.rating.trim() ? Number(profileDraft.rating.trim()) : null;
+    if (ratingVal != null && (Number.isNaN(ratingVal) || ratingVal < 0 || ratingVal > 5)) {
+      alert(t(lang, "invalidRating"));
+      return;
+    }
+    const expVal = profileDraft.experienceYears.trim() ? Number(profileDraft.experienceYears.trim()) : null;
+    if (expVal != null && (Number.isNaN(expVal) || expVal < 0 || expVal > 80)) {
+      alert(t(lang, "invalidExperience"));
       return;
     }
     await api(`/api/admin/staff/${su.id}`, {
@@ -1693,6 +1866,10 @@ export default function AdminPage() {
         age: Number.isNaN(ageVal) ? null : ageVal,
         gender: profileDraft.gender,
         photoUrl: profileDraft.photoUrl,
+        rating: Number.isNaN(ratingVal) ? null : ratingVal,
+        recommended: profileDraft.recommended,
+        experienceYears: Number.isNaN(expVal) ? null : expVal,
+        favoriteItems: profileDraft.favoriteItems,
       }),
     });
     setProfileEditingId(null);
@@ -1744,6 +1921,70 @@ export default function AdminPage() {
     setTopItems(await resTopItems.json());
     const resTopCategories = await api(`/api/admin/stats/top-categories?${qsTop.toString()}`);
     setTopCategories(await resTopCategories.json());
+    await loadWaiterMotivation(qs);
+  }
+
+  async function loadWaiterMotivation(qs?: URLSearchParams) {
+    setWaiterMotivationLoading(true);
+    try {
+      const params = qs ? new URLSearchParams(qs.toString()) : new URLSearchParams();
+      if (!qs) {
+        if (statsFrom) params.set("from", statsFrom);
+        if (statsTo) params.set("to", statsTo);
+        if (statsHallId !== "") params.set("hallId", String(statsHallId));
+        if (statsHallPlanId !== "") params.set("planId", String(statsHallPlanId));
+      }
+      const res = await api(`/api/admin/stats/waiters-motivation?${params.toString()}`);
+      setWaiterMotivation(await res.json());
+    } finally {
+      setWaiterMotivationLoading(false);
+    }
+  }
+
+  async function loadStaffReviews() {
+    setStaffReviewLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (staffReviewWaiterId) params.set("staffUserId", String(staffReviewWaiterId));
+      if (staffReviewLimit) params.set("limit", String(staffReviewLimit));
+      const res = await api(`/api/admin/staff-reviews?${params.toString()}`);
+      setStaffReviews(await res.json());
+    } finally {
+      setStaffReviewLoading(false);
+    }
+  }
+
+  async function loadBranchReviews() {
+    setBranchReviewLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (branchReviewLimit) params.set("limit", String(branchReviewLimit));
+      if (branchReviewTableId !== "") params.set("tableId", String(branchReviewTableId));
+      if (branchReviewHallId !== "") params.set("hallId", String(branchReviewHallId));
+      const res = await api(`/api/admin/branch-reviews?${params.toString()}`);
+      setBranchReviews(await res.json());
+      const summaryRes = await api(`/api/admin/branch-reviews/summary?${params.toString()}`);
+      setBranchReviewSummary(await summaryRes.json());
+    } finally {
+      setBranchReviewLoading(false);
+    }
+  }
+
+  async function downloadBranchReviewsCsv() {
+    const qs = new URLSearchParams();
+    if (branchReviewExportFrom) qs.set("from", branchReviewExportFrom);
+    if (branchReviewExportTo) qs.set("to", branchReviewExportTo);
+    if (branchReviewTableId !== "") qs.set("tableId", String(branchReviewTableId));
+    if (branchReviewHallId !== "") qs.set("hallId", String(branchReviewHallId));
+    const res = await api(`/api/admin/branch-reviews/export.csv?${qs.toString()}`);
+    const text = await res.text();
+    const blob = new Blob([text], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "branch-reviews.csv";
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   async function downloadCsv() {
@@ -1763,6 +2004,22 @@ export default function AdminPage() {
     document.body.appendChild(a);
     a.click();
     a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function downloadChatCsv() {
+    const qs = new URLSearchParams();
+    if (chatExportFrom) qs.set("from", chatExportFrom);
+    if (chatExportTo) qs.set("to", chatExportTo);
+    if (chatExportWaiterId !== "") qs.set("waiterId", String(chatExportWaiterId));
+    const res = await api(`/api/admin/chat/export.csv?${qs.toString()}`);
+    const text = await res.text();
+    const blob = new Blob([text], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "chat-export.csv";
+    a.click();
     URL.revokeObjectURL(url);
   }
 
@@ -2207,7 +2464,7 @@ export default function AdminPage() {
           )}
           <label>
             {t(lang, "waiter")}
-            <select value={statsWaiterId} onChange={(e) => setStatsWaiterId(e.target.value ? Number(e.target.value) : "")}>
+            <select value={chatExportWaiterId} onChange={(e) => setChatExportWaiterId(e.target.value ? Number(e.target.value) : "")}>
               <option value="">{t(lang, "all")}</option>
               {staff.filter((s) => s.role === "WAITER").map((w) => (
                 <option key={w.id} value={w.id}>{w.username} #{w.id}</option>
@@ -2227,6 +2484,11 @@ export default function AdminPage() {
             <div>{t(lang, "gross")}: {money(stats.grossCents)}</div>
             <div>{t(lang, "tips")}: {money(stats.tipsCents)}</div>
             <div>{t(lang, "activeTables")}: {stats.activeTablesCount}</div>
+            {stats.avgBranchRating != null && (
+              <div>
+                {t(lang, "branchReviewsAvg")}: {stats.avgBranchRating.toFixed(2)} • {t(lang, "branchReviewsCount")}: {stats.branchReviewsCount ?? 0}
+              </div>
+            )}
           </div>
         )}
         {daily.length > 0 && (
@@ -2312,6 +2574,67 @@ export default function AdminPage() {
             </div>
           </div>
         )}
+
+        <div style={{ marginTop: 16, border: "1px solid #eee", borderRadius: 8, padding: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <strong>{t(lang, "motivation")}</strong>
+            {waiterMotivationLoading && <span style={{ fontSize: 12, color: "#666" }}>{t(lang, "loading")}</span>}
+          </div>
+          {waiterMotivation.length === 0 ? (
+            <div style={{ marginTop: 6, color: "#666" }}>{t(lang, "noData")}</div>
+          ) : (
+            (() => {
+              const maxOrders = Math.max(...waiterMotivation.map((r) => r.ordersCount));
+              const maxTips = Math.max(...waiterMotivation.map((r) => r.tipsCents));
+              const slaValues = waiterMotivation.map((r) => r.avgSlaMinutes).filter((v): v is number => v != null);
+              const bestSla = slaValues.length ? Math.min(...slaValues) : null;
+              return (
+            <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 6 }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "waiter")}</th>
+                  <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "ordersCount")}</th>
+                  <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "tips")}</th>
+                  <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "avgSla")}</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "badges")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {waiterMotivation.map((r) => (
+                  <tr key={r.staffUserId}>
+                    <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{r.username}</td>
+                    <td style={{ padding: "6px 4px", textAlign: "right", borderBottom: "1px solid #f0f0f0" }}>{r.ordersCount}</td>
+                    <td style={{ padding: "6px 4px", textAlign: "right", borderBottom: "1px solid #f0f0f0" }}>{money(r.tipsCents)}</td>
+                    <td style={{ padding: "6px 4px", textAlign: "right", borderBottom: "1px solid #f0f0f0" }}>
+                      {r.avgSlaMinutes != null ? r.avgSlaMinutes.toFixed(1) : "—"}
+                    </td>
+                    <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        {r.ordersCount === maxOrders && maxOrders > 0 && (
+                          <span style={{ fontSize: 11, padding: "2px 6px", background: "#eef2ff", color: "#3730a3", borderRadius: 999 }}>
+                            {t(lang, "badgeTopOrders")}
+                          </span>
+                        )}
+                        {r.tipsCents === maxTips && maxTips > 0 && (
+                          <span style={{ fontSize: 11, padding: "2px 6px", background: "#ecfeff", color: "#0f766e", borderRadius: 999 }}>
+                            {t(lang, "badgeTopTips")}
+                          </span>
+                        )}
+                        {bestSla != null && r.avgSlaMinutes != null && r.avgSlaMinutes === bestSla && (
+                          <span style={{ fontSize: 11, padding: "2px 6px", background: "#fef3c7", color: "#92400e", borderRadius: 999 }}>
+                            {t(lang, "badgeBestSla")}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+              );
+            })()
+          )}
+        </div>
       </section>
 
       <section style={{ marginTop: 24 }}>
@@ -3333,6 +3656,19 @@ export default function AdminPage() {
                     }
                     placeholder="H"
                   />
+                  <select
+                    value={z.waiterId ?? ""}
+                    onChange={(e) =>
+                      setPlanZones((prev) =>
+                        prev.map((p, i) => (i === zi ? { ...p, waiterId: e.target.value ? Number(e.target.value) : null } : p))
+                      )
+                    }
+                  >
+                    <option value="">{t(lang, "zoneWaiter")}: {t(lang, "none")}</option>
+                    {staff.filter((s) => s.role === "WAITER").map((w) => (
+                      <option key={w.id} value={w.id}>{w.username}</option>
+                    ))}
+                  </select>
                 </div>
               ))}
               <button
@@ -3340,7 +3676,7 @@ export default function AdminPage() {
                 onClick={() =>
                   setPlanZones((prev) => [
                     ...prev,
-                    { id: String(Date.now()), name: t(lang, "zone"), x: 10, y: 10, w: 30, h: 20, color: "#6C5CE7" },
+                    { id: String(Date.now()), name: t(lang, "zone"), x: 10, y: 10, w: 30, h: 20, color: "#6C5CE7", waiterId: null },
                   ])
                 }
               >
@@ -3519,6 +3855,56 @@ export default function AdminPage() {
           <button onClick={() => { setStaffFilterText(""); setStaffFilterRole(""); setStaffFilterActive(""); }}>{t(lang, "clear")}</button>
         </div>
         <div style={{ marginTop: 10 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
+            <strong>{t(lang, "staffBulk")}</strong>
+            <span style={{ color: "#666" }}>{t(lang, "staffSelected")}: {staffSelectedIds.length}</span>
+            <button
+              onClick={() => {
+                const filtered = staff
+                  .filter((su) => {
+                    const q = staffFilterText.trim().toLowerCase();
+                    if (q && !su.username.toLowerCase().includes(q)) return false;
+                    if (staffFilterRole && su.role !== staffFilterRole) return false;
+                    if (staffFilterActive) {
+                      const active = staffFilterActive === "ACTIVE";
+                      if (su.isActive !== active) return false;
+                    }
+                    return true;
+                  })
+                  .map((s) => s.id);
+                setStaffSelectedIds(filtered);
+              }}
+            >
+              {t(lang, "staffSelectAll")}
+            </button>
+            <button onClick={() => setStaffSelectedIds([])}>{t(lang, "staffClearSelection")}</button>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
+            <select value={bulkRole} onChange={(e) => setBulkRole(e.target.value)}>
+              <option value="__SKIP__">{t(lang, "staffBulkRole")} — {t(lang, "staffBulkSkip")}</option>
+              <option value="WAITER">WAITER</option>
+              <option value="KITCHEN">KITCHEN</option>
+              <option value="ADMIN">ADMIN</option>
+            </select>
+            <select value={bulkActive} onChange={(e) => setBulkActive(e.target.value)}>
+              <option value="__SKIP__">{t(lang, "staffBulkActive")} — {t(lang, "staffBulkSkip")}</option>
+              <option value="ACTIVE">{t(lang, "active")}</option>
+              <option value="INACTIVE">{t(lang, "inactive")}</option>
+            </select>
+            <input placeholder={t(lang, "firstName")} value={bulkFirstName} onChange={(e) => setBulkFirstName(e.target.value)} />
+            <input placeholder={t(lang, "lastName")} value={bulkLastName} onChange={(e) => setBulkLastName(e.target.value)} />
+            <input placeholder={t(lang, "age")} value={bulkAge} onChange={(e) => setBulkAge(e.target.value)} style={{ width: 90 }} />
+            <select value={bulkGender} onChange={(e) => setBulkGender(e.target.value)}>
+              <option value="">{t(lang, "gender")} — {t(lang, "staffBulkSkip")}</option>
+              <option value="male">{t(lang, "genderMale")}</option>
+              <option value="female">{t(lang, "genderFemale")}</option>
+              <option value="other">{t(lang, "genderOther")}</option>
+            </select>
+            <input placeholder={t(lang, "photoUrl")} value={bulkPhotoUrl} onChange={(e) => setBulkPhotoUrl(e.target.value)} style={{ minWidth: 240 }} />
+            <button onClick={applyStaffBulk} disabled={bulkApplying}>
+              {bulkApplying ? `${t(lang, "staffApplyBulk")} (${bulkProgress}/${staffSelectedIds.length})` : t(lang, "staffApplyBulk")}
+            </button>
+          </div>
           {staff
             .filter((su) => {
               const q = staffFilterText.trim().toLowerCase();
@@ -3532,6 +3918,44 @@ export default function AdminPage() {
             })
             .map((su) => (
             <div key={su.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "6px 0", borderBottom: "1px solid #eee" }}>
+              <input
+                type="checkbox"
+                checked={staffSelectedIds.includes(su.id)}
+                onChange={(e) => {
+                  setStaffSelectedIds((prev) =>
+                    e.target.checked ? [...prev, su.id] : prev.filter((id) => id !== su.id)
+                  );
+                }}
+              />
+              {su.role === "WAITER" && (
+                su.photoUrl ? (
+                  <Image
+                    src={su.photoUrl}
+                    alt={su.firstName ? `${su.firstName} ${su.lastName ?? ""}`.trim() : su.username}
+                    width={28}
+                    height={28}
+                    style={{ borderRadius: "50%", objectFit: "cover" }}
+                    unoptimized
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: "50%",
+                      background: "#f1f3f5",
+                      color: "#667085",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 12,
+                      fontWeight: 600,
+                    }}
+                  >
+                    {(su.firstName || su.lastName) ? `${su.firstName?.[0] ?? ""}${su.lastName?.[0] ?? ""}`.toUpperCase() : "W"}
+                  </div>
+                )
+              )}
               <strong>{su.username}</strong>
               {su.role === "WAITER" && su.firstName && (
                 <span style={{ color: "#6b7280" }}>{su.firstName}</span>
@@ -3567,6 +3991,12 @@ export default function AdminPage() {
                 onChange={(e) => setProfileDraft({ ...profileDraft, age: e.target.value })}
                 style={{ width: 90 }}
               />
+              <input
+                placeholder={t(lang, "rating")}
+                value={profileDraft.rating}
+                onChange={(e) => setProfileDraft({ ...profileDraft, rating: e.target.value })}
+                style={{ width: 90 }}
+              />
               <select
                 value={profileDraft.gender}
                 onChange={(e) => setProfileDraft({ ...profileDraft, gender: e.target.value })}
@@ -3577,9 +4007,29 @@ export default function AdminPage() {
                 <option value="other">{t(lang, "genderOther")}</option>
               </select>
               <input
+                placeholder={t(lang, "experienceYears")}
+                value={profileDraft.experienceYears}
+                onChange={(e) => setProfileDraft({ ...profileDraft, experienceYears: e.target.value })}
+                style={{ width: 140 }}
+              />
+              <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <input
+                  type="checkbox"
+                  checked={profileDraft.recommended}
+                  onChange={(e) => setProfileDraft({ ...profileDraft, recommended: e.target.checked })}
+                />
+                {t(lang, "recommended")}
+              </label>
+              <input
                 placeholder={t(lang, "photoUrl")}
                 value={profileDraft.photoUrl}
                 onChange={(e) => setProfileDraft({ ...profileDraft, photoUrl: e.target.value })}
+                style={{ minWidth: 240 }}
+              />
+              <input
+                placeholder={t(lang, "favoriteItems")}
+                value={profileDraft.favoriteItems}
+                onChange={(e) => setProfileDraft({ ...profileDraft, favoriteItems: e.target.value })}
                 style={{ minWidth: 240 }}
               />
               <button onClick={() => {
@@ -3590,6 +4040,139 @@ export default function AdminPage() {
             </div>
           </div>
         )}
+      </section>
+
+      <section style={{ marginTop: 24 }}>
+        <h2>{t(lang, "staffReviews")}</h2>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <select value={staffReviewWaiterId} onChange={(e) => setStaffReviewWaiterId(e.target.value ? Number(e.target.value) : "")}>
+            <option value="">{t(lang, "reviewWaiter")} — {t(lang, "all")}</option>
+            {staff.filter((s) => s.role === "WAITER").map((s) => (
+              <option key={s.id} value={s.id}>{s.username}</option>
+            ))}
+          </select>
+          <input
+            type="number"
+            min={1}
+            max={200}
+            placeholder={t(lang, "reviewLimit")}
+            value={staffReviewLimit}
+            onChange={(e) => setStaffReviewLimit(Number(e.target.value))}
+            style={{ width: 120 }}
+          />
+          <button onClick={loadStaffReviews} disabled={staffReviewLoading}>
+            {staffReviewLoading ? t(lang, "loading") : t(lang, "loadReviews")}
+          </button>
+        </div>
+        <div style={{ marginTop: 10 }}>
+          {staffReviews.length === 0 ? (
+            <div style={{ color: "#666" }}>{t(lang, "noReviews")}</div>
+          ) : (
+            <div style={{ display: "grid", gap: 8 }}>
+              {staffReviews.map((r) => (
+                <div key={r.id} style={{ border: "1px solid #eee", borderRadius: 8, padding: 10 }}>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                    <strong>{t(lang, "reviewWaiter")}: {r.staffUsername}</strong>
+                    {r.tableNumber != null && <span>{t(lang, "reviewTable")}: {r.tableNumber}</span>}
+                    <span>{t(lang, "reviewRating")}: {r.rating}/5</span>
+                    {r.createdAt && <span>{t(lang, "reviewCreatedAt")}: {new Date(r.createdAt).toLocaleString()}</span>}
+                    <span>{t(lang, "reviewGuest")}: {r.guestSessionId}</span>
+                  </div>
+                  {r.comment && <div style={{ marginTop: 6 }}>{t(lang, "reviewComment")}: {r.comment}</div>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section style={{ marginTop: 24 }}>
+        <h2>{t(lang, "branchReviews")}</h2>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <label>{t(lang, "reviewLimit")}
+            <input type="number" min={1} max={200} value={branchReviewLimit} onChange={(e) => setBranchReviewLimit(Number(e.target.value))} style={{ width: 120, marginLeft: 6 }} />
+          </label>
+          <label>
+            {t(lang, "hall")}
+            <select value={branchReviewHallId} onChange={(e) => setBranchReviewHallId(e.target.value ? Number(e.target.value) : "")}>
+              <option value="">{t(lang, "all")}</option>
+              {halls.map((h) => (
+                <option key={h.id} value={h.id}>{h.name}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            {t(lang, "table")}
+            <select value={branchReviewTableId} onChange={(e) => setBranchReviewTableId(e.target.value ? Number(e.target.value) : "")}>
+              <option value="">{t(lang, "all")}</option>
+              {tables.map((t) => (
+                <option key={t.id} value={t.id}>#{t.number}</option>
+              ))}
+            </select>
+          </label>
+          <button onClick={loadBranchReviews} disabled={branchReviewLoading}>
+            {branchReviewLoading ? t(lang, "loading") : t(lang, "loadReviews")}
+          </button>
+          {branchReviewSummary && (
+            <span style={{ color: "#666" }}>
+              {t(lang, "branchReviewsAvg")}: {branchReviewSummary.avgRating.toFixed(2)} • {t(lang, "branchReviewsCount")}: {branchReviewSummary.count}
+            </span>
+          )}
+        </div>
+        <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <strong>{t(lang, "branchReviewsExport")}</strong>
+          <label>
+            {t(lang, "from")}
+            <input type="date" value={branchReviewExportFrom} onChange={(e) => setBranchReviewExportFrom(e.target.value)} />
+          </label>
+          <label>
+            {t(lang, "to")}
+            <input type="date" value={branchReviewExportTo} onChange={(e) => setBranchReviewExportTo(e.target.value)} />
+          </label>
+          <button onClick={downloadBranchReviewsCsv}>{t(lang, "branchReviewsDownload")}</button>
+        </div>
+        <div style={{ marginTop: 10 }}>
+          {branchReviews.length === 0 ? (
+            <div style={{ color: "#666" }}>{t(lang, "noReviews")}</div>
+          ) : (
+            <div style={{ display: "grid", gap: 8 }}>
+              {branchReviews.map((r) => (
+                <div key={r.id} style={{ border: "1px solid #eee", borderRadius: 8, padding: 10 }}>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                    <span>{t(lang, "reviewRating")}: {r.rating}/5</span>
+                    {r.createdAt && <span>{t(lang, "reviewCreatedAt")}: {new Date(r.createdAt).toLocaleString()}</span>}
+                    <span>{t(lang, "reviewGuest")}: {r.guestSessionId}</span>
+                  </div>
+                  {r.comment && <div style={{ marginTop: 6 }}>{t(lang, "reviewComment")}: {r.comment}</div>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section style={{ marginTop: 24 }}>
+        <h2>{t(lang, "chatExport")}</h2>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <label>
+            {t(lang, "from")}
+            <input type="date" value={chatExportFrom} onChange={(e) => setChatExportFrom(e.target.value)} />
+          </label>
+          <label>
+            {t(lang, "to")}
+            <input type="date" value={chatExportTo} onChange={(e) => setChatExportTo(e.target.value)} />
+          </label>
+          <label>
+            {t(lang, "waiter")}
+            <select value={statsWaiterId} onChange={(e) => setStatsWaiterId(e.target.value ? Number(e.target.value) : "")}>
+              <option value="">{t(lang, "all")}</option>
+              {staff.filter((s) => s.role === "WAITER").map((w) => (
+                <option key={w.id} value={w.id}>{w.username} #{w.id}</option>
+              ))}
+            </select>
+          </label>
+          <button onClick={downloadChatCsv}>{t(lang, "chatExportDownload")}</button>
+        </div>
       </section>
 
       <section style={{ marginTop: 24 }}>

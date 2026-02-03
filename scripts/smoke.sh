@@ -12,8 +12,26 @@ PHONE_E164="${PHONE_E164:-+37369000000}"
 LOCALE="${LOCALE:-ru}"
 
 if [[ -z "$TABLE_PUBLIC_ID" ]]; then
-  echo "Set TABLE_PUBLIC_ID before running."
-  exit 1
+  echo "==> Resolve tablePublicId"
+  TABLE_PUBLIC_ID="$(curl -sS -u "${ADMIN_USER}:${ADMIN_PASS}" \
+    "${API_BASE}/api/admin/tables" | python3 - <<'PY'
+import json,sys
+data=json.load(sys.stdin)
+print(data[0]["publicId"] if data else "")
+PY
+)"
+  if [[ -z "$TABLE_PUBLIC_ID" ]]; then
+    echo "==> Create table"
+    CREATED_JSON="$(curl -sS -u "${ADMIN_USER}:${ADMIN_PASS}" \
+      -H "Content-Type: application/json" \
+      -X POST "${API_BASE}/api/admin/tables" \
+      -d "{\"number\":1}")"
+    TABLE_PUBLIC_ID="$(python3 - <<'PY'
+import json,sys
+print(json.load(sys.stdin)["publicId"])
+PY
+<<<"$CREATED_JSON")"
+  fi
 fi
 
 echo "==> Fetch signed URL for table ${TABLE_PUBLIC_ID}"

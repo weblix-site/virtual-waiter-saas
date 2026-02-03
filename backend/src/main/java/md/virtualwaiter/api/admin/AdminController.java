@@ -21,10 +21,14 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.util.regex.Pattern;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -32,7 +36,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 @RestController
 @RequestMapping("/api/admin")
 public class AdminController {
+  private static final Logger LOG = LoggerFactory.getLogger(AdminController.class);
   private final StaffUserRepo staffUserRepo;
+  private final StaffReviewRepo staffReviewRepo;
+  private final ChatMessageRepo chatMessageRepo;
+  private final BranchReviewRepo branchReviewRepo;
   private final MenuCategoryRepo categoryRepo;
   private final MenuItemRepo itemRepo;
   private final CafeTableRepo tableRepo;
@@ -55,9 +63,15 @@ public class AdminController {
   private final TablePartyRepo partyRepo;
   private final GuestSessionRepo guestSessionRepo;
   private final CurrencyRepo currencyRepo;
+  private final int maxPhotoUrlLength;
+  private final int maxPhotoUrlsCount;
+  private final Set<String> allowedPhotoExts;
 
   public AdminController(
     StaffUserRepo staffUserRepo,
+    StaffReviewRepo staffReviewRepo,
+    ChatMessageRepo chatMessageRepo,
+    BranchReviewRepo branchReviewRepo,
     MenuCategoryRepo categoryRepo,
     MenuItemRepo itemRepo,
     CafeTableRepo tableRepo,
@@ -79,9 +93,15 @@ public class AdminController {
     AuditLogRepo auditLogRepo,
     TablePartyRepo partyRepo,
     GuestSessionRepo guestSessionRepo,
-    CurrencyRepo currencyRepo
+    CurrencyRepo currencyRepo,
+    @Value("${app.media.maxPhotoUrlLength:512}") int maxPhotoUrlLength,
+    @Value("${app.media.maxPhotoUrlsCount:6}") int maxPhotoUrlsCount,
+    @Value("${app.media.allowedPhotoExts:jpg,jpeg,png,webp,gif}") String allowedPhotoExts
   ) {
     this.staffUserRepo = staffUserRepo;
+    this.staffReviewRepo = staffReviewRepo;
+    this.chatMessageRepo = chatMessageRepo;
+    this.branchReviewRepo = branchReviewRepo;
     this.categoryRepo = categoryRepo;
     this.itemRepo = itemRepo;
     this.tableRepo = tableRepo;
@@ -104,6 +124,9 @@ public class AdminController {
     this.partyRepo = partyRepo;
     this.guestSessionRepo = guestSessionRepo;
     this.currencyRepo = currencyRepo;
+    this.maxPhotoUrlLength = maxPhotoUrlLength;
+    this.maxPhotoUrlsCount = maxPhotoUrlsCount;
+    this.allowedPhotoExts = parseExts(allowedPhotoExts);
   }
 
   private StaffUser current(Authentication auth) {
@@ -1086,7 +1109,7 @@ public class AdminController {
     it.allergens = req.allergens;
     it.weight = req.weight;
     it.tags = req.tags;
-    it.photoUrls = req.photoUrls;
+    it.photoUrls = sanitizePhotoUrls(req.photoUrls);
     it.kcal = req.kcal;
     it.proteinG = req.proteinG;
     it.fatG = req.fatG;
@@ -1162,7 +1185,7 @@ public class AdminController {
     if (req.allergens != null) it.allergens = req.allergens;
     if (req.weight != null) it.weight = req.weight;
     if (req.tags != null) it.tags = req.tags;
-    if (req.photoUrls != null) it.photoUrls = req.photoUrls;
+    if (req.photoUrls != null) it.photoUrls = sanitizePhotoUrls(req.photoUrls);
     if (req.kcal != null) it.kcal = req.kcal;
     if (req.proteinG != null) it.proteinG = req.proteinG;
     if (req.fatG != null) it.fatG = req.fatG;
@@ -1474,7 +1497,11 @@ public class AdminController {
     String lastName,
     Integer age,
     String gender,
-    String photoUrl
+    String photoUrl,
+    Integer rating,
+    Boolean recommended,
+    Integer experienceYears,
+    String favoriteItems
   ) {}
   public record CreateStaffUserRequest(
     @NotBlank String username,
@@ -1484,7 +1511,11 @@ public class AdminController {
     String lastName,
     Integer age,
     String gender,
-    String photoUrl
+    String photoUrl,
+    Integer rating,
+    Boolean recommended,
+    Integer experienceYears,
+    String favoriteItems
   ) {}
   public record UpdateStaffUserRequest(
     String password,
@@ -1494,7 +1525,48 @@ public class AdminController {
     String lastName,
     Integer age,
     String gender,
-    String photoUrl
+    String photoUrl,
+    Integer rating,
+    Boolean recommended,
+    Integer experienceYears,
+    String favoriteItems
+  ) {}
+  public record BulkStaffUpdateRequest(
+    List<Long> ids,
+    UpdateStaffUserRequest patch
+  ) {}
+  public record BulkStaffUpdateResponse(int updated) {}
+
+  public record StaffReviewDto(
+    long id,
+    long staffUserId,
+    String staffUsername,
+    Integer tableNumber,
+    long guestSessionId,
+    int rating,
+    String comment,
+    String createdAt
+  ) {}
+
+  public record BranchReviewDto(
+    long id,
+    long guestSessionId,
+    int rating,
+    String comment,
+    String createdAt
+  ) {}
+
+  public record BranchReviewSummary(double avgRating, long count) {}
+
+  public record ChatExportRow(
+    long id,
+    long guestSessionId,
+    long tableId,
+    Integer tableNumber,
+    String senderRole,
+    Long staffUserId,
+    String message,
+    String createdAt
   ) {}
 
   @GetMapping("/staff")
@@ -1506,7 +1578,8 @@ public class AdminController {
     for (StaffUser su : users) {
       out.add(new StaffUserDto(
         su.id, su.branchId, su.username, su.role, su.isActive,
-        su.firstName, su.lastName, su.age, su.gender, su.photoUrl
+        su.firstName, su.lastName, su.age, su.gender, su.photoUrl,
+        su.rating, su.recommended, su.experienceYears, su.favoriteItems
       ));
     }
     return out;
@@ -1534,12 +1607,17 @@ public class AdminController {
     su.lastName = trimOrNull(req.lastName);
     su.age = sanitizeAge(req.age);
     su.gender = sanitizeGender(req.gender);
-    su.photoUrl = trimOrNull(req.photoUrl);
+    su.photoUrl = sanitizePhotoUrl(req.photoUrl);
+    su.rating = sanitizeRating(req.rating);
+    su.recommended = req.recommended != null ? req.recommended : Boolean.FALSE;
+    su.experienceYears = sanitizeExperienceYears(req.experienceYears);
+    su.favoriteItems = sanitizeFavoriteItems(req.favoriteItems);
     su = staffUserRepo.save(su);
     auditService.log(u, "CREATE", "StaffUser", su.id, null);
     return new StaffUserDto(
       su.id, su.branchId, su.username, su.role, su.isActive,
-      su.firstName, su.lastName, su.age, su.gender, su.photoUrl
+      su.firstName, su.lastName, su.age, su.gender, su.photoUrl,
+      su.rating, su.recommended, su.experienceYears, su.favoriteItems
     );
   }
 
@@ -1549,28 +1627,37 @@ public class AdminController {
     StaffUser su = staffUserRepo.findById(id)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Staff user not found"));
     requireBranchAccess(u, su.branchId);
-    if (req.password != null && !req.password.isBlank()) {
-      su.passwordHash = passwordEncoder.encode(req.password);
-    }
-    if (req.role != null) {
-      String role = req.role.trim().toUpperCase(Locale.ROOT);
-      if (!Set.of("WAITER", "KITCHEN", "ADMIN").contains(role)) {
-        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported role");
-      }
-      su.role = role;
-    }
-    if (req.isActive != null) su.isActive = req.isActive;
-    if (req.firstName != null) su.firstName = trimOrNull(req.firstName);
-    if (req.lastName != null) su.lastName = trimOrNull(req.lastName);
-    if (req.age != null) su.age = sanitizeAge(req.age);
-    if (req.gender != null) su.gender = sanitizeGender(req.gender);
-    if (req.photoUrl != null) su.photoUrl = trimOrNull(req.photoUrl);
+    applyStaffPatch(su, req);
     su = staffUserRepo.save(su);
     auditService.log(u, "UPDATE", "StaffUser", su.id, null);
     return new StaffUserDto(
       su.id, su.branchId, su.username, su.role, su.isActive,
-      su.firstName, su.lastName, su.age, su.gender, su.photoUrl
+      su.firstName, su.lastName, su.age, su.gender, su.photoUrl,
+      su.rating, su.recommended, su.experienceYears, su.favoriteItems
     );
+  }
+
+  @PostMapping("/staff/bulk")
+  @Transactional
+  public BulkStaffUpdateResponse bulkUpdateStaff(@RequestBody BulkStaffUpdateRequest req, Authentication auth) {
+    StaffUser u = requireAdmin(auth);
+    if (req == null || req.ids == null || req.ids.isEmpty() || req.patch == null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "ids and patch are required");
+    }
+    int updated = 0;
+    for (Long id : req.ids) {
+      if (id == null) continue;
+      StaffUser su = staffUserRepo.findById(id)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Staff user not found"));
+      requireBranchAccess(u, su.branchId);
+      applyStaffPatch(su, req.patch);
+      staffUserRepo.save(su);
+      updated++;
+    }
+    if (updated > 0) {
+      auditService.log(u, "BULK_UPDATE", "StaffUser", null, "{\"updated\":" + updated + "}");
+    }
+    return new BulkStaffUpdateResponse(updated);
   }
 
   @DeleteMapping("/staff/{id}")
@@ -1579,8 +1666,274 @@ public class AdminController {
     StaffUser su = staffUserRepo.findById(id)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Staff user not found"));
     requireBranchAccess(u, su.branchId);
+    int cleared = tableRepo.clearAssignedWaiter(su.id);
     staffUserRepo.delete(su);
+    if (cleared > 0) {
+      auditService.log(u, "UNASSIGN_WAITER", "CafeTable", null, "{\"clearedTables\":" + cleared + ",\"waiterId\":" + su.id + "}");
+    }
     auditService.log(u, "DELETE", "StaffUser", su.id, null);
+  }
+
+  @GetMapping("/staff-reviews")
+  public List<StaffReviewDto> listStaffReviews(
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @RequestParam(value = "staffUserId", required = false) Long staffUserId,
+    @RequestParam(value = "limit", required = false) Integer limit,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    int lim = limit == null ? 50 : Math.min(Math.max(limit, 1), 200);
+    List<StaffReview> reviews = (staffUserId != null)
+      ? staffReviewRepo.findByBranchIdAndStaffUserIdOrderByIdDesc(bid, staffUserId)
+      : staffReviewRepo.findByBranchIdOrderByIdDesc(bid);
+    if (reviews.size() > lim) {
+      reviews = reviews.subList(0, lim);
+    }
+    Set<Long> staffIds = new HashSet<>();
+    Set<Long> tableIds = new HashSet<>();
+    for (StaffReview r : reviews) {
+      staffIds.add(r.staffUserId);
+      tableIds.add(r.tableId);
+    }
+    Map<Long, StaffUser> staffById = new HashMap<>();
+    if (!staffIds.isEmpty()) {
+      staffUserRepo.findAllById(staffIds).forEach(s -> staffById.put(s.id, s));
+    }
+    Map<Long, CafeTable> tablesById = new HashMap<>();
+    if (!tableIds.isEmpty()) {
+      tableRepo.findAllById(tableIds).forEach(t -> tablesById.put(t.id, t));
+    }
+    List<StaffReviewDto> out = new ArrayList<>();
+    for (StaffReview r : reviews) {
+      StaffUser su = staffById.get(r.staffUserId);
+      CafeTable t = tablesById.get(r.tableId);
+      out.add(new StaffReviewDto(
+        r.id,
+        r.staffUserId,
+        su != null ? su.username : ("#" + r.staffUserId),
+        t != null ? t.number : null,
+        r.guestSessionId,
+        r.rating != null ? r.rating : 0,
+        r.comment,
+        r.createdAt != null ? r.createdAt.toString() : null
+      ));
+    }
+    return out;
+  }
+
+  @GetMapping("/branch-reviews")
+  public List<BranchReviewDto> listBranchReviews(
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @RequestParam(value = "tableId", required = false) Long tableId,
+    @RequestParam(value = "hallId", required = false) Long hallId,
+    @RequestParam(value = "limit", required = false) Integer limit,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    if (tableId != null) {
+      CafeTable t = tableRepo.findById(tableId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
+      requireBranchAccess(u, t.branchId);
+    }
+    if (hallId != null) {
+      BranchHall h = hallRepo.findById(hallId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hall not found"));
+      if (!h.branchId.equals(bid)) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Hall does not belong to branch");
+      }
+      requireBranchAccess(u, h.branchId);
+    }
+    int lim = limit == null ? 50 : Math.min(Math.max(limit, 1), 200);
+    List<BranchReview> reviews = branchReviewRepo.findByBranchIdOrderByIdDesc(bid);
+    reviews = filterBranchReviews(reviews, tableId, hallId, null, null);
+    if (reviews.size() > lim) reviews = reviews.subList(0, lim);
+    List<BranchReviewDto> out = new ArrayList<>();
+    for (BranchReview r : reviews) {
+      out.add(new BranchReviewDto(
+        r.id,
+        r.guestSessionId,
+        r.rating != null ? r.rating : 0,
+        r.comment,
+        r.createdAt != null ? r.createdAt.toString() : null
+      ));
+    }
+    return out;
+  }
+
+  @GetMapping("/branch-reviews/summary")
+  public BranchReviewSummary branchReviewSummary(
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @RequestParam(value = "tableId", required = false) Long tableId,
+    @RequestParam(value = "hallId", required = false) Long hallId,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    if (tableId != null) {
+      CafeTable t = tableRepo.findById(tableId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
+      requireBranchAccess(u, t.branchId);
+    }
+    if (hallId != null) {
+      BranchHall h = hallRepo.findById(hallId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hall not found"));
+      if (!h.branchId.equals(bid)) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Hall does not belong to branch");
+      }
+      requireBranchAccess(u, h.branchId);
+    }
+    List<BranchReview> reviews = branchReviewRepo.findByBranchIdOrderByIdDesc(bid);
+    reviews = filterBranchReviews(reviews, tableId, hallId, null, null);
+    if (reviews.isEmpty()) return new BranchReviewSummary(0.0, 0);
+    double sum = 0.0;
+    long count = 0;
+    for (BranchReview r : reviews) {
+      if (r.rating != null) {
+        sum += r.rating;
+        count++;
+      }
+    }
+    double avg = count == 0 ? 0.0 : (sum / count);
+    return new BranchReviewSummary(avg, count);
+  }
+
+  @GetMapping("/branch-reviews/export.csv")
+  public ResponseEntity<String> exportBranchReviewsCsv(
+    @RequestParam(value = "from", required = false) String from,
+    @RequestParam(value = "to", required = false) String to,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @RequestParam(value = "tableId", required = false) Long tableId,
+    @RequestParam(value = "hallId", required = false) Long hallId,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    if (tableId != null) {
+      CafeTable t = tableRepo.findById(tableId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
+      requireBranchAccess(u, t.branchId);
+    }
+    if (hallId != null) {
+      BranchHall h = hallRepo.findById(hallId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hall not found"));
+      if (!h.branchId.equals(bid)) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Hall does not belong to branch");
+      }
+      requireBranchAccess(u, h.branchId);
+    }
+    Instant fromTs = parseInstantOrDate(from, true);
+    Instant toTs = parseInstantOrDate(to, false);
+    List<BranchReview> reviews = branchReviewRepo.findByBranchIdOrderByIdDesc(bid);
+    List<BranchReview> filtered = filterBranchReviews(reviews, tableId, hallId, fromTs, toTs);
+    StringBuilder sb = new StringBuilder();
+    sb.append("id,guest_session_id,rating,comment,created_at\n");
+    for (BranchReview r : filtered) {
+      sb.append(r.id).append(',')
+        .append(r.guestSessionId).append(',')
+        .append(r.rating != null ? r.rating : 0).append(',')
+        .append('"').append((r.comment == null ? "" : r.comment).replace("\"", "\"\"")).append('"').append(',')
+        .append(r.createdAt != null ? r.createdAt.toString() : "")
+        .append('\n');
+    }
+    String filename = "branch-reviews-" + bid + ".csv";
+    return ResponseEntity.ok()
+      .contentType(MediaType.parseMediaType("text/csv"))
+      .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+      .body(sb.toString());
+  }
+
+  private List<BranchReview> filterBranchReviews(
+    List<BranchReview> reviews,
+    Long tableId,
+    Long hallId,
+    Instant fromTs,
+    Instant toTs
+  ) {
+    if ((tableId == null && hallId == null && fromTs == null && toTs == null) || reviews.isEmpty()) {
+      return reviews;
+    }
+    Set<Long> sessionIds = new HashSet<>();
+    for (BranchReview r : reviews) {
+      if (r.guestSessionId != null) sessionIds.add(r.guestSessionId);
+    }
+    Map<Long, GuestSession> sessionsById = new HashMap<>();
+    if (!sessionIds.isEmpty()) {
+      guestSessionRepo.findAllById(sessionIds).forEach(s -> sessionsById.put(s.id, s));
+    }
+    Set<Long> tableIds = new HashSet<>();
+    for (GuestSession s : sessionsById.values()) {
+      if (s.tableId != null) tableIds.add(s.tableId);
+    }
+    Map<Long, CafeTable> tablesById = new HashMap<>();
+    if (!tableIds.isEmpty()) {
+      tableRepo.findAllById(tableIds).forEach(t -> tablesById.put(t.id, t));
+    }
+    List<BranchReview> out = new ArrayList<>();
+    for (BranchReview r : reviews) {
+      if (fromTs != null || toTs != null) {
+        if (r.createdAt == null) continue;
+        if (fromTs != null && r.createdAt.isBefore(fromTs)) continue;
+        if (toTs != null && r.createdAt.isAfter(toTs)) continue;
+      }
+      GuestSession s = sessionsById.get(r.guestSessionId);
+      if (s == null) continue;
+      if (tableId != null && !tableId.equals(s.tableId)) continue;
+      if (hallId != null) {
+        CafeTable t = tablesById.get(s.tableId);
+        if (t == null || t.hallId == null || !t.hallId.equals(hallId)) continue;
+      }
+      out.add(r);
+    }
+    return out;
+  }
+
+  @GetMapping("/chat/export.csv")
+  public ResponseEntity<String> exportChatCsv(
+    @RequestParam(value = "from", required = false) String from,
+    @RequestParam(value = "to", required = false) String to,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @RequestParam(value = "waiterId", required = false) Long waiterId,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    Instant fromTs = parseInstantOrDate(from, true);
+    Instant toTs = parseInstantOrDate(to, false);
+    List<ChatMessage> msgs = chatMessageRepo.findByBranchIdAndCreatedAtBetweenOrderByIdAsc(bid, fromTs, toTs);
+    Map<Long, CafeTable> tableById = new HashMap<>();
+    for (ChatMessage m : msgs) {
+      if (!tableById.containsKey(m.tableId)) {
+        tableRepo.findById(m.tableId).ifPresent(t -> tableById.put(t.id, t));
+      }
+    }
+    if (waiterId != null) {
+      msgs = msgs.stream().filter(m -> {
+        if (m.staffUserId != null && Objects.equals(m.staffUserId, waiterId)) return true;
+        CafeTable t = tableById.get(m.tableId);
+        return t != null && Objects.equals(t.assignedWaiterId, waiterId);
+      }).toList();
+    }
+    StringBuilder sb = new StringBuilder();
+    sb.append("id,guest_session_id,table_id,table_number,sender_role,staff_user_id,message,created_at\n");
+    for (ChatMessage m : msgs) {
+      CafeTable t = tableById.get(m.tableId);
+      sb.append(m.id).append(',')
+        .append(m.guestSessionId).append(',')
+        .append(m.tableId).append(',')
+        .append(t != null ? t.number : "").append(',')
+        .append(m.senderRole).append(',')
+        .append(m.staffUserId != null ? m.staffUserId : "").append(',')
+        .append('"').append(m.message.replace("\"", "\"\"")).append('"').append(',')
+        .append(m.createdAt != null ? m.createdAt.toString() : "")
+        .append('\n');
+    }
+    String filename = "chat-export-" + bid + ".csv";
+    return ResponseEntity.ok()
+      .contentType(MediaType.parseMediaType("text/csv"))
+      .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+      .body(sb.toString());
   }
 
   private static String generatePublicId() {
@@ -1780,7 +2133,17 @@ public class AdminController {
     long paidBillsCount,
     long grossCents,
     long tipsCents,
-    long activeTablesCount
+    long activeTablesCount,
+    double avgBranchRating,
+    long branchReviewsCount
+  ) {}
+
+  public record WaiterMotivationRow(
+    long staffUserId,
+    String username,
+    long ordersCount,
+    long tipsCents,
+    Double avgSlaMinutes
   ) {}
 
   public record StatsDailyRow(
@@ -1879,6 +2242,17 @@ public class AdminController {
     Instant fromTs = parseInstantOrDate(from, true);
     Instant toTs = parseInstantOrDate(to, false);
     StatsService.Summary s = statsService.summaryForBranchFiltered(bid, fromTs, toTs, tableId, waiterId, hallId);
+    List<BranchReview> reviews = branchReviewRepo.findByBranchIdOrderByIdDesc(bid);
+    reviews = filterBranchReviews(reviews, tableId, hallId, fromTs, toTs);
+    double sumRating = 0.0;
+    long ratingCount = 0;
+    for (BranchReview r : reviews) {
+      if (r.rating != null) {
+        sumRating += r.rating;
+        ratingCount++;
+      }
+    }
+    double avgRating = ratingCount == 0 ? 0.0 : (sumRating / ratingCount);
     return new StatsSummaryResponse(
       s.from().toString(),
       s.to().toString(),
@@ -1887,7 +2261,9 @@ public class AdminController {
       s.paidBillsCount(),
       s.grossCents(),
       s.tipsCents(),
-      s.activeTablesCount()
+      s.activeTablesCount(),
+      avgRating,
+      ratingCount
     );
   }
 
@@ -1929,6 +2305,42 @@ public class AdminController {
     List<StatsDailyRow> out = new ArrayList<>();
     for (StatsService.DailyRow r : rows) {
       out.add(new StatsDailyRow(r.day(), r.ordersCount(), r.callsCount(), r.paidBillsCount(), r.grossCents(), r.tipsCents()));
+    }
+    return out;
+  }
+
+  @GetMapping("/stats/waiters-motivation")
+  public List<WaiterMotivationRow> getWaiterMotivation(
+    @RequestParam(value = "from", required = false) String from,
+    @RequestParam(value = "to", required = false) String to,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @RequestParam(value = "hallId", required = false) Long hallId,
+    @RequestParam(value = "planId", required = false) Long planId,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    hallId = resolveHallIdFromPlan(u, hallId, planId);
+    if (hallId != null) {
+      BranchHall h = hallRepo.findById(hallId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hall not found"));
+      if (!h.branchId.equals(bid)) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Hall does not belong to branch");
+      }
+      requireBranchAccess(u, h.branchId);
+    }
+    Instant fromTs = parseInstantOrDate(from, true);
+    Instant toTs = parseInstantOrDate(to, false);
+    List<StatsService.WaiterMotivationRow> rows = statsService.waiterMotivationForBranch(bid, fromTs, toTs, hallId);
+    List<WaiterMotivationRow> out = new ArrayList<>();
+    for (StatsService.WaiterMotivationRow r : rows) {
+      out.add(new WaiterMotivationRow(
+        r.staffUserId(),
+        r.username(),
+        r.ordersCount(),
+        r.tipsCents(),
+        r.avgSlaMinutes()
+      ));
     }
     return out;
   }
@@ -2191,15 +2603,131 @@ public class AdminController {
     return t.isEmpty() ? null : t;
   }
 
+  private static Set<String> parseExts(String raw) {
+    if (raw == null) return Set.of();
+    Set<String> out = new HashSet<>();
+    for (String p : raw.split(",")) {
+      String t = p.trim().toLowerCase(Locale.ROOT);
+      if (!t.isEmpty()) out.add(t);
+    }
+    return out;
+  }
+
+  private String sanitizePhotoUrl(String raw) {
+    String url = trimOrNull(raw);
+    if (url == null) return null;
+    if (maxPhotoUrlLength > 0 && url.length() > maxPhotoUrlLength) {
+      logReject("Photo URL too long", url);
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Photo URL too long");
+    }
+    URI uri;
+    try {
+      uri = new URI(url);
+    } catch (URISyntaxException e) {
+      logReject("Invalid photo URL", url);
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid photo URL");
+    }
+    String scheme = uri.getScheme();
+    if (scheme == null || (!scheme.equalsIgnoreCase("http") && !scheme.equalsIgnoreCase("https"))) {
+      logReject("Photo URL must be http/https", url);
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Photo URL must be http/https");
+    }
+    if (uri.getHost() == null || uri.getHost().isBlank()) {
+      logReject("Photo URL host is required", url);
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Photo URL host is required");
+    }
+    String path = uri.getPath();
+    if (path == null || path.isBlank()) {
+      logReject("Photo URL path is required", url);
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Photo URL path is required");
+    }
+    int dot = path.lastIndexOf('.');
+    if (dot < 0 || dot == path.length() - 1) {
+      logReject("Photo URL must include file extension", url);
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Photo URL must include file extension");
+    }
+    String ext = path.substring(dot + 1).toLowerCase(Locale.ROOT);
+    if (!allowedPhotoExts.isEmpty() && !allowedPhotoExts.contains(ext)) {
+      logReject("Unsupported photo type", url);
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported photo type");
+    }
+    return url;
+  }
+
+  private String sanitizePhotoUrls(String raw) {
+    String csv = trimOrNull(raw);
+    if (csv == null) return null;
+    String[] parts = csv.split(",");
+    List<String> cleaned = new ArrayList<>();
+    for (String p : parts) {
+      String u = sanitizePhotoUrl(p);
+      if (u != null) cleaned.add(u);
+    }
+    if (maxPhotoUrlsCount > 0 && cleaned.size() > maxPhotoUrlsCount) {
+      logReject("Too many photo URLs", csv);
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Too many photo URLs");
+    }
+    return String.join(",", cleaned);
+  }
+
+  private void logReject(String reason, String url) {
+    int max = 200;
+    String safe = url == null ? "" : (url.length() > max ? url.substring(0, max) + "..." : url);
+    LOG.warn("Photo URL rejected: {} (url={})", reason, safe);
+  }
+
   private static Integer sanitizeAge(Integer v) {
     if (v == null) return null;
     if (v < 0 || v > 120) return null;
     return v;
   }
 
+  private static Integer sanitizeRating(Integer v) {
+    if (v == null) return null;
+    if (v < 0 || v > 5) return null;
+    return v;
+  }
+
+  private static Integer sanitizeExperienceYears(Integer v) {
+    if (v == null) return null;
+    if (v < 0 || v > 80) return null;
+    return v;
+  }
+
+  private static String sanitizeFavoriteItems(String v) {
+    if (v == null) return null;
+    String t = v.trim();
+    if (t.isEmpty()) return null;
+    if (t.length() > 500) t = t.substring(0, 500);
+    return t;
+  }
+
   private static String sanitizeGender(String v) {
     if (v == null) return null;
     String t = v.trim().toLowerCase(Locale.ROOT);
     return switch (t) { case "male", "female", "other" -> t; default -> null; };
+  }
+
+  private void applyStaffPatch(StaffUser su, UpdateStaffUserRequest req) {
+    if (req.password != null && !req.password.isBlank()) {
+      su.passwordHash = passwordEncoder.encode(req.password);
+    }
+    if (req.role != null) {
+      String role = req.role.trim().toUpperCase(Locale.ROOT);
+      if (!Set.of("WAITER", "KITCHEN", "ADMIN").contains(role)) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported role");
+      }
+      su.role = role;
+    }
+    if (req.isActive != null) su.isActive = req.isActive;
+    if (req.firstName != null) su.firstName = trimOrNull(req.firstName);
+    if (req.lastName != null) su.lastName = trimOrNull(req.lastName);
+    if (req.age != null) su.age = sanitizeAge(req.age);
+    if (req.gender != null) su.gender = sanitizeGender(req.gender);
+    if (req.photoUrl != null) su.photoUrl = sanitizePhotoUrl(req.photoUrl);
+    if (req.rating != null) su.rating = sanitizeRating(req.rating);
+    if (req.recommended != null) su.recommended = req.recommended;
+    if (req.experienceYears != null) su.experienceYears = sanitizeExperienceYears(req.experienceYears);
+    if (req.favoriteItems != null) su.favoriteItems = sanitizeFavoriteItems(req.favoriteItems);
   }
 }

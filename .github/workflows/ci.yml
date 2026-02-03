@@ -17,9 +17,72 @@ jobs:
           java-version: "17"
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          validate-wrappers: false
       - name: Backend build
         working-directory: backend
         run: ./gradlew clean test build
+      - name: Backend static analysis
+        working-directory: backend
+        run: ./gradlew checkstyleMain spotbugsMain
+
+  migrations-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          validate-wrappers: false
+      - name: Check migrations
+        run: bash scripts/check_migrations.sh
+
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          validate-wrappers: false
+      - name: Start postgres
+        run: docker compose -f infra/docker-compose.yml up -d postgres
+      - name: Start backend
+        run: |
+          export SPRING_DATASOURCE_URL="jdbc:postgresql://localhost:5432/vw"
+          export SPRING_DATASOURCE_USERNAME="vw"
+          export SPRING_DATASOURCE_PASSWORD="vw"
+          ./gradlew -p backend bootRun > /tmp/backend.log 2>&1 &
+          echo $! > /tmp/backend.pid
+          for i in {1..30}; do
+            if curl -sf http://localhost:8080/actuator/health >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+      - name: Smoke tests
+        run: bash scripts/smoke.sh
+        env:
+          API_BASE: http://localhost:8080
+          ADMIN_USER: admin1
+          ADMIN_PASS: demo123
+      - name: Stop backend
+        if: always()
+        run: |
+          if [ -f /tmp/backend.pid ]; then kill "$(cat /tmp/backend.pid)" || true; fi
+          docker compose -f infra/docker-compose.yml down
 
   guest-web:
     runs-on: ubuntu-latest
@@ -32,10 +95,27 @@ jobs:
           node-version: "20"
       - name: Install
         working-directory: guest-web
-        run: npm install
+        run: npm ci
       - name: Lint
         working-directory: guest-web
         run: npm run lint
       - name: Build
         working-directory: guest-web
         run: npm run build
+
+  staff-app:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.22.0"
+          cache: true
+      - name: Pub get
+        working-directory: staff-app
+        run: flutter pub get
+      - name: Unit tests
+        working-directory: staff-app
+        run: flutter test

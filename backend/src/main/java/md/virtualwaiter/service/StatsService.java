@@ -141,6 +141,52 @@ public class StatsService {
     long tipsCents
   ) {}
 
+  public record WaiterMotivationRow(
+    long staffUserId,
+    String username,
+    long ordersCount,
+    long tipsCents,
+    Double avgSlaMinutes
+  ) {}
+
+  public java.util.List<WaiterMotivationRow> waiterMotivationForBranch(long branchId, Instant from, Instant to, Long hallId) {
+    Map<String, Object> params = baseParams(from, to);
+    params.put("branchId", branchId);
+    params.put("hallId", hallId);
+    String sql =
+      "WITH tips AS (\n" +
+      "  SELECT o.handled_by_staff_id AS staff_id, COALESCE(SUM(br.tips_amount_cents),0) AS tips_cents\n" +
+      "  FROM bill_requests br\n" +
+      "  JOIN bill_request_items bri ON bri.bill_request_id = br.id\n" +
+      "  JOIN order_items oi ON oi.id = bri.order_item_id\n" +
+      "  JOIN orders o ON o.id = oi.order_id\n" +
+      "  JOIN tables t ON t.id = br.table_id\n" +
+      "  WHERE br.status = 'PAID_CONFIRMED' AND br.confirmed_at BETWEEN :fromTs AND :toTs\n" +
+      "    AND (:hallId IS NULL OR t.hall_id = :hallId)\n" +
+      "  GROUP BY o.handled_by_staff_id\n" +
+      ")\n" +
+      "SELECT su.id AS staff_id, su.username AS username,\n" +
+      "  COALESCE(COUNT(o.id) FILTER (WHERE (:hallId IS NULL OR t.hall_id = :hallId)),0) AS orders_count,\n" +
+      "  COALESCE(tips.tips_cents,0) AS tips_cents,\n" +
+      "  AVG(EXTRACT(EPOCH FROM (o.ready_at - o.created_at))/60.0)\n" +
+      "    FILTER (WHERE o.ready_at IS NOT NULL AND (:hallId IS NULL OR t.hall_id = :hallId))\n" +
+      "    AS avg_sla_minutes\n" +
+      "FROM staff_users su\n" +
+      "LEFT JOIN orders o ON o.handled_by_staff_id = su.id AND o.created_at BETWEEN :fromTs AND :toTs\n" +
+      "LEFT JOIN tables t ON t.id = o.table_id\n" +
+      "LEFT JOIN tips ON tips.staff_id = su.id\n" +
+      "WHERE su.branch_id = :branchId AND su.role = 'WAITER'\n" +
+      "GROUP BY su.id, su.username, tips.tips_cents\n" +
+      "ORDER BY orders_count DESC, tips_cents DESC";
+    return jdbc.query(sql, params, (rs, rowNum) -> new WaiterMotivationRow(
+      rs.getLong("staff_id"),
+      rs.getString("username"),
+      rs.getLong("orders_count"),
+      rs.getLong("tips_cents"),
+      (Double) rs.getObject("avg_sla_minutes")
+    ));
+  }
+
   public java.util.List<BranchSummaryRow> summaryByBranchForTenant(long tenantId, Instant from, Instant to) {
     Map<String, Object> params = baseParams(from, to);
     params.put("tenantId", tenantId);

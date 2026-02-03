@@ -177,6 +177,25 @@ certbot --nginx -d YOUR_DOMAIN
 
 ---
 
+## Мониторинг и алерты (Prometheus)
+Включён эндпойнт: `https://YOUR_DOMAIN/api/actuator/prometheus` (если проксируете `/api` на backend).
+
+Пример scrape‑настройки:
+```yaml
+scrape_configs:
+  - job_name: virtual-waiter
+    metrics_path: /api/actuator/prometheus
+    static_configs:
+      - targets: ["YOUR_DOMAIN:443"]
+```
+
+Минимальные алерты (ориентиры):
+- `up == 0` — backend недоступен
+- `http_server_requests_seconds_count{status=~"5.."} > 0` — ошибки 5xx
+- `jvm_memory_used_bytes / jvm_memory_max_bytes > 0.9` — высокий расход памяти
+
+---
+
 ## 8) Полезные команды
 
 ```
@@ -195,6 +214,13 @@ certbot --nginx -d YOUR_DOMAIN
 
 # Остановить
  docker compose -f infra/docker-compose.full.yml down
+
+---
+
+## SLA timestamps (orders)
+В базе фиксируются временные метки статусов заказов:
+`accepted_at`, `in_progress_at`, `ready_at`, `served_at`, `closed_at`, `cancelled_at`.
+Они используются для расчёта SLA в мотивации официантов.
 ```
 
 ---

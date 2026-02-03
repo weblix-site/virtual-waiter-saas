@@ -178,6 +178,14 @@ Steps:
 Expected:
 - Tips applied and shown in totals
 
+### B11. Guest ↔ Waiter chat
+Steps:
+1. In guest web open chat block and send a message.
+2. In staff‑app open Chat tab and reply.
+Expected:
+- Messages appear on both sides
+- Guest does not need phone number
+
 ---
 
 ## C) Staff‑app (Waiter/Kitchen)
@@ -216,6 +224,13 @@ Steps:
 Expected:
 - Forbidden transitions rejected
 - Allowed transitions succeed
+- Check that timestamps are set:
+  - ACCEPTED → `accepted_at`
+  - IN_PROGRESS → `in_progress_at`
+  - READY → `ready_at`
+  - SERVED → `served_at`
+  - CLOSED → `closed_at`
+  - CANCELLED → `cancelled_at`
 
 ### C4. Kitchen queue
 Steps:
@@ -236,6 +251,13 @@ Steps:
 Expected:
 - Status updates
 
+### C6.2 Chat unread badge
+Steps:
+1. Guest sends a new message.
+2. Staff‑app shows badge on Chat tab.
+Expected:
+- Badge count increases for new guest messages
+
 ### C6.1 Party close confirmation
 Steps:
 1. In Bills tab, click “Close Party”.
@@ -253,6 +275,18 @@ Expected:
 - Back clears guest filter
 - Date filter applies
  - Presets (Today/7 days/30 days) apply correctly
+
+### C8. Flutter analyze
+Steps:
+1. Run:
+```
+cd staff-app
+flutter analyze
+```
+Expected:
+- No errors (warnings acceptable if known)
+Known warnings (acceptable):
+- If you see a warning about missing Flutter SDK or platform tooling on a fresh machine, install Flutter and re-run.
 
 ---
 
@@ -367,6 +401,11 @@ Steps:
 2. Download CSV.
 3. Set waiter filter and ensure counts match orders handled by that waiter (handled_by_staff_id).
 4. Set Hall and Plan filters (plan within hall) and verify stats are scoped.
+5. Check "Motivation" table:
+   - Orders count
+   - Tips amount
+   - Avg SLA (ready_at - created_at)
+   - Badges: Top orders / Top tips / Best SLA
 Expected:
 - Data matches activity
 
@@ -379,6 +418,13 @@ Steps:
 Expected:
 - Correct filtering and pagination
 - Limit affects page size
+
+### D10. Chat export CSV
+Steps:
+1. In admin open Chat Export.
+2. Set date range and download CSV.
+Expected:
+- CSV contains messages with table/guest/session
 
 ---
 

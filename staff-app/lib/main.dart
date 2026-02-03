@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:audioplayers/audioplayers.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -183,6 +184,16 @@ String _tr(BuildContext context, String key) {
     'events': {'ru': 'События', 'ro': 'Evenimente', 'en': 'Events'},
     'profile': {'ru': 'Профиль', 'ro': 'Profil', 'en': 'Profile'},
     'myProfile': {'ru': 'Мой профиль', 'ro': 'Profilul meu', 'en': 'My profile'},
+    'chat': {'ru': 'Чат', 'ro': 'Chat', 'en': 'Chat'},
+    'chatThreads': {'ru': 'Диалоги', 'ro': 'Dialoguri', 'en': 'Threads'},
+    'chatSend': {'ru': 'Отправить', 'ro': 'Trimite', 'en': 'Send'},
+    'chatPlaceholder': {'ru': 'Сообщение...', 'ro': 'Mesaj...', 'en': 'Message...'},
+    'chatEmpty': {'ru': 'Сообщений нет', 'ro': 'Nu sunt mesaje', 'en': 'No messages'},
+    'profileReadOnlyNote': {
+      'ru': 'Профиль доступен только для просмотра. Изменения вносит администратор.',
+      'ro': 'Profilul este doar pentru vizualizare. Modificările le face administratorul.',
+      'en': 'Profile is read-only. Changes are made by the admin.',
+    },
     'firstName': {'ru': 'Имя', 'ro': 'Prenume', 'en': 'First name'},
     'lastName': {'ru': 'Фамилия', 'ro': 'Nume', 'en': 'Last name'},
     'age': {'ru': 'Возраст', 'ro': 'Vârstă', 'en': 'Age'},
@@ -191,8 +202,21 @@ String _tr(BuildContext context, String key) {
     'genderFemale': {'ru': 'Женский', 'ro': 'Feminin', 'en': 'Female'},
     'genderOther': {'ru': 'Другое', 'ro': 'Altul', 'en': 'Other'},
     'photoUrl': {'ru': 'Фото', 'ro': 'Foto', 'en': 'Photo'},
+    'rating': {'ru': 'Рейтинг', 'ro': 'Rating', 'en': 'Rating'},
+    'recommended': {'ru': 'Рекомендуемый', 'ro': 'Recomandat', 'en': 'Recommended'},
+    'experienceYears': {'ru': 'Стаж (лет)', 'ro': 'Experiență (ani)', 'en': 'Experience (years)'},
+    'favoriteItems': {'ru': 'Любимые блюда', 'ro': 'Feluri preferate', 'en': 'Favorite items'},
+    'motivation': {'ru': 'Награды и мотивация', 'ro': 'Motivație și insigne', 'en': 'Motivation & badges'},
+    'badgeTopOrders': {'ru': 'Топ по заказам', 'ro': 'Top comenzi', 'en': 'Top orders'},
+    'badgeTopTips': {'ru': 'Топ по чаевым', 'ro': 'Top bacșiș', 'en': 'Top tips'},
+    'badgeBestSla': {'ru': 'Лучший SLA', 'ro': 'Cel mai bun SLA', 'en': 'Best SLA'},
+    'avgSla': {'ru': 'Средний SLA (мин)', 'ro': 'SLA mediu (min)', 'en': 'Avg SLA (min)'},
     'notSet': {'ru': 'не задано', 'ro': 'nesetat', 'en': 'not set'},
     'refresh': {'ru': 'Обновить', 'ro': 'Reîmprospătează', 'en': 'Refresh'},
+    'yes': {'ru': 'Да', 'ro': 'Da', 'en': 'Yes'},
+    'no': {'ru': 'Нет', 'ro': 'Nu', 'en': 'No'},
+    'copyId': {'ru': 'Скопировать ID', 'ro': 'Copiază ID', 'en': 'Copy ID'},
+    'copied': {'ru': 'Скопировано', 'ro': 'Copiat', 'en': 'Copied'},
     'sortNewest': {'ru': 'Сорт: новые сверху', 'ro': 'Sortare: cele mai noi', 'en': 'Sort: newest first'},
     'sortSla': {'ru': 'Сорт: SLA (старые сверху)', 'ro': 'Sortare: SLA (cele mai vechi)', 'en': 'Sort: SLA (oldest first)'},
     'sortPriority': {'ru': 'Сорт: приоритет → время', 'ro': 'Sortare: prioritate → timp', 'en': 'Sort: priority then time'},
@@ -432,6 +456,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int _newOrders = 0;
   int _newCalls = 0;
   int _newBills = 0;
+  int _newChats = 0;
   int _lastNotifId = 0;
   final List<Map<String, dynamic>> _events = [];
   String? _deviceToken;
@@ -605,6 +630,18 @@ class _HomeScreenState extends State<HomeScreen> {
         _newCalls = body['newCalls'] ?? 0;
         _newBills = body['newBills'] ?? 0;
       });
+
+      final chatRes = await http.get(
+        Uri.parse('$apiBase/api/staff/chat/threads?limit=100${_hallId != null ? "&hallId=$_hallId" : ""}'),
+        headers: {'Authorization': 'Basic $_auth'},
+      );
+      if (chatRes.statusCode == 200) {
+        final threads = (jsonDecode(chatRes.body) as List<dynamic>).cast<Map<String, dynamic>>();
+        final unread = threads.where((t) => (t['unread'] == true)).length;
+        if (mounted) {
+          setState(() => _newChats = unread);
+        }
+      }
     } catch (_) {}
   }
 
@@ -754,6 +791,7 @@ class _HomeScreenState extends State<HomeScreen> {
       BillsTab(username: widget.username, password: widget.password, hallId: _hallId),
       KitchenTab(username: widget.username, password: widget.password, hallId: _hallId),
       FloorPlanTab(username: widget.username, password: widget.password),
+      ChatTab(username: widget.username, password: widget.password, hallId: _hallId),
       HistoryTab(username: widget.username, password: widget.password),
       NotificationsTab(events: _events),
       ProfileTab(username: widget.username, password: widget.password),
@@ -834,6 +872,8 @@ class _HomeScreenState extends State<HomeScreen> {
             } else if (i == 2) {
               _sinceBills = now;
               _newBills = 0;
+            } else if (i == 5) {
+              _newChats = 0;
             }
           });
         },
@@ -852,6 +892,10 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           NavigationDestination(icon: const Icon(Icons.kitchen), label: _tr(context, 'kitchen')),
           NavigationDestination(icon: const Icon(Icons.map), label: _tr(context, 'hall')),
+          NavigationDestination(
+            icon: _newChats > 0 ? Badge(label: Text('$_newChats'), child: const Icon(Icons.chat)) : const Icon(Icons.chat),
+            label: _tr(context, 'chat'),
+          ),
           NavigationDestination(icon: const Icon(Icons.history), label: _tr(context, 'history')),
           NavigationDestination(icon: const Icon(Icons.notifications), label: _tr(context, 'events')),
           NavigationDestination(icon: const Icon(Icons.person), label: _tr(context, 'profile')),
@@ -887,6 +931,197 @@ class NotificationsTab extends StatelessWidget {
   }
 }
 
+class ChatTab extends StatefulWidget {
+  final String username;
+  final String password;
+  final int? hallId;
+
+  const ChatTab({super.key, required this.username, required this.password, this.hallId});
+
+  @override
+  State<ChatTab> createState() => _ChatTabState();
+}
+
+class _ChatTabState extends State<ChatTab> {
+  bool _loading = true;
+  String? _error;
+  List<Map<String, dynamic>> _threads = const [];
+  int? _activeSessionId;
+  int? _activeTableNumber;
+  List<Map<String, dynamic>> _messages = const [];
+  final _msgCtrl = TextEditingController();
+
+  String get _auth => base64Encode(utf8.encode('${widget.username}:${widget.password}'));
+
+  Future<void> _loadThreads() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final uri = Uri.parse(
+        '$apiBase/api/staff/chat/threads?limit=50${widget.hallId != null ? "&hallId=${widget.hallId}" : ""}',
+      );
+      final res = await http.get(uri, headers: {'Authorization': 'Basic $_auth'});
+      if (res.statusCode != 200) throw Exception('${_tr(context, 'loadFailed')} (${res.statusCode})');
+      final body = (jsonDecode(res.body) as List<dynamic>).cast<Map<String, dynamic>>();
+      setState(() {
+        _threads = body;
+      });
+    } catch (e) {
+      setState(() => _error = e.toString());
+    } finally {
+      setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _loadMessages(int guestSessionId, int? tableNumber) async {
+    setState(() {
+      _activeSessionId = guestSessionId;
+      _activeTableNumber = tableNumber;
+    });
+    final res = await http.get(
+      Uri.parse('$apiBase/api/staff/chat/messages?guestSessionId=$guestSessionId'),
+      headers: {'Authorization': 'Basic $_auth'},
+    );
+    if (res.statusCode == 200) {
+      setState(() {
+        _messages = (jsonDecode(res.body) as List<dynamic>).cast<Map<String, dynamic>>();
+      });
+    }
+    await http.post(
+      Uri.parse('$apiBase/api/staff/chat/read'),
+      headers: {'Authorization': 'Basic $_auth', 'Content-Type': 'application/json'},
+      body: jsonEncode({'guestSessionId': guestSessionId}),
+    );
+  }
+
+  Future<void> _send() async {
+    final msg = _msgCtrl.text.trim();
+    if (msg.isEmpty || _activeSessionId == null) return;
+    await http.post(
+      Uri.parse('$apiBase/api/staff/chat/send'),
+      headers: {'Authorization': 'Basic $_auth', 'Content-Type': 'application/json'},
+      body: jsonEncode({'guestSessionId': _activeSessionId, 'message': msg}),
+    );
+    _msgCtrl.clear();
+    await _loadMessages(_activeSessionId!, _activeTableNumber);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadThreads();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(_tr(context, 'chat'))),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(child: Text(_error!))
+              : Column(
+                  children: [
+                    Expanded(
+                      child: _activeSessionId == null
+                          ? ListView.separated(
+                              itemCount: _threads.length,
+                              separatorBuilder: (_, __) => const Divider(height: 1),
+                              itemBuilder: (ctx, i) {
+                                final t = _threads[i];
+                                final tableNum = (t['tableNumber'] as num?)?.toInt() ?? 0;
+                                final unread = t['unread'] == true;
+                                return ListTile(
+                                  title: Text('${_tr(context, 'table')} #$tableNum'),
+                                  subtitle: Text(t['lastMessage']?.toString() ?? ''),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (unread)
+                                        Container(
+                                          width: 8,
+                                          height: 8,
+                                          margin: const EdgeInsets.only(right: 6),
+                                          decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                                        ),
+                                      Text(t['lastSenderRole']?.toString() ?? ''),
+                                    ],
+                                  ),
+                                  onTap: () => _loadMessages((t['guestSessionId'] as num).toInt(), tableNum),
+                                );
+                              },
+                            )
+                          : Column(
+                              children: [
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(8),
+                                  color: Colors.grey.shade200,
+                                  child: Row(
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(Icons.arrow_back),
+                                        onPressed: () => setState(() {
+                                          _activeSessionId = null;
+                                          _activeTableNumber = null;
+                                          _messages = const [];
+                                        }),
+                                      ),
+                                      Text('${_tr(context, 'table')} #${_activeTableNumber ?? 0}'),
+                                    ],
+                                  ),
+                                ),
+                                Expanded(
+                                  child: _messages.isEmpty
+                                      ? Center(child: Text(_tr(context, 'chatEmpty')))
+                                      : ListView.builder(
+                                          padding: const EdgeInsets.all(8),
+                                          itemCount: _messages.length,
+                                          itemBuilder: (ctx, i) {
+                                            final m = _messages[i];
+                                            final sender = (m['senderRole'] ?? '').toString();
+                                            final isStaff = sender == 'STAFF';
+                                            return Align(
+                                              alignment: isStaff ? Alignment.centerRight : Alignment.centerLeft,
+                                              child: Container(
+                                                margin: const EdgeInsets.symmetric(vertical: 4),
+                                                padding: const EdgeInsets.all(8),
+                                                decoration: BoxDecoration(
+                                                  color: isStaff ? Colors.blue.shade50 : Colors.grey.shade200,
+                                                  borderRadius: BorderRadius.circular(8),
+                                                ),
+                                                child: Text(m['message']?.toString() ?? ''),
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: TextField(
+                                          controller: _msgCtrl,
+                                          decoration: InputDecoration(hintText: _tr(context, 'chatPlaceholder')),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      ElevatedButton(onPressed: _send, child: Text(_tr(context, 'chatSend'))),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                    ),
+                  ],
+                ),
+    );
+  }
+}
+
 class ProfileTab extends StatefulWidget {
   final String username;
   final String password;
@@ -901,6 +1136,7 @@ class _ProfileTabState extends State<ProfileTab> {
   bool _loading = true;
   String? _error;
   Map<String, dynamic>? _profile;
+  List<Map<String, dynamic>> _motivation = const [];
 
   String get _auth => base64Encode(utf8.encode('${widget.username}:${widget.password}'));
 
@@ -916,6 +1152,17 @@ class _ProfileTabState extends State<ProfileTab> {
       );
       if (res.statusCode != 200) throw Exception('${_tr(context, 'loadFailed')} (${res.statusCode})');
       setState(() => _profile = jsonDecode(res.body) as Map<String, dynamic>);
+      final now = DateTime.now().toUtc();
+      final from = now.subtract(const Duration(days: 30));
+      final motRes = await http.get(
+        Uri.parse('$apiBase/api/staff/motivation?from=${from.toIso8601String()}&to=${now.toIso8601String()}'),
+        headers: {'Authorization': 'Basic $_auth'},
+      );
+      if (motRes.statusCode == 200) {
+        _motivation = (jsonDecode(motRes.body) as List<dynamic>).cast<Map<String, dynamic>>();
+      } else {
+        _motivation = const [];
+      }
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
@@ -934,6 +1181,16 @@ class _ProfileTabState extends State<ProfileTab> {
       default:
         return _tr(context, 'notSet');
     }
+  }
+
+  Future<void> _copyId() async {
+    final id = _profile?['id']?.toString();
+    if (id == null || id.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: id));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(_tr(context, 'copied'))),
+    );
   }
 
   @override
@@ -955,7 +1212,29 @@ class _ProfileTabState extends State<ProfileTab> {
                   : ListView(
                       padding: const EdgeInsets.all(16),
                       children: [
-                        Text(_tr(context, 'myProfile'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(_tr(context, 'myProfile'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                            ),
+                            TextButton.icon(
+                              onPressed: _loading ? null : _load,
+                              icon: const Icon(Icons.refresh, size: 18),
+                              label: Text(_tr(context, 'refresh')),
+                            ),
+                            const SizedBox(width: 6),
+                            TextButton.icon(
+                              onPressed: _loading ? null : _copyId,
+                              icon: const Icon(Icons.copy, size: 18),
+                              label: Text(_tr(context, 'copyId')),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          _tr(context, 'profileReadOnlyNote'),
+                          style: const TextStyle(color: Colors.black54),
+                        ),
                         const SizedBox(height: 12),
                         if ((_profile?['photoUrl'] ?? '').toString().isNotEmpty)
                           Center(
@@ -976,6 +1255,20 @@ class _ProfileTabState extends State<ProfileTab> {
                         _profileRow(context, _tr(context, 'lastName'), _profile?['lastName']?.toString()),
                         _profileRow(context, _tr(context, 'age'), _profile?['age']?.toString()),
                         _profileRow(context, _tr(context, 'gender'), _genderLabel(context, _profile?['gender']?.toString())),
+                        _profileRow(context, _tr(context, 'rating'), _profile?['rating']?.toString()),
+                        _profileRow(
+                          context,
+                          _tr(context, 'recommended'),
+                          _profile?['recommended'] == null
+                              ? _tr(context, 'notSet')
+                              : (_profile?['recommended'] == true ? _tr(context, 'yes') : _tr(context, 'no')),
+                        ),
+                        _profileRow(context, _tr(context, 'experienceYears'), _profile?['experienceYears']?.toString()),
+                        _profileRow(context, _tr(context, 'favoriteItems'), _profile?['favoriteItems']?.toString()),
+                        const SizedBox(height: 10),
+                        Text(_tr(context, 'motivation'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 6),
+                        _buildMotivation(context),
                       ],
                     ),
     );
@@ -991,6 +1284,71 @@ class _ProfileTabState extends State<ProfileTab> {
           Expanded(child: Text(v)),
         ],
       ),
+    );
+  }
+
+  Widget _buildMotivation(BuildContext context) {
+    if (_motivation.isEmpty || _profile?['id'] == null) {
+      return Text(_tr(context, 'noData'), style: const TextStyle(color: Colors.black54));
+    }
+    final myId = (_profile?['id'] as num?)?.toInt();
+    final my = _motivation.firstWhere(
+      (m) => (m['staffUserId'] as num?)?.toInt() == myId,
+      orElse: () => const {},
+    );
+    if (my.isEmpty) {
+      return Text(_tr(context, 'noData'), style: const TextStyle(color: Colors.black54));
+    }
+    final maxOrders = _motivation.map((m) => (m['ordersCount'] as num?)?.toInt() ?? 0).reduce((a, b) => a > b ? a : b);
+    final maxTips = _motivation.map((m) => (m['tipsCents'] as num?)?.toInt() ?? 0).reduce((a, b) => a > b ? a : b);
+    final slaValues = _motivation
+        .map((m) => (m['avgSlaMinutes'] as num?)?.toDouble())
+        .where((v) => v != null)
+        .cast<double>()
+        .toList();
+    final bestSla = slaValues.isEmpty ? null : slaValues.reduce((a, b) => a < b ? a : b);
+
+    final myOrders = (my['ordersCount'] as num?)?.toInt() ?? 0;
+    final myTips = (my['tipsCents'] as num?)?.toInt() ?? 0;
+    final mySla = (my['avgSlaMinutes'] as num?)?.toDouble();
+
+    final badges = <String>[];
+    if (myOrders == maxOrders && maxOrders > 0) badges.add(_tr(context, 'badgeTopOrders'));
+    if (myTips == maxTips && maxTips > 0) badges.add(_tr(context, 'badgeTopTips'));
+    if (bestSla != null && mySla != null && mySla == bestSla) badges.add(_tr(context, 'badgeBestSla'));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            SizedBox(width: 120, child: Text(_tr(context, 'orders'), style: const TextStyle(color: Colors.black54))),
+            Expanded(child: Text(myOrders.toString())),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            SizedBox(width: 120, child: Text(_tr(context, 'tips'), style: const TextStyle(color: Colors.black54))),
+            Expanded(child: Text((myTips / 100.0).toStringAsFixed(2))),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            SizedBox(width: 120, child: Text(_tr(context, 'avgSla'), style: const TextStyle(color: Colors.black54))),
+            Expanded(child: Text(mySla != null ? mySla.toStringAsFixed(1) : '—')),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: badges.isEmpty
+              ? [Text(_tr(context, 'noData'), style: const TextStyle(color: Colors.black54))]
+              : badges.map((b) => Chip(label: Text(b), padding: const EdgeInsets.symmetric(horizontal: 4))).toList(),
+        ),
+      ],
     );
   }
 }
@@ -2159,6 +2517,7 @@ class _FloorPlanTabState extends State<FloorPlanTab> {
   bool _syncingActivePlan = false;
   static const String _lastHallPrefKey = 'staff_last_hall_id';
   int? _lastHallPrefId;
+  List<Map<String, dynamic>> _waiters = const [];
 
   String get _auth => base64Encode(utf8.encode('${widget.username}:${widget.password}'));
 
@@ -2209,6 +2568,15 @@ class _FloorPlanTabState extends State<FloorPlanTab> {
       }
       if (_useActivePlan) {
         _planId = planId;
+      }
+
+      List<Map<String, dynamic>> waitersBody = _waiters;
+      final waitersRes = await http.get(
+        Uri.parse('$apiBase/api/staff/waiters'),
+        headers: {'Authorization': 'Basic $_auth'},
+      );
+      if (waitersRes.statusCode == 200) {
+        waitersBody = (jsonDecode(waitersRes.body) as List<dynamic>).cast<Map<String, dynamic>>();
       }
 
       final tablesRes = await http.get(
@@ -2295,6 +2663,7 @@ class _FloorPlanTabState extends State<FloorPlanTab> {
         _halls = hallsBody;
         _hallId = hallId;
         _plans = plansBody;
+        _waiters = waitersBody;
         if (_useActivePlan) {
           _planId = planId;
         } else {
@@ -2944,12 +3313,33 @@ class _FloorPlanTabState extends State<FloorPlanTab> {
                         final w = (z['w'] as num?)?.toDouble() ?? 10;
                         final h = (z['h'] as num?)?.toDouble() ?? 10;
                         final name = (z['name'] ?? '').toString();
+                        final assignedWaiterId = (z['waiterId'] as num?)?.toInt();
+                        String waiterName = '';
+                        if (assignedWaiterId != null) {
+                          final wuser = _waiters.firstWhere(
+                            (w) => (w['id'] as num?)?.toInt() == assignedWaiterId,
+                            orElse: () => const {},
+                          );
+                          if (wuser.isNotEmpty) {
+                            final first = (wuser['firstName'] ?? '').toString();
+                            final last = (wuser['lastName'] ?? '').toString();
+                            final user = (wuser['username'] ?? '').toString();
+                            final full = ('$first $last').trim();
+                            waiterName = full.isNotEmpty ? full : user;
+                          } else {
+                            waiterName = '#$assignedWaiterId';
+                          }
+                        }
                         final colorStr = (z['color'] ?? '#6C5CE7').toString();
                         Color color;
-                        try {
-                          color = Color(int.parse(colorStr.replaceFirst('#', '0xff')));
-                        } catch (_) {
-                          color = const Color(0xFF6C5CE7);
+                        if (assignedWaiterId != null) {
+                          color = _waiterColor(assignedWaiterId);
+                        } else {
+                          try {
+                            color = Color(int.parse(colorStr.replaceFirst('#', '0xff')));
+                          } catch (_) {
+                            color = const Color(0xFF6C5CE7);
+                          }
                         }
                         return Positioned(
                           left: (x / 100) * width,
@@ -2965,7 +3355,14 @@ class _FloorPlanTabState extends State<FloorPlanTab> {
                             padding: const EdgeInsets.all(6),
                             child: Align(
                               alignment: Alignment.topLeft,
-                              child: Text(name, style: const TextStyle(fontSize: 11, color: Colors.black87)),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(name, style: const TextStyle(fontSize: 11, color: Colors.black87)),
+                                  if (waiterName.isNotEmpty)
+                                    Text(waiterName, style: const TextStyle(fontSize: 10, color: Colors.black54)),
+                                ],
+                              ),
                             ),
                           ),
                         );

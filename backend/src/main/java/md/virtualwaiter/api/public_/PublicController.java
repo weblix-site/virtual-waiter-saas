@@ -16,6 +16,9 @@ import md.virtualwaiter.repo.ModifierGroupRepo;
 import md.virtualwaiter.repo.ModifierOptionRepo;
 import md.virtualwaiter.repo.MenuItemModifierGroupRepo;
 import md.virtualwaiter.repo.StaffUserRepo;
+import md.virtualwaiter.repo.ChatMessageRepo;
+import md.virtualwaiter.repo.BranchReviewRepo;
+import md.virtualwaiter.repo.StaffReviewRepo;
 import md.virtualwaiter.otp.OtpService;
 import md.virtualwaiter.service.BranchSettingsService;
 import md.virtualwaiter.service.PartyService;
@@ -54,6 +57,9 @@ public class PublicController {
   private final ModifierOptionRepo modifierOptionRepo;
   private final MenuItemModifierGroupRepo menuItemModifierGroupRepo;
   private final StaffUserRepo staffUserRepo;
+  private final StaffReviewRepo staffReviewRepo;
+  private final ChatMessageRepo chatMessageRepo;
+  private final BranchReviewRepo branchReviewRepo;
   private final QrSignatureService qrSig;
   private final OtpService otpService;
   private final BranchSettingsService settingsService;
@@ -74,6 +80,8 @@ public class PublicController {
   private final int sessionStartLimitWindowSeconds;
   private final int menuLimitMax;
   private final int menuLimitWindowSeconds;
+  private final int chatLimitMax;
+  private final int chatLimitWindowSeconds;
   private final BillProperties billProperties;
 
   public PublicController(
@@ -91,6 +99,9 @@ public class PublicController {
     ModifierOptionRepo modifierOptionRepo,
     MenuItemModifierGroupRepo menuItemModifierGroupRepo,
     StaffUserRepo staffUserRepo,
+    StaffReviewRepo staffReviewRepo,
+    ChatMessageRepo chatMessageRepo,
+    BranchReviewRepo branchReviewRepo,
     QrSignatureService qrSig,
     OtpService otpService,
     BranchSettingsService settingsService,
@@ -111,7 +122,9 @@ public class PublicController {
     @Value("${app.rateLimit.sessionStart.maxRequests:30}") int sessionStartLimitMax,
     @Value("${app.rateLimit.sessionStart.windowSeconds:60}") int sessionStartLimitWindowSeconds,
     @Value("${app.rateLimit.menu.maxRequests:60}") int menuLimitMax,
-    @Value("${app.rateLimit.menu.windowSeconds:60}") int menuLimitWindowSeconds
+    @Value("${app.rateLimit.menu.windowSeconds:60}") int menuLimitWindowSeconds,
+    @Value("${app.rateLimit.chat.maxRequests:15}") int chatLimitMax,
+    @Value("${app.rateLimit.chat.windowSeconds:60}") int chatLimitWindowSeconds
   ) {
     this.tableRepo = tableRepo;
     this.sessionRepo = sessionRepo;
@@ -127,6 +140,9 @@ public class PublicController {
     this.modifierOptionRepo = modifierOptionRepo;
     this.menuItemModifierGroupRepo = menuItemModifierGroupRepo;
     this.staffUserRepo = staffUserRepo;
+    this.staffReviewRepo = staffReviewRepo;
+    this.chatMessageRepo = chatMessageRepo;
+    this.branchReviewRepo = branchReviewRepo;
     this.qrSig = qrSig;
     this.otpService = otpService;
     this.settingsService = settingsService;
@@ -147,6 +163,8 @@ public class PublicController {
     this.sessionStartLimitWindowSeconds = sessionStartLimitWindowSeconds;
     this.menuLimitMax = menuLimitMax;
     this.menuLimitWindowSeconds = menuLimitWindowSeconds;
+    this.chatLimitMax = chatLimitMax;
+    this.chatLimitWindowSeconds = chatLimitWindowSeconds;
     this.billProperties = billProperties;
   }
 
@@ -185,7 +203,13 @@ public class PublicController {
     String sessionSecret,
     String currencyCode,
     String waiterName,
-    String waiterPhotoUrl
+    String waiterPhotoUrl,
+    Integer waiterRating,
+    Boolean waiterRecommended,
+    Integer waiterExperienceYears,
+    List<String> waiterFavoriteItems,
+    Double waiterAvgRating,
+    Long waiterReviewsCount
   ) {}
 
   @PostMapping("/session/start")
@@ -217,12 +241,24 @@ public class PublicController {
 
     String waiterName = null;
     String waiterPhoto = null;
+    Integer waiterRating = null;
+    Boolean waiterRecommended = null;
+    Integer waiterExperienceYears = null;
+    List<String> waiterFavoriteItems = List.of();
+    Double waiterAvgRating = null;
+    Long waiterReviewsCount = null;
     if (table.assignedWaiterId != null) {
       StaffUser waiter = staffUserRepo.findById(table.assignedWaiterId).orElse(null);
       if (waiter != null) {
         String first = waiter.firstName != null && !waiter.firstName.isBlank() ? waiter.firstName.trim() : null;
         waiterName = first != null ? first : waiter.username;
         waiterPhoto = waiter.photoUrl;
+        waiterRating = waiter.rating;
+        waiterRecommended = waiter.recommended;
+        waiterExperienceYears = waiter.experienceYears;
+        waiterFavoriteItems = parseFavoriteItems(waiter.favoriteItems);
+        waiterAvgRating = staffReviewRepo.averageRating(waiter.id);
+        waiterReviewsCount = staffReviewRepo.countByStaffUserId(waiter.id);
       }
     }
     return new StartSessionResponse(
@@ -236,8 +272,150 @@ public class PublicController {
       s.sessionSecret,
       settings.currencyCode(),
       waiterName,
-      waiterPhoto
+      waiterPhoto,
+      waiterRating,
+      waiterRecommended,
+      waiterExperienceYears,
+      waiterFavoriteItems,
+      waiterAvgRating,
+      waiterReviewsCount
     );
+  }
+
+  public record WaiterReviewRequest(@NotNull Long guestSessionId, @NotNull Integer rating, String comment) {}
+  public record WaiterReviewResponse(boolean created) {}
+
+  @PostMapping("/waiter-review")
+  public WaiterReviewResponse createWaiterReview(
+    @Valid @RequestBody WaiterReviewRequest req,
+    jakarta.servlet.http.HttpServletRequest httpReq
+  ) {
+    GuestSession s = sessionRepo.findById(req.guestSessionId())
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Guest session not found"));
+    requireSessionSecret(s, httpReq);
+    if (staffReviewRepo.findByGuestSessionId(s.id).isPresent()) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "Review already exists");
+    }
+    if (req.rating() < 1 || req.rating() > 5) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Rating must be 1..5");
+    }
+    CafeTable table = tableRepo.findById(s.tableId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
+    if (table.assignedWaiterId == null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Waiter not assigned");
+    }
+    StaffReview r = new StaffReview();
+    r.branchId = table.branchId;
+    r.tableId = table.id;
+    r.staffUserId = table.assignedWaiterId;
+    r.guestSessionId = s.id;
+    r.rating = req.rating();
+    String comment = req.comment() != null ? req.comment().trim() : null;
+    if (comment != null && comment.length() > 500) {
+      comment = comment.substring(0, 500);
+    }
+    r.comment = (comment == null || comment.isBlank()) ? null : comment;
+    staffReviewRepo.save(r);
+    return new WaiterReviewResponse(true);
+  }
+
+  public record ChatSendRequest(@NotNull Long guestSessionId, @NotBlank String message) {}
+  public record ChatMessageDto(long id, String senderRole, String message, String createdAt) {}
+
+  @PostMapping("/chat/send")
+  public void sendChatMessage(@Valid @RequestBody ChatSendRequest req, jakarta.servlet.http.HttpServletRequest httpReq) {
+    GuestSession s = sessionRepo.findById(req.guestSessionId())
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Guest session not found"));
+    requireSessionSecret(s, httpReq);
+    if (s.expiresAt != null && s.expiresAt.isBefore(Instant.now())) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Guest session expired");
+    }
+    String clientIp = getClientIp(httpReq);
+    if (!rateLimitService.allow("chat:" + clientIp, chatLimitMax, chatLimitWindowSeconds)) {
+      throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Too many chat messages");
+    }
+    String msg = req.message() == null ? "" : req.message().trim();
+    if (msg.isEmpty()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Message empty");
+    }
+    if (msg.length() > 500) {
+      msg = msg.substring(0, 500);
+    }
+    CafeTable table = tableRepo.findById(s.tableId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
+    ChatMessage m = new ChatMessage();
+    m.branchId = table.branchId;
+    m.tableId = table.id;
+    m.guestSessionId = s.id;
+    m.senderRole = "GUEST";
+    m.message = msg;
+    chatMessageRepo.save(m);
+  }
+
+  @GetMapping("/chat/messages")
+  public List<ChatMessageDto> listChatMessages(
+    @RequestParam("guestSessionId") Long guestSessionId,
+    jakarta.servlet.http.HttpServletRequest httpReq
+  ) {
+    GuestSession s = sessionRepo.findById(guestSessionId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Guest session not found"));
+    requireSessionSecret(s, httpReq);
+    CafeTable table = tableRepo.findById(s.tableId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
+    List<ChatMessage> msgs = chatMessageRepo.findByBranchIdAndGuestSessionIdOrderByIdAsc(table.branchId, s.id);
+    List<ChatMessageDto> out = new ArrayList<>();
+    for (ChatMessage m : msgs) {
+      out.add(new ChatMessageDto(
+        m.id,
+        m.senderRole,
+        m.message,
+        m.createdAt != null ? m.createdAt.toString() : null
+      ));
+    }
+    return out;
+  }
+
+  public record BranchReviewRequest(@NotNull Long guestSessionId, @NotNull Integer rating, String comment) {}
+  public record BranchReviewResponse(boolean created) {}
+
+  @PostMapping("/branch-review")
+  public BranchReviewResponse createBranchReview(
+    @Valid @RequestBody BranchReviewRequest req,
+    jakarta.servlet.http.HttpServletRequest httpReq
+  ) {
+    GuestSession s = sessionRepo.findById(req.guestSessionId())
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Guest session not found"));
+    requireSessionSecret(s, httpReq);
+    if (branchReviewRepo.findByGuestSessionId(s.id).isPresent()) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "Review already exists");
+    }
+    if (req.rating() < 1 || req.rating() > 5) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Rating must be 1..5");
+    }
+    CafeTable table = tableRepo.findById(s.tableId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
+    BranchReview r = new BranchReview();
+    r.branchId = table.branchId;
+    r.guestSessionId = s.id;
+    r.rating = req.rating();
+    String comment = req.comment() != null ? req.comment().trim() : null;
+    if (comment != null && comment.length() > 500) {
+      comment = comment.substring(0, 500);
+    }
+    r.comment = (comment == null || comment.isBlank()) ? null : comment;
+    branchReviewRepo.save(r);
+    return new BranchReviewResponse(true);
+  }
+
+  private static List<String> parseFavoriteItems(String v) {
+    if (v == null || v.isBlank()) return List.of();
+    String[] parts = v.split(",");
+    List<String> out = new ArrayList<>();
+    for (String p : parts) {
+      String t = p.trim();
+      if (!t.isEmpty()) out.add(t);
+    }
+    return out;
   }
 
   // --- Menu ---

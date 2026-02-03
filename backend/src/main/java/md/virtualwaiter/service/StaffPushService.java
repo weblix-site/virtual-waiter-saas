@@ -155,6 +155,10 @@ public class StaffPushService {
       }
 
       String body = objectMapper.writeValueAsString(payload);
+      if (pushProperties.maxPayloadBytes > 0 && body.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > pushProperties.maxPayloadBytes) {
+        log.warn("[FCM] payload too large ({} bytes > {}), skip send", body.getBytes(java.nio.charset.StandardCharsets.UTF_8).length, pushProperties.maxPayloadBytes);
+        return;
+      }
       HttpRequest req = HttpRequest.newBuilder()
         .uri(URI.create(pushProperties.fcmApiUrl))
         .header("Authorization", "key=" + pushProperties.fcmServerKey)

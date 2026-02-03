@@ -12,11 +12,15 @@ import md.virtualwaiter.domain.GuestSession;
 import md.virtualwaiter.domain.Branch;
 import md.virtualwaiter.domain.BranchHall;
 import md.virtualwaiter.domain.HallPlan;
+import md.virtualwaiter.domain.ChatMessage;
+import md.virtualwaiter.domain.ChatRead;
 import md.virtualwaiter.repo.CafeTableRepo;
 import md.virtualwaiter.repo.GuestSessionRepo;
 import md.virtualwaiter.repo.OrderItemRepo;
 import md.virtualwaiter.repo.OrderRepo;
 import md.virtualwaiter.repo.StaffUserRepo;
+import md.virtualwaiter.repo.ChatMessageRepo;
+import md.virtualwaiter.repo.ChatReadRepo;
 import md.virtualwaiter.repo.WaiterCallRepo;
 import md.virtualwaiter.repo.BillRequestRepo;
 import md.virtualwaiter.repo.BillRequestItemRepo;
@@ -48,6 +52,8 @@ import java.util.*;
 public class StaffController {
 
   private final StaffUserRepo staffUserRepo;
+  private final ChatMessageRepo chatMessageRepo;
+  private final ChatReadRepo chatReadRepo;
   private final CafeTableRepo tableRepo;
   private final OrderRepo orderRepo;
   private final OrderItemRepo orderItemRepo;
@@ -69,6 +75,8 @@ public class StaffController {
 
   public StaffController(
     StaffUserRepo staffUserRepo,
+    ChatMessageRepo chatMessageRepo,
+    ChatReadRepo chatReadRepo,
     CafeTableRepo tableRepo,
     OrderRepo orderRepo,
     OrderItemRepo orderItemRepo,
@@ -89,6 +97,8 @@ public class StaffController {
     BillProperties billProperties
   ) {
     this.staffUserRepo = staffUserRepo;
+    this.chatMessageRepo = chatMessageRepo;
+    this.chatReadRepo = chatReadRepo;
     this.tableRepo = tableRepo;
     this.orderRepo = orderRepo;
     this.orderItemRepo = orderItemRepo;
@@ -140,6 +150,12 @@ public class StaffController {
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unknown user"));
   }
 
+  private void requireBranchAccess(StaffUser u, Long branchId) {
+    if (u == null || branchId == null || !Objects.equals(u.branchId, branchId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong branch");
+    }
+  }
+
   private StaffUser requireRole(Authentication auth, String... roles) {
     StaffUser u = current(auth);
     String role = u.role == null ? "" : u.role.toUpperCase(Locale.ROOT);
@@ -158,13 +174,31 @@ public class StaffController {
     String lastName,
     Integer age,
     String gender,
-    String photoUrl
+    String photoUrl,
+    Integer rating,
+    Boolean recommended,
+    Integer experienceYears,
+    String favoriteItems
   ) {}
 
   @GetMapping("/me")
   public MeResponse me(Authentication auth) {
     StaffUser u = current(auth);
-    return new MeResponse(u.id, u.username, u.role, u.branchId, u.firstName, u.lastName, u.age, u.gender, u.photoUrl);
+    return new MeResponse(
+      u.id,
+      u.username,
+      u.role,
+      u.branchId,
+      u.firstName,
+      u.lastName,
+      u.age,
+      u.gender,
+      u.photoUrl,
+      u.rating,
+      u.recommended,
+      u.experienceYears,
+      u.favoriteItems
+    );
   }
 
   public record StaffTableDto(
@@ -184,6 +218,27 @@ public class StaffController {
 
   public record BranchLayoutResponse(String backgroundUrl, String zonesJson) {}
   public record HallDto(long id, long branchId, String name, boolean isActive, int sortOrder, String backgroundUrl, String zonesJson, Long activePlanId) {}
+  public record WaiterDto(long id, String username, String firstName, String lastName, String photoUrl) {}
+  public record WaiterMotivationRow(
+    long staffUserId,
+    String username,
+    long ordersCount,
+    long tipsCents,
+    Double avgSlaMinutes
+  ) {}
+
+  public record ChatThreadDto(
+    long guestSessionId,
+    int tableNumber,
+    String lastMessage,
+    String lastSenderRole,
+    String lastAt,
+    String lastReadAt,
+    boolean unread
+  ) {}
+
+  public record ChatMessageDto(long id, String senderRole, String message, String createdAt) {}
+  public record ChatSendRequest(long guestSessionId, String message) {}
 
   @GetMapping("/tables")
   public List<StaffTableDto> tables(
@@ -213,6 +268,156 @@ public class StaffController {
       ));
     }
     return out;
+  }
+
+  @GetMapping("/waiters")
+  public List<WaiterDto> waiters(Authentication auth) {
+    StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
+    List<StaffUser> staff = staffUserRepo.findByBranchId(u.branchId);
+    List<WaiterDto> out = new ArrayList<>();
+    for (StaffUser su : staff) {
+      if (!"WAITER".equalsIgnoreCase(su.role)) continue;
+      out.add(new WaiterDto(su.id, su.username, su.firstName, su.lastName, su.photoUrl));
+    }
+    return out;
+  }
+
+  @GetMapping("/motivation")
+  public List<WaiterMotivationRow> motivation(
+    @RequestParam(value = "from", required = false) String from,
+    @RequestParam(value = "to", required = false) String to,
+    @RequestParam(value = "hallId", required = false) Long hallId,
+    Authentication auth
+  ) {
+    StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
+    Instant fromTs = parseInstantOrDate(from, true);
+    Instant toTs = parseInstantOrDate(to, false);
+    List<StatsService.WaiterMotivationRow> rows = statsService.waiterMotivationForBranch(u.branchId, fromTs, toTs, hallId);
+    List<WaiterMotivationRow> out = new ArrayList<>();
+    for (StatsService.WaiterMotivationRow r : rows) {
+      out.add(new WaiterMotivationRow(
+        r.staffUserId(),
+        r.username(),
+        r.ordersCount(),
+        r.tipsCents(),
+        r.avgSlaMinutes()
+      ));
+    }
+    return out;
+  }
+
+  @GetMapping("/chat/threads")
+  public List<ChatThreadDto> chatThreads(
+    @RequestParam(value = "limit", required = false) Integer limit,
+    @RequestParam(value = "hallId", required = false) Long hallId,
+    Authentication auth
+  ) {
+    StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
+    int lim = limit == null ? 50 : Math.min(Math.max(limit, 1), 200);
+    List<ChatMessage> all = chatMessageRepo.findByBranchIdOrderByIdDesc(u.branchId);
+    Map<Long, ChatMessage> latestBySession = new LinkedHashMap<>();
+    for (ChatMessage m : all) {
+      if (latestBySession.size() >= lim) break;
+      if (latestBySession.containsKey(m.guestSessionId)) continue;
+      if (hallId != null) {
+        CafeTable t = tableRepo.findById(m.tableId).orElse(null);
+        if (t == null || !Objects.equals(t.hallId, hallId)) continue;
+      }
+      latestBySession.put(m.guestSessionId, m);
+    }
+    Map<Long, CafeTable> tableById = new HashMap<>();
+    for (ChatMessage m : latestBySession.values()) {
+      if (!tableById.containsKey(m.tableId)) {
+        tableRepo.findById(m.tableId).ifPresent(t -> tableById.put(t.id, t));
+      }
+    }
+    List<ChatThreadDto> out = new ArrayList<>();
+    for (ChatMessage m : latestBySession.values()) {
+      CafeTable t = tableById.get(m.tableId);
+      ChatRead read = chatReadRepo.findByStaffUserIdAndGuestSessionId(u.id, m.guestSessionId).orElse(null);
+      String lastReadAt = read != null && read.lastReadAt != null ? read.lastReadAt.toString() : null;
+      boolean unread = "GUEST".equalsIgnoreCase(m.senderRole)
+        && (read == null || (m.createdAt != null && read.lastReadAt != null && m.createdAt.isAfter(read.lastReadAt)));
+      out.add(new ChatThreadDto(
+        m.guestSessionId,
+        t != null ? t.number : 0,
+        m.message,
+        m.senderRole,
+        m.createdAt != null ? m.createdAt.toString() : null,
+        lastReadAt,
+        unread
+      ));
+    }
+    return out;
+  }
+
+  @GetMapping("/chat/messages")
+  public List<ChatMessageDto> chatMessages(
+    @RequestParam("guestSessionId") Long guestSessionId,
+    Authentication auth
+  ) {
+    StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
+    GuestSession s = guestSessionRepo.findById(guestSessionId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Guest session not found"));
+    CafeTable table = tableRepo.findById(s.tableId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
+    requireBranchAccess(u, table.branchId);
+    List<ChatMessage> msgs = chatMessageRepo.findByBranchIdAndGuestSessionIdOrderByIdAsc(table.branchId, guestSessionId);
+    List<ChatMessageDto> out = new ArrayList<>();
+    for (ChatMessage m : msgs) {
+      out.add(new ChatMessageDto(m.id, m.senderRole, m.message, m.createdAt != null ? m.createdAt.toString() : null));
+    }
+    return out;
+  }
+
+  @PostMapping("/chat/send")
+  public void chatSend(@RequestBody ChatSendRequest req, Authentication auth) {
+    StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
+    if (req == null || req.guestSessionId <= 0 || req.message == null || req.message.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid message");
+    }
+    GuestSession s = guestSessionRepo.findById(req.guestSessionId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Guest session not found"));
+    if (s.expiresAt != null && s.expiresAt.isBefore(Instant.now())) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Guest session expired");
+    }
+    CafeTable table = tableRepo.findById(s.tableId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
+    requireBranchAccess(u, table.branchId);
+    String msg = req.message.trim();
+    if (msg.length() > 500) msg = msg.substring(0, 500);
+    ChatMessage m = new ChatMessage();
+    m.branchId = table.branchId;
+    m.tableId = table.id;
+    m.guestSessionId = s.id;
+    m.senderRole = "STAFF";
+    m.staffUserId = u.id;
+    m.message = msg;
+    chatMessageRepo.save(m);
+  }
+
+  public record ChatReadRequest(long guestSessionId) {}
+
+  @PostMapping("/chat/read")
+  public void chatRead(@RequestBody ChatReadRequest req, Authentication auth) {
+    StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
+    if (req == null || req.guestSessionId <= 0) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid guestSessionId");
+    }
+    GuestSession s = guestSessionRepo.findById(req.guestSessionId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Guest session not found"));
+    CafeTable table = tableRepo.findById(s.tableId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
+    requireBranchAccess(u, table.branchId);
+    ChatRead read = chatReadRepo.findByStaffUserIdAndGuestSessionId(u.id, req.guestSessionId).orElse(null);
+    if (read == null) {
+      read = new ChatRead();
+      read.branchId = table.branchId;
+      read.staffUserId = u.id;
+      read.guestSessionId = req.guestSessionId;
+    }
+    read.lastReadAt = Instant.now();
+    chatReadRepo.save(read);
   }
 
   @GetMapping("/branch-layout")
@@ -689,6 +894,29 @@ public class StaffController {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid status transition");
     }
     o.status = next;
+    Instant now = Instant.now();
+    switch (next) {
+      case "ACCEPTED" -> {
+        if (o.acceptedAt == null) o.acceptedAt = now;
+      }
+      case "IN_PROGRESS" -> {
+        if (o.inProgressAt == null) o.inProgressAt = now;
+      }
+      case "READY" -> {
+        if (o.readyAt == null) o.readyAt = now;
+      }
+      case "SERVED" -> {
+        if (o.servedAt == null) o.servedAt = now;
+      }
+      case "CLOSED" -> {
+        if (o.closedAt == null) o.closedAt = now;
+      }
+      case "CANCELLED" -> {
+        if (o.cancelledAt == null) o.cancelledAt = now;
+      }
+      default -> {
+      }
+    }
     if (o.handledByStaffId == null) {
       String role = u.role == null ? "" : u.role.toUpperCase(Locale.ROOT);
       if (Set.of("WAITER", "ADMIN").contains(role)) {

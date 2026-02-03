@@ -13,6 +13,23 @@ spring:
   flyway:
     enabled: true
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,loggers
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+    prometheus:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
 app:
   bill:
     expireMinutes: 120
@@ -63,6 +80,15 @@ app:
     menu:
       maxRequests: 60
       windowSeconds: 60
+    chat:
+      maxRequests: 15
+      windowSeconds: 60
+  audit:
+    maxDetailsChars: ${APP_AUDIT_MAX_DETAILS_CHARS:4000}
+  media:
+    maxPhotoUrlLength: ${APP_MEDIA_MAX_PHOTO_URL_LENGTH:512}
+    maxPhotoUrlsCount: ${APP_MEDIA_MAX_PHOTO_URLS_COUNT:6}
+    allowedPhotoExts: ${APP_MEDIA_ALLOWED_PHOTO_EXTS:jpg,jpeg,png,webp,gif}
 
   tips:
     enabled: false
@@ -73,3 +99,4 @@ push:
   fcmServerKey: ${FCM_SERVER_KEY:}
   fcmApiUrl: "https://fcm.googleapis.com/fcm/send"
   dryRun: false
+  maxPayloadBytes: ${PUSH_MAX_PAYLOAD_BYTES:4096}
