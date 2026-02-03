@@ -1,6 +1,7 @@
 package md.virtualwaiter.api.superadmin;
 
 import md.virtualwaiter.domain.Branch;
+import md.virtualwaiter.domain.BranchReview;
 import md.virtualwaiter.domain.StaffUser;
 import md.virtualwaiter.domain.Tenant;
 import md.virtualwaiter.repo.CafeTableRepo;

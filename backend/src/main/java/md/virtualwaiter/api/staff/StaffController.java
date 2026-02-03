@@ -30,6 +30,7 @@ import md.virtualwaiter.repo.BranchHallRepo;
 import md.virtualwaiter.repo.HallPlanRepo;
 import md.virtualwaiter.security.QrSignatureService;
 import md.virtualwaiter.service.PartyService;
+import md.virtualwaiter.service.StatsService;
 import md.virtualwaiter.config.BillProperties;
 import md.virtualwaiter.service.StaffNotificationService;
 import md.virtualwaiter.repo.NotificationEventRepo;
@@ -72,6 +73,7 @@ public class StaffController {
   private final StaffDeviceTokenRepo staffDeviceTokenRepo;
   private final PartyService partyService;
   private final BillProperties billProperties;
+  private final StatsService statsService;
 
   public StaffController(
     StaffUserRepo staffUserRepo,
@@ -94,7 +96,8 @@ public class StaffController {
     NotificationEventRepo notificationEventRepo,
     StaffDeviceTokenRepo staffDeviceTokenRepo,
     PartyService partyService,
-    BillProperties billProperties
+    BillProperties billProperties,
+    StatsService statsService
   ) {
     this.staffUserRepo = staffUserRepo;
     this.chatMessageRepo = chatMessageRepo;
@@ -117,6 +120,7 @@ public class StaffController {
     this.staffDeviceTokenRepo = staffDeviceTokenRepo;
     this.partyService = partyService;
     this.billProperties = billProperties;
+    this.statsService = statsService;
   }
 
   private boolean expireBillIfNeeded(BillRequest br) {
@@ -1212,6 +1216,21 @@ public class StaffController {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "token required");
     }
     staffDeviceTokenRepo.deleteByToken(req.token.trim());
+  }
+
+  private static Instant parseInstantOrDate(String v, boolean isStart) {
+    if (v == null || v.isBlank()) {
+      Instant now = Instant.now();
+      return isStart ? now.minusSeconds(30L * 24 * 3600) : now;
+    }
+    String s = v.trim();
+    try {
+      return Instant.parse(s);
+    } catch (Exception ignored) {
+      LocalDate d = LocalDate.parse(s);
+      return isStart ? d.atStartOfDay().toInstant(ZoneOffset.UTC)
+        : d.plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC).minusSeconds(1);
+    }
   }
 
   // --- Notifications (polling) ---
