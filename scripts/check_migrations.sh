@@ -40,6 +40,7 @@ export SPRING_DATASOURCE_URL="jdbc:postgresql://localhost:${DB_PORT}/${DB_NAME}"
 export SPRING_DATASOURCE_USERNAME="$DB_USER"
 export SPRING_DATASOURCE_PASSWORD="$DB_PASS"
 export APP_AUTH_COOKIE_SECRET="${APP_AUTH_COOKIE_SECRET:-dev_cookie_secret_change_me}"
+export APP_QR_HMAC_SECRET="${APP_QR_HMAC_SECRET:-dev_qr_hmac_secret_change_me}"
 timeout 60s ./backend/gradlew -p backend bootRun --args="--spring.main.web-application-type=none --spring.main.banner-mode=off" || true
 
 echo "==> Verify migrations count"

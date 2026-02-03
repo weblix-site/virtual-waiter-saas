@@ -44,7 +44,13 @@ public class SecurityConfig {
   SecurityFilterChain filterChain(HttpSecurity http, AuthCookieFilter authCookieFilter) throws Exception {
     http.csrf(csrf -> csrf.disable())
       .authorizeHttpRequests(auth -> auth
-        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/api/public/**", "/api/auth/**").permitAll()
+        .requestMatchers(
+          "/v3/api-docs/**",
+          "/swagger-ui/**",
+          "/api/public/**",
+          "/api/auth/**",
+          "/actuator/health/**"
+        ).permitAll()
         .anyRequest().authenticated()
       )
       .httpBasic(Customizer.withDefaults())

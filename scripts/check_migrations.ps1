@@ -41,6 +41,7 @@ $env:SPRING_DATASOURCE_URL = "jdbc:postgresql://localhost:$DbPort/$DbName"
 $env:SPRING_DATASOURCE_USERNAME = $DbUser
 $env:SPRING_DATASOURCE_PASSWORD = $DbPass
 $env:APP_AUTH_COOKIE_SECRET = "dev_cookie_secret_change_me"
+$env:APP_QR_HMAC_SECRET = "dev_qr_hmac_secret_change_me"
 & ./backend/gradlew -p backend bootRun --args="--spring.main.web-application-type=none --spring.main.banner-mode=off" | Out-Null
 
 Write-Host "==> Verify migrations count"
