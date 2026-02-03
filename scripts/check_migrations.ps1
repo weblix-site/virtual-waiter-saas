@@ -40,7 +40,7 @@ Write-Host "==> Run backend to apply migrations"
 $env:SPRING_DATASOURCE_URL = "jdbc:postgresql://localhost:$DbPort/$DbName"
 $env:SPRING_DATASOURCE_USERNAME = $DbUser
 $env:SPRING_DATASOURCE_PASSWORD = $DbPass
-& ./gradlew -p backend bootRun --args="--spring.main.web-application-type=none --spring.main.banner-mode=off" | Out-Null
+& ./backend/gradlew -p backend bootRun --args="--spring.main.web-application-type=none --spring.main.banner-mode=off" | Out-Null
 
 Write-Host "==> Verify migrations count"
 $migFilesCount = (Get-ChildItem backend/src/main/resources/db/migration | Measure-Object).Count

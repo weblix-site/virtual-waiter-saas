@@ -2602,7 +2602,7 @@ class _FloorPlanTabState extends State<FloorPlanTab> {
           if (status == 'NEW') {
             hot.add(tableId);
             final ageMin = _ageFromIso(o['createdAt']?.toString()).inMinutes.toDouble();
-            final intensity = (ageMin / SlaConfig.orderCrit).clamp(0, 1);
+            final intensity = (ageMin / SlaConfig.orderCrit).clamp(0, 1).toDouble();
             final prev = heat[tableId] ?? 0;
             if (intensity > prev) heat[tableId] = intensity;
           }
@@ -2735,7 +2735,7 @@ class _FloorPlanTabState extends State<FloorPlanTab> {
           if (status == 'NEW') {
             hot.add(tableId);
             final ageMin = _ageFromIso(o['createdAt']?.toString()).inMinutes.toDouble();
-            final intensity = (ageMin / SlaConfig.orderCrit).clamp(0, 1);
+            final intensity = (ageMin / SlaConfig.orderCrit).clamp(0, 1).toDouble();
             final prev = heat[tableId] ?? 0;
             if (intensity > prev) heat[tableId] = intensity;
           }

@@ -34,7 +34,7 @@ echo "==> Run backend to apply migrations"
 export SPRING_DATASOURCE_URL="jdbc:postgresql://localhost:${DB_PORT}/${DB_NAME}"
 export SPRING_DATASOURCE_USERNAME="$DB_USER"
 export SPRING_DATASOURCE_PASSWORD="$DB_PASS"
-timeout 60s ./gradlew -p backend bootRun --args="--spring.main.web-application-type=none --spring.main.banner-mode=off" || true
+timeout 60s ./backend/gradlew -p backend bootRun --args="--spring.main.web-application-type=none --spring.main.banner-mode=off" || true
 
 echo "==> Verify migrations count"
 MIG_FILES_COUNT="$(ls backend/src/main/resources/db/migration | wc -l | tr -d ' ')"

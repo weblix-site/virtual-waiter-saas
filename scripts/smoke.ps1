@@ -7,7 +7,12 @@ param(
   [string]$AdminPass = $env:ADMIN_PASS,
   [string]$TablePublicId = $env:TABLE_PUBLIC_ID,
   [string]$PhoneE164 = $env:PHONE_E164,
-  [string]$Locale = $env:LOCALE
+  [string]$Locale = $env:LOCALE,
+  [string]$DbName = $env:DB_NAME,
+  [string]$DbUser = $env:DB_USER,
+  [string]$DbPass = $env:DB_PASS,
+  [string]$DbPort = $env:DB_PORT,
+  [string]$ComposeFile = $env:COMPOSE_FILE
 )
 
 if (-not $ApiBase) { $ApiBase = "http://localhost:8080" }
@@ -15,6 +20,23 @@ if (-not $AdminUser) { $AdminUser = "admin1" }
 if (-not $AdminPass) { $AdminPass = "demo123" }
 if (-not $PhoneE164) { $PhoneE164 = "+37369000000" }
 if (-not $Locale) { $Locale = "ru" }
+if (-not $DbName) { $DbName = "vw" }
+if (-not $DbUser) { $DbUser = "vw" }
+if (-not $DbPass) { $DbPass = "vw" }
+if (-not $DbPort) { $DbPort = "5432" }
+if (-not $ComposeFile) { $ComposeFile = "infra/docker-compose.yml" }
+
+function Ensure-Backend {
+  try {
+    Invoke-RestMethod -Method Get -Uri "$ApiBase/actuator/health" | Out-Null
+    return
+  } catch {
+    Write-Host "Backend is not reachable. Please start backend and database before running smoke tests."
+    exit 1
+  }
+}
+
+Ensure-Backend
 
 if (-not $TablePublicId) {
   Write-Host "Set TABLE_PUBLIC_ID before running."

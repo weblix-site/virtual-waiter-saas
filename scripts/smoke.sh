@@ -10,6 +10,66 @@ ADMIN_PASS="${ADMIN_PASS:-demo123}"
 TABLE_PUBLIC_ID="${TABLE_PUBLIC_ID:-}"
 PHONE_E164="${PHONE_E164:-+37369000000}"
 LOCALE="${LOCALE:-ru}"
+DB_NAME="${DB_NAME:-vw}"
+DB_USER="${DB_USER:-vw}"
+DB_PASS="${DB_PASS:-vw}"
+DB_PORT="${DB_PORT:-5432}"
+COMPOSE_FILE="${COMPOSE_FILE:-infra/docker-compose.yml}"
+
+BACKEND_PID=""
+
+cleanup() {
+  if [[ -n "${BACKEND_PID}" ]]; then
+    kill "${BACKEND_PID}" >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup EXIT
+
+ensure_backend() {
+  if curl -fsS "${API_BASE}/actuator/health" >/dev/null 2>&1; then
+    return 0
+  fi
+  if command -v docker >/dev/null 2>&1; then
+    echo "==> Start postgres (docker compose)"
+    docker compose -f "$COMPOSE_FILE" up -d postgres >/dev/null
+    DB_CONTAINER="$(docker compose -f "$COMPOSE_FILE" ps -q postgres)"
+    if [[ -z "$DB_CONTAINER" ]]; then
+      echo "Postgres container not found."
+      exit 1
+    fi
+    echo "==> Wait for postgres"
+    for i in {1..30}; do
+      if docker exec "$DB_CONTAINER" pg_isready -U "$DB_USER" >/dev/null 2>&1; then
+        break
+      fi
+      sleep 1
+    done
+  fi
+
+  if [[ -x "./backend/gradlew" ]]; then
+    echo "==> Start backend"
+    export SPRING_DATASOURCE_URL="jdbc:postgresql://localhost:${DB_PORT}/${DB_NAME}"
+    export SPRING_DATASOURCE_USERNAME="$DB_USER"
+    export SPRING_DATASOURCE_PASSWORD="$DB_PASS"
+    ./backend/gradlew -p backend bootRun --args="--spring.main.banner-mode=off" >/tmp/vw_smoke_backend.log 2>&1 &
+    BACKEND_PID=$!
+  else
+    echo "backend/gradlew not found."
+    exit 1
+  fi
+
+  echo "==> Wait for backend"
+  for i in {1..60}; do
+    if curl -fsS "${API_BASE}/actuator/health" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "Backend did not become ready. Check /tmp/vw_smoke_backend.log"
+  exit 1
+}
+
+ensure_backend
 
 if [[ -z "$TABLE_PUBLIC_ID" ]]; then
   echo "==> Resolve tablePublicId"
