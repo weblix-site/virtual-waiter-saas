@@ -1,7 +1,9 @@
 # Java
 **/build/
+**/bin/
 **/.gradle/
 **/out/
+**/*.class
 **/*.iml
 **/.idea/
 
