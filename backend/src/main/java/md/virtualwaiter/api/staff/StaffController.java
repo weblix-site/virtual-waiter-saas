@@ -32,6 +32,7 @@ import md.virtualwaiter.security.QrSignatureService;
 import md.virtualwaiter.service.PartyService;
 import md.virtualwaiter.service.StatsService;
 import md.virtualwaiter.service.LoyaltyService;
+import md.virtualwaiter.service.AuditService;
 import md.virtualwaiter.config.BillProperties;
 import md.virtualwaiter.service.StaffNotificationService;
 import md.virtualwaiter.repo.NotificationEventRepo;
@@ -90,6 +91,7 @@ public class StaffController {
   private final BillProperties billProperties;
   private final StatsService statsService;
   private final LoyaltyService loyaltyService;
+  private final AuditService auditService;
 
   public StaffController(
     StaffUserRepo staffUserRepo,
@@ -114,7 +116,8 @@ public class StaffController {
     PartyService partyService,
     BillProperties billProperties,
     StatsService statsService,
-    LoyaltyService loyaltyService
+    LoyaltyService loyaltyService,
+    AuditService auditService
   ) {
     this.staffUserRepo = staffUserRepo;
     this.chatMessageRepo = chatMessageRepo;
@@ -139,7 +142,12 @@ public class StaffController {
     this.billProperties = billProperties;
     this.statsService = statsService;
     this.loyaltyService = loyaltyService;
+    this.auditService = auditService;
   }
+
+  private static final Set<String> ROLE_ADMIN_LIKE = Set.of("ADMIN", "MANAGER");
+  private static final Set<String> ROLE_WAITER_LIKE = Set.of("WAITER", "HOST");
+  private static final Set<String> ROLE_KITCHEN_LIKE = Set.of("KITCHEN", "BAR");
 
   private boolean expireBillIfNeeded(BillRequest br) {
     if (br == null) return false;
@@ -182,9 +190,20 @@ public class StaffController {
     StaffUser u = current(auth);
     String role = u.role == null ? "" : u.role.toUpperCase(Locale.ROOT);
     for (String r : roles) {
-      if (role.equals(r)) return u;
+      if (roleMatches(r, role)) return u;
     }
     throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Insufficient role");
+  }
+
+  private boolean roleMatches(String required, String actual) {
+    if (required == null || actual == null) return false;
+    String req = required.toUpperCase(Locale.ROOT);
+    String act = actual.toUpperCase(Locale.ROOT);
+    if (req.equals(act)) return true;
+    if ("ADMIN".equals(req) && ROLE_ADMIN_LIKE.contains(act)) return true;
+    if ("WAITER".equals(req) && ROLE_WAITER_LIKE.contains(act)) return true;
+    if ("KITCHEN".equals(req) && ROLE_KITCHEN_LIKE.contains(act)) return true;
+    return false;
   }
 
   public record MeResponse(
@@ -298,7 +317,7 @@ public class StaffController {
     List<StaffUser> staff = staffUserRepo.findByBranchId(u.branchId);
     List<WaiterDto> out = new ArrayList<>();
     for (StaffUser su : staff) {
-      if (!"WAITER".equalsIgnoreCase(su.role)) continue;
+      if (su.role == null || !ROLE_WAITER_LIKE.contains(su.role.toUpperCase(Locale.ROOT))) continue;
       out.add(new WaiterDto(su.id, su.username, su.firstName, su.lastName, su.photoUrl));
     }
     return out;
@@ -416,6 +435,7 @@ public class StaffController {
     m.staffUserId = u.id;
     m.message = msg;
     chatMessageRepo.save(m);
+    auditService.log(u, "SEND", "ChatMessage", m.id, "{\"guestSessionId\":" + m.guestSessionId + "}");
   }
 
   public record ChatReadRequest(long guestSessionId) {}
@@ -915,6 +935,7 @@ public class StaffController {
     if (!isAllowedRoleTransition(u.role, o.status, next)) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid status transition");
     }
+    String prevStatus = o.status;
     o.status = next;
     Instant now = Instant.now();
     switch (next) {
@@ -941,11 +962,12 @@ public class StaffController {
     }
     if (o.handledByStaffId == null) {
       String role = u.role == null ? "" : u.role.toUpperCase(Locale.ROOT);
-      if (Set.of("WAITER", "ADMIN").contains(role)) {
+      if (Set.of("WAITER", "HOST", "ADMIN", "MANAGER").contains(role)) {
         o.handledByStaffId = u.id;
       }
     }
     orderRepo.save(o);
+    auditService.log(u, "UPDATE_STATUS", "Order", o.id, "{\"from\":\"" + (prevStatus == null ? "" : prevStatus) + "\",\"to\":\"" + next + "\"}");
   }
 
   private boolean isAllowedOrderStatus(String s) {
@@ -968,11 +990,11 @@ public class StaffController {
 
   private boolean isAllowedRoleTransition(String role, String current, String next) {
     String r = role == null ? "" : role.toUpperCase(Locale.ROOT);
-    if ("ADMIN".equals(r)) return isAllowedTransition(current, next);
-    if ("KITCHEN".equals(r)) {
+    if ("ADMIN".equals(r) || "MANAGER".equals(r)) return isAllowedTransition(current, next);
+    if ("KITCHEN".equals(r) || "BAR".equals(r)) {
       return isAllowedTransition(current, next) && Set.of("ACCEPTED", "IN_PROGRESS", "READY", "SERVED", "CLOSED").contains(next);
     }
-    if ("WAITER".equals(r)) {
+    if ("WAITER".equals(r) || "HOST".equals(r)) {
       return isAllowedTransition(current, next) && Set.of("ACCEPTED", "READY", "SERVED", "CLOSED", "CANCELLED").contains(next);
     }
     return false;
@@ -1026,6 +1048,7 @@ public class StaffController {
     }
     c.status = next;
     waiterCallRepo.save(c);
+    auditService.log(u, "UPDATE_STATUS", "WaiterCall", c.id, "{\"to\":\"" + next + "\"}");
     return new UpdateWaiterCallStatusRes(c.id, c.status);
   }
   // --- QR helper (for admin/staff tooling) ---
@@ -1135,6 +1158,7 @@ public class StaffController {
       }
     }
 
+    auditService.log(staff, "CONFIRM_PAID", "BillRequest", br.id, "{\"status\":\"" + br.status + "\"}");
     return new ConfirmPaidResponse(br.id, br.status);
   }
 
@@ -1165,6 +1189,7 @@ public class StaffController {
         orderItemRepo.save(oi);
       }
     }
+    auditService.log(staff, "CANCEL", "BillRequest", br.id, "{\"status\":\"" + br.status + "\"}");
     return new CancelBillRequestResponse(br.id, br.status);
   }
 
@@ -1185,6 +1210,7 @@ public class StaffController {
       return new ClosePartyResponse(p.id, p.status);
     }
     partyService.closeParty(p, java.time.Instant.now());
+    auditService.log(staff, "CLOSE", "Party", p.id, "{\"status\":\"" + p.status + "\"}");
     return new ClosePartyResponse(p.id, p.status);
   }
 

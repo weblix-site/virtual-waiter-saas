@@ -83,6 +83,22 @@ const dict: Record<string, Record<Lang, string>> = {
   reviewLimit: { ru: "Лимит", ro: "Limită", en: "Limit" },
   tables: { ru: "Столы", ro: "Mese", en: "Tables" },
   floorPlan: { ru: "План зала", ro: "Plan sală", en: "Floor Plan" },
+  multiSelect: { ru: "Мультивыбор", ro: "Multiselect", en: "Multi-select" },
+  multiSelectHint: { ru: "Клик по столам добавляет в выбор.", ro: "Click pe mese pentru selecție.", en: "Click tables to select." },
+  selectedCount: { ru: "Выбрано", ro: "Selectate", en: "Selected" },
+  bulkAssignWaiter: { ru: "Назначить официанта", ro: "Atribuie chelner", en: "Assign waiter" },
+  bulkAssignZone: { ru: "Назначить зону", ro: "Atribuie zonă", en: "Assign zone" },
+  bulkClearWaiter: { ru: "Очистить официанта", ro: "Elimină chelner", en: "Clear waiter" },
+  bulkClearZone: { ru: "Очистить зону", ro: "Elimină zonă", en: "Clear zone" },
+  bulkApply: { ru: "Применить к выбранным", ro: "Aplică la selectați", en: "Apply to selected" },
+  operatorMode: { ru: "Оператор‑режим", ro: "Mod operator", en: "Operator mode" },
+  operatorHint: { ru: "Подсветка столов с вызовами/заказами и SLA‑таймер.", ro: "Evidențiază mese cu apeluri/comenzi și timer SLA.", en: "Highlights tables with calls/orders and SLA timer." },
+  autoAssignZones: { ru: "Авто‑назначить зоны", ro: "Auto‑atribuire zone", en: "Auto-assign zones" },
+  autoAssignZonesHint: { ru: "Распределить официантов по зонам по нагрузке.", ro: "Distribuie chelneri pe zone după încărcare.", en: "Distribute waiters by zone load." },
+  zoneLoad: { ru: "Нагрузка", ro: "Încărcare", en: "Load" },
+  signalCall: { ru: "Вызов", ro: "Apel", en: "Call" },
+  signalOrder: { ru: "Заказ", ro: "Comandă", en: "Order" },
+  signalAge: { ru: "Время", ro: "Timp", en: "Age" },
   stats: { ru: "Статистика", ro: "Statistici", en: "Stats" },
   audit: { ru: "Аудит", ro: "Audit", en: "Audit" },
   add: { ru: "Добавить", ro: "Adaugă", en: "Add" },
@@ -340,6 +356,12 @@ const dict: Record<string, Record<Lang, string>> = {
   staffPassword: { ru: "Пароль", ro: "Parolă", en: "Password" },
   staffProfile: { ru: "Профиль официанта", ro: "Profil chelner", en: "Waiter profile" },
   editProfile: { ru: "Профиль", ro: "Profil", en: "Profile" },
+  roleWaiter: { ru: "Официант", ro: "Chelner", en: "Waiter" },
+  roleHost: { ru: "Хост", ro: "Host", en: "Host" },
+  roleKitchen: { ru: "Кухня", ro: "Bucătărie", en: "Kitchen" },
+  roleBar: { ru: "Бар", ro: "Bar", en: "Bar" },
+  roleAdmin: { ru: "Администратор", ro: "Administrator", en: "Admin" },
+  roleManager: { ru: "Менеджер", ro: "Manager", en: "Manager" },
   firstName: { ru: "Имя", ro: "Prenume", en: "First name" },
   lastName: { ru: "Фамилия", ro: "Nume", en: "Last name" },
   age: { ru: "Возраст", ro: "Vârstă", en: "Age" },
@@ -508,6 +530,15 @@ type HallPlanDto = {
   sortOrder: number;
   backgroundUrl?: string | null;
   zonesJson?: string | null;
+};
+
+type PlanSignalRow = {
+  tableId: number;
+  waiterCallActive: boolean;
+  waiterCallStatus?: string | null;
+  waiterCallCreatedAt?: string | null;
+  orderStatus?: string | null;
+  orderCreatedAt?: string | null;
 };
 
 type StaffUser = {
@@ -744,6 +775,22 @@ export default function AdminPage() {
   const [lang, setLang] = useState<Lang>("ru");
   const translate = t;
 
+  const roleLabel = (role?: string | null) => {
+    const r = (role ?? "").toUpperCase();
+    if (r === "WAITER") return t(lang, "roleWaiter");
+    if (r === "HOST") return t(lang, "roleHost");
+    if (r === "KITCHEN") return t(lang, "roleKitchen");
+    if (r === "BAR") return t(lang, "roleBar");
+    if (r === "ADMIN") return t(lang, "roleAdmin");
+    if (r === "MANAGER") return t(lang, "roleManager");
+    return role ?? "";
+  };
+
+  const isWaiterRole = (role?: string | null) => {
+    const r = (role ?? "").toUpperCase();
+    return r === "WAITER" || r === "HOST";
+  };
+
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<MenuItem[]>([]);
   const [tables, setTables] = useState<TableDto[]>([]);
@@ -756,6 +803,14 @@ export default function AdminPage() {
   const [newHallName, setNewHallName] = useState("");
   const [newHallSort, setNewHallSort] = useState(0);
   const [selectedTableId, setSelectedTableId] = useState<number | null>(null);
+  const [multiSelectMode, setMultiSelectMode] = useState(false);
+  const [selectedTableIds, setSelectedTableIds] = useState<number[]>([]);
+  const [bulkWaiterId, setBulkWaiterId] = useState<number | "">("");
+  const [bulkZoneName, setBulkZoneName] = useState("");
+  const [planOperatorMode, setPlanOperatorMode] = useState(false);
+  const [planSignals, setPlanSignals] = useState<Record<number, PlanSignalRow>>({});
+  const [planNow, setPlanNow] = useState(Date.now());
+  const [zoneLoads, setZoneLoads] = useState<Record<string, number>>({});
   const [planEditMode, setPlanEditMode] = useState(true);
   const [planPreview, setPlanPreview] = useState(false);
   const [snapEnabled, setSnapEnabled] = useState(true);
@@ -1050,6 +1105,12 @@ export default function AdminPage() {
     localStorage.setItem("adminLang", lang);
   }, [lang]);
 
+  useEffect(() => {
+    if (!multiSelectMode) {
+      setSelectedTableIds([]);
+    }
+  }, [multiSelectMode]);
+
   async function api(path: string, init?: RequestInit) {
     const res = await fetch(`${API_BASE}${path}`, {
       ...init,
@@ -1131,6 +1192,100 @@ export default function AdminPage() {
     return { maxX: Math.max(1, maxX), maxY: Math.max(1, maxY) };
   };
 
+  const toggleTableSelection = (id: number) => {
+    setSelectedTableIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  const clearTableSelection = () => {
+    setSelectedTableIds([]);
+  };
+
+  const applyBulkToSelected = async (updater: (t: TableDto) => TableDto) => {
+    if (selectedTableIds.length === 0) return;
+    const nextTables = tables.map((t) => (selectedTableIds.includes(t.id) ? updater({ ...t }) : t));
+    setTables(nextTables);
+    await saveTableLayout(nextTables);
+    clearTableSelection();
+  };
+
+  const autoAssignZones = () => {
+    const waiters = staff.filter((s) => isWaiterRole(s.role));
+    if (planZones.length === 0 || waiters.length === 0) return;
+    const sorted = [...waiters].sort((a, b) => a.id - b.id);
+    setPlanZones((prev) =>
+      prev.map((z, i) => ({
+        ...z,
+        waiterId: sorted[i % sorted.length].id,
+      }))
+    );
+  };
+
+  const computeZoneLoads = useCallback((signals: Record<number, PlanSignalRow>) => {
+    const loads: Record<string, number> = {};
+    const byId = new Map<number, TableDto>();
+    tables.forEach((t) => byId.set(t.id, t));
+    const weight = (s?: string | null) => {
+      if (!s) return 0;
+      const st = s.toUpperCase();
+      if (st === "NEW") return 2.0;
+      if (st === "IN_PROGRESS") return 1.5;
+      if (st === "READY") return 1.0;
+      return 0.5;
+    };
+    Object.values(signals).forEach((sig) => {
+      const table = byId.get(sig.tableId);
+      if (!table || !table.layoutZone) return;
+      const key = table.layoutZone.trim();
+      const callW = sig.waiterCallActive ? 2.0 : 0;
+      const orderW = weight(sig.orderStatus);
+      const add = callW + orderW;
+      if (add <= 0) return;
+      loads[key] = (loads[key] ?? 0) + add;
+    });
+    return loads;
+  }, [tables]);
+
+  const autoAssignZonesBalanced = async () => {
+    const waiters = staff.filter((s) => isWaiterRole(s.role));
+    if (planZones.length === 0 || waiters.length === 0) return;
+    let signals = planSignals;
+    if (Object.keys(signals).length === 0) {
+      const qs = hallId ? `?hallId=${hallId}` : "";
+      const res = await api(`/api/admin/plan-signals${qs}`);
+      const body = await res.json();
+      const next: Record<number, PlanSignalRow> = {};
+      (body as PlanSignalRow[]).forEach((row) => {
+        next[row.tableId] = row;
+      });
+      signals = next;
+      setPlanSignals(next);
+    }
+    const loads = computeZoneLoads(signals);
+    setZoneLoads(loads);
+    const zones = [...planZones].sort((a, b) => (loads[b.name] ?? 0) - (loads[a.name] ?? 0));
+    const sortedWaiters = [...waiters].sort((a, b) => a.id - b.id);
+    setPlanZones(
+      zones.map((z, i) => ({
+        ...z,
+        waiterId: sortedWaiters[i % sortedWaiters.length].id,
+      }))
+    );
+  };
+
+  useEffect(() => {
+    if (!planOperatorMode) {
+      setZoneLoads({});
+      return;
+    }
+    setZoneLoads(computeZoneLoads(planSignals));
+  }, [planOperatorMode, planSignals, tables, planZones, computeZoneLoads]);
+
+  const formatAge = (sec: number) => {
+    const m = Math.floor(sec / 60);
+    const s = Math.max(0, sec % 60);
+    return `${m}:${String(s).padStart(2, "0")}`;
+  };
+
   const fitPlanToScreen = () => {
     const { maxX, maxY } = computePlanBounds();
     const zoomX = 100 / maxX;
@@ -1138,6 +1293,34 @@ export default function AdminPage() {
     const target = Math.min(2, Math.max(0.3, Math.min(zoomX, zoomY)));
     setPlanZoom(Number(target.toFixed(2)));
   };
+
+  const loadPlanSignals = useCallback(async () => {
+    if (!authReady || !planOperatorMode) return;
+    const qs = hallId ? `?hallId=${hallId}` : "";
+    const res = await api(`/api/admin/plan-signals${qs}`);
+    const body = await res.json();
+    const next: Record<number, PlanSignalRow> = {};
+    (body as PlanSignalRow[]).forEach((row) => {
+      next[row.tableId] = row;
+    });
+    setPlanSignals(next);
+  }, [authReady, planOperatorMode, hallId]);
+
+  useEffect(() => {
+    if (!planOperatorMode) {
+      setPlanSignals({});
+      return;
+    }
+    loadPlanSignals();
+    const id = window.setInterval(loadPlanSignals, 5000);
+    return () => window.clearInterval(id);
+  }, [planOperatorMode, loadPlanSignals]);
+
+  useEffect(() => {
+    if (!planOperatorMode) return;
+    const id = window.setInterval(() => setPlanNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [planOperatorMode]);
 
   useEffect(() => {
     const handleMove = (e: PointerEvent) => {
@@ -1607,9 +1790,10 @@ export default function AdminPage() {
     loadAll();
   }
 
-  async function saveTableLayout() {
+  async function saveTableLayout(overrideTables?: TableDto[]) {
     if (!hallId) return;
-    const payload = tables.map((t, idx) => {
+    const sourceTables = overrideTables ?? tables;
+    const payload = sourceTables.map((t, idx) => {
       const layout = getTableLayout(t, idx);
       return {
         id: t.id,
@@ -2655,6 +2839,16 @@ export default function AdminPage() {
 
   return (
     <main style={{ padding: 16, maxWidth: 1100, margin: "0 auto", fontFamily: "system-ui, -apple-system, Segoe UI, Roboto" }}>
+      <style jsx global>{`
+        @keyframes vwPlanFlash {
+          0% { box-shadow: 0 0 0 0 rgba(229,57,53,0.35); }
+          70% { box-shadow: 0 0 0 12px rgba(229,57,53,0); }
+          100% { box-shadow: 0 0 0 0 rgba(229,57,53,0); }
+        }
+        .vw-plan-flash {
+          animation: vwPlanFlash 1.2s ease-out infinite;
+        }
+      `}</style>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h1 style={{ margin: 0 }}>{t(lang, "admin")}</h1>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -3341,7 +3535,7 @@ export default function AdminPage() {
             {t(lang, "waiter")}
             <select value={chatExportWaiterId} onChange={(e) => setChatExportWaiterId(e.target.value ? Number(e.target.value) : "")}>
               <option value="">{t(lang, "all")}</option>
-              {staff.filter((s) => s.role === "WAITER").map((w) => (
+              {staff.filter((s) => isWaiterRole(s.role)).map((w) => (
                 <option key={w.id} value={w.id}>{w.username} #{w.id}</option>
               ))}
             </select>
@@ -3890,6 +4084,14 @@ export default function AdminPage() {
             <input type="checkbox" checked={panMode} onChange={(e) => setPanMode(e.target.checked)} />
             {t(lang, "panMode")}
           </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <input type="checkbox" checked={multiSelectMode} onChange={(e) => setMultiSelectMode(e.target.checked)} />
+            {t(lang, "multiSelect")}
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <input type="checkbox" checked={planOperatorMode} onChange={(e) => setPlanOperatorMode(e.target.checked)} />
+            {t(lang, "operatorMode")}
+          </label>
           <button onClick={fitPlanToScreen}>{t(lang, "fitToScreen")}</button>
           <button onClick={() => setPlanZoom(1)}>{t(lang, "resetZoom")}</button>
           <button onClick={() => setPlanPan({ x: 0, y: 0 })}>{t(lang, "resetPan")}</button>
@@ -3955,7 +4157,7 @@ export default function AdminPage() {
           <button onClick={autoLayoutTables}>{t(lang, "autoLayout")}</button>
           <button onClick={resetLayouts}>{t(lang, "resetLayout")}</button>
           <button onClick={snapLayouts}>{t(lang, "snapLayout")}</button>
-          <button onClick={saveTableLayout}>{t(lang, "saveLayout")}</button>
+          <button onClick={() => saveTableLayout()}>{t(lang, "saveLayout")}</button>
           <button onClick={exportPlanJson} disabled={!hallPlanId}>{t(lang, "exportJson")}</button>
           <button
             onClick={() => setPlanVersionsOpen((v) => !v)}
@@ -3992,6 +4194,8 @@ export default function AdminPage() {
               }}
             />
           </label>
+          {multiSelectMode && <span style={{ color: "#666" }}>{t(lang, "multiSelectHint")}</span>}
+          {planOperatorMode && <span style={{ color: "#666" }}>{t(lang, "operatorHint")}</span>}
           <span style={{ color: "#666" }}>{t(lang, "dragHint")}</span>
         </div>
         {hallPlanId && planVersionsOpen && (
@@ -4162,7 +4366,7 @@ export default function AdminPage() {
         )}
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
           <span style={{ fontSize: 12, color: "#666" }}>{t(lang, "legend")}:</span>
-          {staff.filter((s) => s.role === "WAITER").map((s) => (
+          {staff.filter((s) => isWaiterRole(s.role)).map((s) => (
             <span key={s.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12 }}>
               <span
                 style={{
@@ -4176,7 +4380,7 @@ export default function AdminPage() {
               {s.username} #{s.id}
             </span>
           ))}
-          {staff.filter((s) => s.role === "WAITER").length === 0 && (
+          {staff.filter((s) => isWaiterRole(s.role)).length === 0 && (
             <span style={{ fontSize: 12, color: "#999" }}>{t(lang, "noWaiters")}</span>
           )}
         </div>
@@ -4325,13 +4529,28 @@ export default function AdminPage() {
                 .map((t, idx) => {
                   const layout = getTableLayout(t, idx);
                   const color = waiterColor(t.assignedWaiterId ?? null);
-                  const selected = t.id === selectedTableId;
+                  const selected = multiSelectMode ? selectedTableIds.includes(t.id) : t.id === selectedTableId;
+                  const signal = planSignals[t.id];
+                  const callActive = planOperatorMode && signal?.waiterCallActive;
+                  const orderStatus = planOperatorMode ? signal?.orderStatus : null;
+                  const callAgeSec =
+                    callActive && signal?.waiterCallCreatedAt ? Math.floor((planNow - Date.parse(signal.waiterCallCreatedAt)) / 1000) : null;
+                  const orderAgeSec =
+                    orderStatus && signal?.orderCreatedAt ? Math.floor((planNow - Date.parse(signal.orderCreatedAt)) / 1000) : null;
+                  const operatorTone = callActive ? "#E53935" : orderStatus === "NEW" ? "#FB8C00" : orderStatus === "IN_PROGRESS" ? "#FDD835" : orderStatus === "READY" ? "#43A047" : null;
+                  const flashClass = callActive || orderStatus === "NEW" || orderStatus === "IN_PROGRESS" ? "vw-plan-flash" : "";
                   const isDropTarget = dragWaiterId !== null && dragOverTableId === t.id;
                   return (
                     <div
                       key={t.id}
+                      className={flashClass}
                       onPointerDown={(e) => {
                         if (!isInteractive || panMode) return;
+                        if (multiSelectMode) {
+                          toggleTableSelection(t.id);
+                          setSelectedTableId(t.id);
+                          return;
+                        }
                         dragRef.current = {
                           id: t.id,
                           startX: e.clientX,
@@ -4367,7 +4586,14 @@ export default function AdminPage() {
                         setDragWaiterId(null);
                         setDragOverTableId(null);
                       }}
-                      onClick={() => setSelectedTableId(t.id)}
+                      onClick={() => {
+                        if (multiSelectMode) {
+                          toggleTableSelection(t.id);
+                          setSelectedTableId(t.id);
+                          return;
+                        }
+                        setSelectedTableId(t.id);
+                      }}
                       style={{
                         position: "absolute",
                         left: `${layout.layoutX}%`,
@@ -4375,7 +4601,13 @@ export default function AdminPage() {
                         width: `${layout.layoutW}%`,
                         height: `${layout.layoutH}%`,
                         borderRadius: layout.layoutShape === "ROUND" ? 999 : 14,
-                        border: isDropTarget ? `2px dashed ${color}` : selected ? `2px solid ${color}` : "1px solid rgba(0,0,0,0.12)",
+                        border: isDropTarget
+                          ? `2px dashed ${color}`
+                          : selected
+                            ? `2px solid ${color}`
+                            : operatorTone
+                              ? `2px solid ${operatorTone}`
+                              : "1px solid rgba(0,0,0,0.12)",
                         background: selected ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.9)",
                         boxShadow: isDropTarget ? "0 0 0 2px rgba(0,0,0,0.12)" : selected ? "0 10px 28px rgba(0,0,0,0.18)" : "0 6px 18px rgba(0,0,0,0.12)",
                         transform: `rotate(${layout.layoutRotation ?? 0}deg)`,
@@ -4387,7 +4619,7 @@ export default function AdminPage() {
                         cursor: isInteractive ? "grab" : "default",
                         userSelect: "none",
                       }}
-                    >
+                      >
                       <div style={{ fontWeight: 700, fontSize: 16 }}>#{t.number}</div>
                       <div style={{ fontSize: 12, color }}>
                         {t.assignedWaiterId ? `${translate(lang, "waiterLabel")} #${t.assignedWaiterId}` : translate(lang, "unassigned")}
@@ -4395,6 +4627,11 @@ export default function AdminPage() {
                       {layout.layoutZone ? (
                         <div style={{ fontSize: 11, color: "#666" }}>{layout.layoutZone}</div>
                       ) : null}
+                      {planOperatorMode && (callActive || orderStatus) && (
+                        <div style={{ fontSize: 11, color: operatorTone ?? "#444" }}>
+                          {callActive ? `${translate(lang, "signalCall")} • ${formatAge(callAgeSec ?? 0)}` : `${translate(lang, "signalOrder")} ${orderStatus} • ${formatAge(orderAgeSec ?? 0)}`}
+                        </div>
+                      )}
                       {isInteractive && selected && (
                         <>
                           {["nw", "ne", "sw", "se"].map((corner) => (
@@ -4442,7 +4679,7 @@ export default function AdminPage() {
             <div style={{ marginBottom: 12 }}>
               <div style={{ fontWeight: 600, marginBottom: 6 }}>{t(lang, "assignWaiterDrag")}</div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {staff.filter((s) => s.role === "WAITER").map((s) => (
+                {staff.filter((s) => isWaiterRole(s.role)).map((s) => (
                   <div
                     key={s.id}
                     draggable={isInteractive}
@@ -4462,7 +4699,7 @@ export default function AdminPage() {
                     {s.username} #{s.id}
                   </div>
                 ))}
-                {staff.filter((s) => s.role === "WAITER").length === 0 && (
+                {staff.filter((s) => isWaiterRole(s.role)).length === 0 && (
                   <div style={{ color: "#777", fontSize: 12 }}>{t(lang, "noWaitersYet")}</div>
                 )}
               </div>
@@ -4472,6 +4709,49 @@ export default function AdminPage() {
                 </div>
               )}
             </div>
+            {multiSelectMode && selectedTableIds.length > 0 && (
+              <div style={{ marginBottom: 12, padding: "10px 12px", borderRadius: 10, border: "1px solid #eee", background: "#fafafa" }}>
+                <div style={{ fontWeight: 600, marginBottom: 6 }}>
+                  {t(lang, "selectedCount")}: {selectedTableIds.length}
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                  <select value={bulkWaiterId} onChange={(e) => setBulkWaiterId(e.target.value ? Number(e.target.value) : "")}>
+                    <option value="">{t(lang, "bulkAssignWaiter")}</option>
+                    {staff.filter((s) => isWaiterRole(s.role)).map((s) => (
+                      <option key={s.id} value={s.id}>{s.username}</option>
+                    ))}
+                  </select>
+                  <input
+                    placeholder={t(lang, "bulkAssignZone")}
+                    value={bulkZoneName}
+                    onChange={(e) => setBulkZoneName(e.target.value)}
+                  />
+                  <button
+                    onClick={() => {
+                      if (bulkWaiterId === "") return;
+                      applyBulkToSelected((t) => ({ ...t, assignedWaiterId: bulkWaiterId as number }));
+                    }}
+                  >
+                    {t(lang, "bulkAssignWaiter")}
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (!bulkZoneName.trim()) return;
+                      applyBulkToSelected((t) => ({ ...t, layoutZone: bulkZoneName.trim() }));
+                    }}
+                  >
+                    {t(lang, "bulkAssignZone")}
+                  </button>
+                  <button onClick={() => applyBulkToSelected((t) => ({ ...t, assignedWaiterId: null }))}>
+                    {t(lang, "bulkClearWaiter")}
+                  </button>
+                  <button onClick={() => applyBulkToSelected((t) => ({ ...t, layoutZone: "" }))}>
+                    {t(lang, "bulkClearZone")}
+                  </button>
+                  <button onClick={clearTableSelection}>{t(lang, "clear")}</button>
+                </div>
+              </div>
+            )}
             {selectedTable ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 <div><strong>{t(lang, "tableSelected")}{selectedTable.number}</strong></div>
@@ -4524,7 +4804,7 @@ export default function AdminPage() {
                   />
                 </label>
                 <div style={{ display: "flex", gap: 8 }}>
-                  <button onClick={saveTableLayout}>{t(lang, "save")}</button>
+                  <button onClick={() => saveTableLayout()}>{t(lang, "save")}</button>
                   <button onClick={() => updateSelectedTable({ layoutShape: "ROUND", layoutW: 10, layoutH: 10, layoutRotation: 0 })}>
                     {t(lang, "resetShape")}
                   </button>
@@ -4644,10 +4924,15 @@ export default function AdminPage() {
                     }
                   >
                     <option value="">{t(lang, "zoneWaiter")}: {t(lang, "none")}</option>
-                    {staff.filter((s) => s.role === "WAITER").map((w) => (
+                    {staff.filter((s) => isWaiterRole(s.role)).map((w) => (
                       <option key={w.id} value={w.id}>{w.username}</option>
                     ))}
                   </select>
+                  {zoneLoads[z.name] != null && (
+                    <div style={{ fontSize: 11, color: "#666" }}>
+                      {t(lang, "zoneLoad")}: {zoneLoads[z.name].toFixed(1)}
+                    </div>
+                  )}
                 </div>
               ))}
               <button
@@ -4661,6 +4946,10 @@ export default function AdminPage() {
               >
                 {t(lang, "addZone")}
               </button>
+              <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center" }}>
+                <button onClick={autoAssignZonesBalanced}>{t(lang, "autoAssignZones")}</button>
+                <span style={{ fontSize: 12, color: "#666" }}>{t(lang, "autoAssignZonesHint")}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -4682,7 +4971,7 @@ export default function AdminPage() {
           </select>
           <select value={newTableWaiterId} onChange={(e) => setNewTableWaiterId(e.target.value ? Number(e.target.value) : "")}>
             <option value="">{t(lang, "assignWaiter")}</option>
-            {staff.filter((s) => s.role === "WAITER").map((s) => (
+            {staff.filter((s) => isWaiterRole(s.role)).map((s) => (
               <option key={s.id} value={s.id}>{s.username}</option>
             ))}
           </select>
@@ -4693,7 +4982,7 @@ export default function AdminPage() {
           <input placeholder={t(lang, "filterTablePlaceholder")} value={tableFilterText} onChange={(e) => setTableFilterText(e.target.value)} />
           <select value={tableFilterWaiterId} onChange={(e) => setTableFilterWaiterId(e.target.value ? Number(e.target.value) : "")}>
             <option value="">{t(lang, "allWaiters")}</option>
-            {staff.filter((s) => s.role === "WAITER").map((s) => (
+            {staff.filter((s) => isWaiterRole(s.role)).map((s) => (
               <option key={s.id} value={s.id}>{s.username}</option>
             ))}
           </select>
@@ -4772,7 +5061,7 @@ export default function AdminPage() {
                 onChange={(e) => assignWaiter(t.id, e.target.value ? Number(e.target.value) : null)}
               >
                 <option value="">{translate(lang, "noWaiter")}</option>
-                {staff.filter((s) => s.role === "WAITER").map((s) => (
+                {staff.filter((s) => isWaiterRole(s.role)).map((s) => (
                   <option key={s.id} value={s.id}>{s.username}</option>
                 ))}
               </select>
@@ -4812,9 +5101,12 @@ export default function AdminPage() {
           <input placeholder={t(lang, "staffUsername")} value={newStaffUser} onChange={(e) => setNewStaffUser(e.target.value)} />
           <input placeholder={t(lang, "staffPassword")} value={newStaffPass} onChange={(e) => setNewStaffPass(e.target.value)} />
           <select value={newStaffRole} onChange={(e) => setNewStaffRole(e.target.value)}>
-            <option value="WAITER">WAITER</option>
-            <option value="KITCHEN">KITCHEN</option>
-            <option value="ADMIN">ADMIN</option>
+            <option value="WAITER">{roleLabel("WAITER")}</option>
+            <option value="HOST">{roleLabel("HOST")}</option>
+            <option value="KITCHEN">{roleLabel("KITCHEN")}</option>
+            <option value="BAR">{roleLabel("BAR")}</option>
+            <option value="ADMIN">{roleLabel("ADMIN")}</option>
+            <option value="MANAGER">{roleLabel("MANAGER")}</option>
           </select>
           <button onClick={createStaff}>{t(lang, "add")}</button>
         </div>
@@ -4822,9 +5114,12 @@ export default function AdminPage() {
           <input placeholder={t(lang, "filterByUsername")} value={staffFilterText} onChange={(e) => setStaffFilterText(e.target.value)} />
           <select value={staffFilterRole} onChange={(e) => setStaffFilterRole(e.target.value)}>
             <option value="">{t(lang, "allRoles")}</option>
-            <option value="WAITER">WAITER</option>
-            <option value="KITCHEN">KITCHEN</option>
-            <option value="ADMIN">ADMIN</option>
+            <option value="WAITER">{roleLabel("WAITER")}</option>
+            <option value="HOST">{roleLabel("HOST")}</option>
+            <option value="KITCHEN">{roleLabel("KITCHEN")}</option>
+            <option value="BAR">{roleLabel("BAR")}</option>
+            <option value="ADMIN">{roleLabel("ADMIN")}</option>
+            <option value="MANAGER">{roleLabel("MANAGER")}</option>
           </select>
           <select value={staffFilterActive} onChange={(e) => setStaffFilterActive(e.target.value)}>
             <option value="">{t(lang, "allStatuses")}</option>
@@ -4861,9 +5156,12 @@ export default function AdminPage() {
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
             <select value={bulkRole} onChange={(e) => setBulkRole(e.target.value)}>
               <option value="__SKIP__">{t(lang, "staffBulkRole")} — {t(lang, "staffBulkSkip")}</option>
-              <option value="WAITER">WAITER</option>
-              <option value="KITCHEN">KITCHEN</option>
-              <option value="ADMIN">ADMIN</option>
+              <option value="WAITER">{roleLabel("WAITER")}</option>
+              <option value="HOST">{roleLabel("HOST")}</option>
+              <option value="KITCHEN">{roleLabel("KITCHEN")}</option>
+              <option value="BAR">{roleLabel("BAR")}</option>
+              <option value="ADMIN">{roleLabel("ADMIN")}</option>
+              <option value="MANAGER">{roleLabel("MANAGER")}</option>
             </select>
             <select value={bulkActive} onChange={(e) => setBulkActive(e.target.value)}>
               <option value="__SKIP__">{t(lang, "staffBulkActive")} — {t(lang, "staffBulkSkip")}</option>
@@ -4906,7 +5204,7 @@ export default function AdminPage() {
                   );
                 }}
               />
-              {su.role === "WAITER" && (
+              {isWaiterRole(su.role) && (
                 su.photoUrl ? (
                   <Image
                     src={su.photoUrl}
@@ -4936,13 +5234,16 @@ export default function AdminPage() {
                 )
               )}
               <strong>{su.username}</strong>
-              {su.role === "WAITER" && su.firstName && (
+              {isWaiterRole(su.role) && su.firstName && (
                 <span style={{ color: "#6b7280" }}>{su.firstName}</span>
               )}
               <select value={su.role} onChange={(e) => updateStaffRole(su, e.target.value)}>
-                <option value="WAITER">WAITER</option>
-                <option value="KITCHEN">KITCHEN</option>
-                <option value="ADMIN">ADMIN</option>
+                <option value="WAITER">{roleLabel("WAITER")}</option>
+                <option value="HOST">{roleLabel("HOST")}</option>
+                <option value="KITCHEN">{roleLabel("KITCHEN")}</option>
+                <option value="BAR">{roleLabel("BAR")}</option>
+                <option value="ADMIN">{roleLabel("ADMIN")}</option>
+                <option value="MANAGER">{roleLabel("MANAGER")}</option>
               </select>
               <span>{su.isActive ? t(lang, "active") : t(lang, "inactive")}</span>
               <button onClick={() => resetStaffPassword(su)}>{t(lang, "resetPassword")}</button>
@@ -5026,7 +5327,7 @@ export default function AdminPage() {
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <select value={staffReviewWaiterId} onChange={(e) => setStaffReviewWaiterId(e.target.value ? Number(e.target.value) : "")}>
             <option value="">{t(lang, "reviewWaiter")} — {t(lang, "all")}</option>
-            {staff.filter((s) => s.role === "WAITER").map((s) => (
+            {staff.filter((s) => isWaiterRole(s.role)).map((s) => (
               <option key={s.id} value={s.id}>{s.username}</option>
             ))}
           </select>
@@ -5145,7 +5446,7 @@ export default function AdminPage() {
             {t(lang, "waiter")}
             <select value={statsWaiterId} onChange={(e) => setStatsWaiterId(e.target.value ? Number(e.target.value) : "")}>
               <option value="">{t(lang, "all")}</option>
-              {staff.filter((s) => s.role === "WAITER").map((w) => (
+              {staff.filter((s) => isWaiterRole(s.role)).map((w) => (
                 <option key={w.id} value={w.id}>{w.username} #{w.id}</option>
               ))}
             </select>

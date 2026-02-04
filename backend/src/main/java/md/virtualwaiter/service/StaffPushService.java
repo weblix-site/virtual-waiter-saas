@@ -36,6 +36,9 @@ import java.util.Set;
 @Service
 public class StaffPushService {
   private static final Logger log = LoggerFactory.getLogger(StaffPushService.class);
+  private static final Set<String> WAITER_ROLES = Set.of("WAITER", "HOST");
+  private static final Set<String> KITCHEN_ROLES = Set.of("KITCHEN", "BAR");
+  private static final Set<String> ADMIN_ROLES = Set.of("ADMIN", "MANAGER");
   private final StaffDeviceTokenRepo tokenRepo;
   private final StaffUserRepo staffUserRepo;
   private final OrderRepo orderRepo;
@@ -68,6 +71,10 @@ public class StaffPushService {
   }
 
   public void notifyBranch(long branchId, String type, long refId) {
+    notifyBranch(branchId, type, refId, Map.of());
+  }
+
+  public void notifyBranch(long branchId, String type, long refId, Map<String, Object> extraData) {
     List<StaffDeviceToken> tokens = tokenRepo.findByBranchId(branchId);
     if (tokens.isEmpty()) return;
 
@@ -87,7 +94,7 @@ public class StaffPushService {
       if (u.branchId != null && !u.branchId.equals(branchId)) continue;
       String role = u.role == null ? "" : u.role.toUpperCase(Locale.ROOT);
       if (!roles.contains(role)) continue;
-      if ("WAITER".equals(role) && assignedWaiterId != null && !assignedWaiterId.equals(u.id)) {
+      if (WAITER_ROLES.contains(role) && assignedWaiterId != null && !assignedWaiterId.equals(u.id)) {
         continue;
       }
       targets.add(t);
@@ -98,7 +105,7 @@ public class StaffPushService {
     String provider = pushProperties.getProvider() == null ? "LOG" : pushProperties.getProvider().toUpperCase(Locale.ROOT);
     for (StaffDeviceToken t : targets) {
       if ("FCM_LEGACY".equals(provider) && pushProperties.getFcmServerKey() != null && !pushProperties.getFcmServerKey().isBlank()) {
-        sendFcmLegacy(t, branchId, type, refId, tableId);
+        sendFcmLegacy(t, branchId, type, refId, tableId, extraData);
       } else {
         log.info("[PUSH] branch={} token={} platform={} type={} refId={} tableId={}", branchId, t.token, t.platform, type, refId, tableId);
       }
@@ -110,10 +117,26 @@ public class StaffPushService {
   private Set<String> rolesForEvent(String type) {
     String t = type == null ? "" : type.toUpperCase(Locale.ROOT);
     return switch (t) {
-      case "ORDER_NEW" -> Set.of("WAITER", "KITCHEN", "ADMIN");
-      case "WAITER_CALL", "BILL_REQUEST" -> Set.of("WAITER", "ADMIN");
-      default -> Set.of("ADMIN");
+      case "ORDER_NEW" -> mergeRoles(WAITER_ROLES, KITCHEN_ROLES, ADMIN_ROLES);
+      case "WAITER_CALL", "BILL_REQUEST" -> mergeRoles(WAITER_ROLES, ADMIN_ROLES);
+      case "SLA_ALERT" -> mergeRoles(WAITER_ROLES, KITCHEN_ROLES, ADMIN_ROLES);
+      default -> ADMIN_ROLES;
     };
+  }
+
+  private Set<String> mergeRoles(Set<String> a, Set<String> b) {
+    Set<String> out = new java.util.HashSet<>();
+    out.addAll(a);
+    out.addAll(b);
+    return out;
+  }
+
+  private Set<String> mergeRoles(Set<String> a, Set<String> b, Set<String> c) {
+    Set<String> out = new java.util.HashSet<>();
+    out.addAll(a);
+    out.addAll(b);
+    out.addAll(c);
+    return out;
   }
 
   private Long resolveTableId(String type, long refId) {
@@ -139,21 +162,27 @@ public class StaffPushService {
     return t.map(table -> table.assignedWaiterId).orElse(null);
   }
 
-  private void sendFcmLegacy(StaffDeviceToken t, long branchId, String type, long refId, Long tableId) {
+  private void sendFcmLegacy(StaffDeviceToken t, long branchId, String type, long refId, Long tableId, Map<String, Object> extraData) {
     try {
       Map<String, Object> data = new HashMap<>();
       data.put("type", type);
       data.put("refId", refId);
       data.put("branchId", branchId);
       if (tableId != null) data.put("tableId", tableId);
+      if (extraData != null && !extraData.isEmpty()) {
+        data.putAll(extraData);
+      }
+
+      String title = extraData != null && extraData.get("title") != null ? extraData.get("title").toString() : "Virtual Waiter";
+      String bodyText = extraData != null && extraData.get("body") != null ? extraData.get("body").toString() : (type + " #" + refId);
 
       Map<String, Object> payload = new HashMap<>();
       payload.put("to", t.token);
       payload.put("priority", "high");
       payload.put("data", data);
       payload.put("notification", Map.of(
-        "title", "Virtual Waiter",
-        "body", type + " #" + refId
+        "title", title,
+        "body", bodyText
       ));
       if (pushProperties.isDryRun()) {
         payload.put("dry_run", true);

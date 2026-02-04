@@ -4,8 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
@@ -63,13 +61,13 @@ class BackendIntegrationTest {
 
   @Test
   void otpOrderBillPartyHallFlows() throws Exception {
-    String adminAuth = basicAuth("admin1", "demo123");
+    String adminCookie = loginCookie("admin1", "demo123");
 
     // Ensure table exists
-    List<Map<String, Object>> tables = getJsonList("/api/admin/tables", adminAuth);
+    List<Map<String, Object>> tables = getJsonList("/api/admin/tables", adminCookie);
     String tablePublicId;
     if (tables.isEmpty()) {
-      Map<String, Object> created = postJson("/api/admin/tables", adminAuth, Map.of("number", 1));
+      Map<String, Object> created = postJson("/api/admin/tables", adminCookie, Map.of("number", 1));
       tablePublicId = created.get("publicId").toString();
     } else {
       tablePublicId = tables.get(0).get("publicId").toString();
@@ -77,7 +75,7 @@ class BackendIntegrationTest {
     assertThat(tablePublicId).isNotBlank();
 
     // Signed URL
-    Map<String, Object> signed = getJson("/api/admin/tables/" + tablePublicId + "/signed-url", adminAuth);
+    Map<String, Object> signed = getJson("/api/admin/tables/" + tablePublicId + "/signed-url", adminCookie);
     String signedUrl = signed.get("url").toString();
     Map<String, String> query = parseQuery(signedUrl);
     String sig = query.get("sig");
@@ -117,7 +115,7 @@ class BackendIntegrationTest {
     Map<String, Object> menu = getJson("/api/public/menu?tablePublicId=" + tablePublicId + "&sig=" + sig + "&ts=" + ts + "&locale=ru", null);
     int itemId = firstMenuItemId(menu);
     if (itemId == 0) {
-      Map<String, Object> cat = postJson("/api/admin/menu/categories", adminAuth, Map.of(
+      Map<String, Object> cat = postJson("/api/admin/menu/categories", adminCookie, Map.of(
         "nameRu", "Тест",
         "nameRo", "Test",
         "nameEn", "Test",
@@ -125,7 +123,7 @@ class BackendIntegrationTest {
         "isActive", true
       ));
       int catId = ((Number) cat.get("id")).intValue();
-      Map<String, Object> item = postJson("/api/admin/menu/items", adminAuth, Map.of(
+      Map<String, Object> item = postJson("/api/admin/menu/items", adminCookie, Map.of(
         "categoryId", catId,
         "nameRu", "Тест",
         "nameRo", "Test",
@@ -152,7 +150,7 @@ class BackendIntegrationTest {
     assertThat(party.get("partyId")).isNotNull();
 
     // Bill request (tips only if enabled)
-    Map<String, Object> settings = getJson("/api/admin/branch-settings", adminAuth);
+    Map<String, Object> settings = getJson("/api/admin/branch-settings", adminCookie);
     boolean tipsEnabled = Boolean.TRUE.equals(settings.get("tipsEnabled"));
     Map<String, Object> billPayload = new java.util.HashMap<>();
     billPayload.put("guestSessionId", guestSessionId);
@@ -162,27 +160,27 @@ class BackendIntegrationTest {
     postJson("/api/public/bill-request/create", sessionSecret, billPayload);
 
     // Halls + plans
-    List<Map<String, Object>> halls = getJsonList("/api/admin/halls", adminAuth);
+    List<Map<String, Object>> halls = getJsonList("/api/admin/halls", adminCookie);
     int hallId;
     if (halls.isEmpty()) {
-      Map<String, Object> hall = postJson("/api/admin/halls", adminAuth, Map.of("name", "Main", "sortOrder", 0));
+      Map<String, Object> hall = postJson("/api/admin/halls", adminCookie, Map.of("name", "Main", "sortOrder", 0));
       hallId = ((Number) hall.get("id")).intValue();
     } else {
       hallId = ((Number) halls.get(0).get("id")).intValue();
     }
     assertThat(hallId).isGreaterThan(0);
 
-    List<Map<String, Object>> plans = getJsonList("/api/admin/halls/" + hallId + "/plans", adminAuth);
+    List<Map<String, Object>> plans = getJsonList("/api/admin/halls/" + hallId + "/plans", adminCookie);
     int planId;
     if (plans.isEmpty()) {
-      Map<String, Object> plan = postJson("/api/admin/halls/" + hallId + "/plans", adminAuth, Map.of("name", "Default", "sortOrder", 0));
+      Map<String, Object> plan = postJson("/api/admin/halls/" + hallId + "/plans", adminCookie, Map.of("name", "Default", "sortOrder", 0));
       planId = ((Number) plan.get("id")).intValue();
     } else {
       planId = ((Number) plans.get(0).get("id")).intValue();
     }
     assertThat(planId).isGreaterThan(0);
 
-    ResponseEntity<String> versions = exchange("/api/admin/hall-plans/" + planId + "/versions", adminAuth, null, HttpMethod.GET);
+    ResponseEntity<String> versions = exchange("/api/admin/hall-plans/" + planId + "/versions", adminCookie, null, HttpMethod.GET);
     assertThat(versions.getStatusCode().value()).isEqualTo(200);
   }
 
@@ -190,8 +188,8 @@ class BackendIntegrationTest {
     HttpHeaders headers = new HttpHeaders();
     headers.setContentType(MediaType.APPLICATION_JSON);
     if (authOrSecret != null) {
-      if (authOrSecret.startsWith("Basic ")) {
-        headers.set("Authorization", authOrSecret);
+      if (authOrSecret.startsWith("vw_auth=")) {
+        headers.add(HttpHeaders.COOKIE, authOrSecret);
       } else {
         headers.set("X-Session-Secret", authOrSecret);
       }
@@ -222,7 +220,7 @@ class BackendIntegrationTest {
 
   private ResponseEntity<String> exchange(String path, String auth, String secret, HttpMethod method) {
     HttpHeaders headers = new HttpHeaders();
-    if (auth != null) headers.set("Authorization", auth);
+    if (auth != null) headers.add(HttpHeaders.COOKIE, auth);
     if (secret != null) headers.set("X-Session-Secret", secret);
     return rest.exchange(url(path), method, new HttpEntity<>(headers), String.class);
   }
@@ -231,9 +229,16 @@ class BackendIntegrationTest {
     return "http://localhost:" + port + path;
   }
 
-  private static String basicAuth(String user, String pass) {
-    String raw = user + ":" + pass;
-    return "Basic " + Base64.getEncoder().encodeToString(raw.getBytes(StandardCharsets.UTF_8));
+  private String loginCookie(String user, String pass) throws Exception {
+    HttpHeaders headers = new HttpHeaders();
+    headers.setContentType(MediaType.APPLICATION_JSON);
+    String body = mapper.writeValueAsString(Map.of("username", user, "password", pass));
+    ResponseEntity<String> res = rest.exchange(url("/api/auth/login"), HttpMethod.POST, new HttpEntity<>(body, headers), String.class);
+    assertThat(res.getStatusCode().value()).isEqualTo(200);
+    List<String> setCookies = res.getHeaders().get(HttpHeaders.SET_COOKIE);
+    assertThat(setCookies).isNotEmpty();
+    String cookie = setCookies.get(0);
+    return cookie.split(";", 2)[0];
   }
 
   private static Map<String, String> parseQuery(String url) throws URISyntaxException {

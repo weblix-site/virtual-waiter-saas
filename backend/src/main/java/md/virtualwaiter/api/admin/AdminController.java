@@ -22,6 +22,8 @@ import md.virtualwaiter.domain.ModifierOption;
 import md.virtualwaiter.domain.StaffReview;
 import md.virtualwaiter.domain.StaffUser;
 import md.virtualwaiter.domain.TableParty;
+import md.virtualwaiter.domain.WaiterCall;
+import md.virtualwaiter.domain.Order;
 import md.virtualwaiter.repo.AuditLogRepo;
 import md.virtualwaiter.repo.BranchHallRepo;
 import md.virtualwaiter.repo.BranchRepo;
@@ -46,6 +48,8 @@ import md.virtualwaiter.repo.ModifierOptionRepo;
 import md.virtualwaiter.repo.StaffReviewRepo;
 import md.virtualwaiter.repo.StaffUserRepo;
 import md.virtualwaiter.repo.TablePartyRepo;
+import md.virtualwaiter.repo.WaiterCallRepo;
+import md.virtualwaiter.repo.OrderRepo;
 import md.virtualwaiter.security.QrSignatureService;
 import md.virtualwaiter.service.BranchSettingsService;
 import md.virtualwaiter.service.StatsService;
@@ -127,6 +131,8 @@ public class AdminController {
   private final TablePartyRepo partyRepo;
   private final GuestSessionRepo guestSessionRepo;
   private final GuestOfferRepo guestOfferRepo;
+  private final WaiterCallRepo waiterCallRepo;
+  private final OrderRepo orderRepo;
   private final InventoryItemRepo inventoryItemRepo;
   private final MenuItemIngredientRepo ingredientRepo;
   private final CurrencyRepo currencyRepo;
@@ -163,6 +169,8 @@ public class AdminController {
     TablePartyRepo partyRepo,
     GuestSessionRepo guestSessionRepo,
     GuestOfferRepo guestOfferRepo,
+    WaiterCallRepo waiterCallRepo,
+    OrderRepo orderRepo,
     InventoryItemRepo inventoryItemRepo,
     MenuItemIngredientRepo ingredientRepo,
     CurrencyRepo currencyRepo,
@@ -198,6 +206,8 @@ public class AdminController {
     this.partyRepo = partyRepo;
     this.guestSessionRepo = guestSessionRepo;
     this.guestOfferRepo = guestOfferRepo;
+    this.waiterCallRepo = waiterCallRepo;
+    this.orderRepo = orderRepo;
     this.inventoryItemRepo = inventoryItemRepo;
     this.ingredientRepo = ingredientRepo;
     this.currencyRepo = currencyRepo;
@@ -218,7 +228,7 @@ public class AdminController {
   private StaffUser requireAdmin(Authentication auth) {
     StaffUser u = current(auth);
     String role = u.role == null ? "" : u.role.toUpperCase(Locale.ROOT);
-    if (!Set.of("ADMIN", "SUPER_ADMIN").contains(role)) {
+    if (!Set.of("ADMIN", "MANAGER", "SUPER_ADMIN").contains(role)) {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Admin role required");
     }
     return u;
@@ -386,6 +396,62 @@ public class AdminController {
     branchRepo.save(b);
     auditService.log(u, "UPDATE", "BranchLayout", b.id, null);
     return new BranchLayoutResponse(b.layoutBgUrl, b.layoutZonesJson);
+  }
+
+  // --- Plan signals (operator mode) ---
+  public record PlanSignalRow(
+    long tableId,
+    boolean waiterCallActive,
+    String waiterCallStatus,
+    String waiterCallCreatedAt,
+    String orderStatus,
+    String orderCreatedAt
+  ) {}
+
+  @GetMapping("/plan-signals")
+  public List<PlanSignalRow> getPlanSignals(
+    @RequestParam(value = "hallId", required = false) Long hallId,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    List<CafeTable> tables = tableRepo.findByBranchId(bid);
+    if (hallId != null) {
+      tables = tables.stream().filter(t -> Objects.equals(t.hallId, hallId)).toList();
+    }
+    if (tables.isEmpty()) return List.of();
+    List<Long> tableIds = tables.stream().map(t -> t.id).toList();
+
+    Map<Long, WaiterCall> callByTable = new HashMap<>();
+    List<WaiterCall> calls = waiterCallRepo.findTop100ByTableIdInAndStatusNotOrderByCreatedAtDesc(tableIds, "CLOSED");
+    for (WaiterCall c : calls) {
+      callByTable.putIfAbsent(c.tableId, c);
+    }
+
+    Map<Long, Order> orderByTable = new HashMap<>();
+    List<Order> orders = orderRepo.findTop100ByTableIdInAndStatusNotInOrderByCreatedAtDesc(
+      tableIds,
+      List.of("CLOSED", "CANCELLED", "SERVED")
+    );
+    for (Order o : orders) {
+      orderByTable.putIfAbsent(o.tableId, o);
+    }
+
+    List<PlanSignalRow> out = new ArrayList<>();
+    for (CafeTable t : tables) {
+      WaiterCall c = callByTable.get(t.id);
+      Order o = orderByTable.get(t.id);
+      out.add(new PlanSignalRow(
+        t.id,
+        c != null,
+        c == null ? null : c.status,
+        c == null || c.createdAt == null ? null : c.createdAt.toString(),
+        o == null ? null : o.status,
+        o == null || o.createdAt == null ? null : o.createdAt.toString()
+      ));
+    }
+    return out;
   }
 
   // --- Halls ---
@@ -2087,7 +2153,7 @@ public class AdminController {
     StaffUser u = requireAdmin(auth);
     long bid = resolveBranchId(u, branchId);
     String role = req.role.trim().toUpperCase(Locale.ROOT);
-    if (!Set.of("WAITER", "KITCHEN", "ADMIN").contains(role)) {
+    if (!Set.of("WAITER", "KITCHEN", "ADMIN", "HOST", "BAR", "MANAGER").contains(role)) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported role");
     }
     StaffUser su = new StaffUser();
@@ -3207,7 +3273,7 @@ public class AdminController {
     }
     if (req.role != null) {
       String role = req.role.trim().toUpperCase(Locale.ROOT);
-      if (!Set.of("WAITER", "KITCHEN", "ADMIN").contains(role)) {
+      if (!Set.of("WAITER", "KITCHEN", "ADMIN", "HOST", "BAR", "MANAGER").contains(role)) {
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported role");
       }
       su.role = role;

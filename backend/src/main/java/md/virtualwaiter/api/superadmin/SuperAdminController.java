@@ -39,11 +39,10 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
 import java.util.HashSet;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import java.util.Set;
 
 @RestController
 @RequestMapping("/api/super")
@@ -233,7 +232,7 @@ public class SuperAdminController {
   public StaffUserDto createStaff(@Valid @RequestBody CreateStaffUserRequest req, Authentication auth) {
     requireSuper(auth);
     String role = req.role.trim().toUpperCase(Locale.ROOT);
-    if (!Set.of("WAITER", "KITCHEN", "ADMIN", "SUPER_ADMIN").contains(role)) {
+    if (!Set.of("WAITER", "HOST", "KITCHEN", "BAR", "ADMIN", "MANAGER", "SUPER_ADMIN").contains(role)) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported role");
     }
     StaffUser su = new StaffUser();
@@ -284,7 +283,7 @@ public class SuperAdminController {
     }
     if (req.role != null) {
       String role = req.role.trim().toUpperCase(Locale.ROOT);
-      if (!Set.of("WAITER", "KITCHEN", "ADMIN", "SUPER_ADMIN").contains(role)) {
+      if (!Set.of("WAITER", "HOST", "KITCHEN", "BAR", "ADMIN", "MANAGER", "SUPER_ADMIN").contains(role)) {
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported role");
       }
       su.role = role;

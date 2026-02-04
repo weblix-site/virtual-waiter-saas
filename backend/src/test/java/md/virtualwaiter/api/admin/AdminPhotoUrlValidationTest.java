@@ -19,8 +19,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
-import java.nio.charset.StandardCharsets;
 import java.util.Locale;
+import jakarta.servlet.http.Cookie;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -51,9 +51,10 @@ class AdminPhotoUrlValidationTest {
 
   private StaffUser admin;
   private MenuCategory cat;
+  private Cookie authCookie;
 
   @BeforeEach
-  void setup() {
+  void setup() throws Exception {
     staffUserRepo.deleteAll();
     categoryRepo.deleteAll();
     branchSettingsRepo.deleteAll();
@@ -90,6 +91,16 @@ class AdminPhotoUrlValidationTest {
     u.role = "ADMIN";
     u.isActive = true;
     admin = staffUserRepo.save(u);
+
+    authCookie = mvc.perform(post("/api/auth/login")
+        .contentType(MediaType.APPLICATION_JSON)
+        .content("{\"username\":\"admin\",\"password\":\"pass\"}"))
+      .andReturn()
+      .getResponse()
+      .getCookie("vw_auth");
+    if (authCookie == null) {
+      throw new IllegalStateException("Auth cookie not set in login response");
+    }
   }
 
   @Test
@@ -101,7 +112,7 @@ class AdminPhotoUrlValidationTest {
     mvc.perform(post("/api/admin/menu/items")
         .contentType(MediaType.APPLICATION_JSON)
         .content(body)
-        .header("Authorization", "Basic " + java.util.Base64.getEncoder().encodeToString("admin:pass".getBytes(StandardCharsets.UTF_8))))
+        .cookie(authCookie))
       .andExpect(status().isBadRequest());
   }
 
@@ -114,7 +125,7 @@ class AdminPhotoUrlValidationTest {
     mvc.perform(post("/api/admin/menu/items")
         .contentType(MediaType.APPLICATION_JSON)
         .content(body)
-        .header("Authorization", "Basic " + java.util.Base64.getEncoder().encodeToString("admin:pass".getBytes(StandardCharsets.UTF_8))))
+        .cookie(authCookie))
       .andExpect(status().isOk());
   }
 
@@ -126,7 +137,7 @@ class AdminPhotoUrlValidationTest {
     mvc.perform(patch("/api/admin/staff/" + admin.id)
         .contentType(MediaType.APPLICATION_JSON)
         .content(body)
-        .header("Authorization", "Basic " + java.util.Base64.getEncoder().encodeToString("admin:pass".getBytes(StandardCharsets.UTF_8))))
+        .cookie(authCookie))
       .andExpect(status().isBadRequest());
   }
 }

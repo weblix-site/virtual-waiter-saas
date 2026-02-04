@@ -57,13 +57,40 @@ Flyway создаёт демо‑данные:
 - tenant: Demo Cafe
 - branch: Main (id=1)
 - table: #1, public_id = `TBL_DEMO_0001`
-- staff (Basic Auth):
+- staff (логин через `/api/auth/login`, httpOnly cookie):
   - waiter: `waiter1` / `demo123`
   - kitchen: `kitchen1` / `demo123`
 
 ## Админка и супер‑админка
 - Admin Web: `http://localhost:3000/admin`
 - Super Admin Web: `http://localhost:3000/superadmin`
+
+## Аутентификация staff‑пользователей
+- Логин: `POST /api/auth/login` (устанавливает httpOnly cookie `vw_auth`)
+- Выход: `POST /api/auth/logout`
+- Basic Auth не используется
+- Параметры (env → application.yml):
+  - `APP_AUTH_COOKIE_SECRET` — обязательный HMAC‑секрет (минимум 32 символа)
+  - `APP_AUTH_COOKIE_NAME` — имя cookie (по умолчанию `vw_auth`)
+  - `APP_AUTH_COOKIE_MAXAGESECONDS` — срок жизни cookie в секундах (по умолчанию 604800)
+  - `APP_AUTH_COOKIE_SECURE` — `true` в проде (HTTPS)
+
+Пример логина (curl):
+```bash
+curl -i -X POST http://localhost:8080/api/auth/login \\
+  -H "Content-Type: application/json" \\
+  -d '{"username":"waiter1","password":"demo123"}'
+```
+Для запросов после логина передайте cookie из ответа:
+```bash
+curl -i http://localhost:8080/api/admin/branch \\
+  -H "Cookie: vw_auth=PASTE_TOKEN"
+```
+Пример выхода (curl):
+```bash
+curl -i -X POST http://localhost:8080/api/auth/logout \\
+  -H "Cookie: vw_auth=PASTE_TOKEN"
+```
 
 ## Профили официантов
 - Профиль официанта (имя/фамилия/возраст/пол/фото) заполняется **только** админом или супер‑админом.
@@ -98,6 +125,21 @@ Flyway создаёт демо‑данные:
 ## Rate limits (по IP)
 Смотри `backend/src/main/resources/application.yml`:
 - OTP, Order, Party, WaiterCall, SessionStart, Menu, Chat
+
+## SLA‑алерты (push)
+Backend автоматически отправляет `SLA_ALERT` в staff‑app (FCM), если заявка превысила критический SLA.
+Настройка через `application.yml` или env:
+```
+app.slaAlerts.enabled=true
+app.slaAlerts.pollMs=60000
+app.slaAlerts.orderCritMin=10
+app.slaAlerts.callCritMin=5
+app.slaAlerts.billCritMin=10
+app.slaAlerts.kitchenCritMin=15
+app.slaAlerts.cooldownMinutes=5
+app.slaAlerts.lookbackMinutes=240
+```
+Текст алерта локализуется по `branch_settings.default_lang` (ru/ro/en).
 
 ## Docker Compose (полный стек)
 ```bash

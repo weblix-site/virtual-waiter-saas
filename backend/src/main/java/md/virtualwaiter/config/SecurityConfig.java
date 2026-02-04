@@ -3,8 +3,8 @@ package md.virtualwaiter.config;
 import md.virtualwaiter.repo.StaffUserRepo;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -23,9 +23,9 @@ public class SecurityConfig {
   }
 
   /**
-   * MVP: DB-backed users + Basic Auth.
+   * DB-backed users + httpOnly auth cookie (signed token).
    *
-   * Production recommendation: switch to JWT (or session auth) behind HTTPS.
+   * Production: keep HTTPS + secure cookie, rotate secrets.
    */
   @Bean
   UserDetailsService userDetailsService(StaffUserRepo staffUserRepo) {
@@ -53,7 +53,7 @@ public class SecurityConfig {
         ).permitAll()
         .anyRequest().authenticated()
       )
-      .httpBasic(Customizer.withDefaults())
+      .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
       .addFilterBefore(authCookieFilter, UsernamePasswordAuthenticationFilter.class);
     return http.build();
   }

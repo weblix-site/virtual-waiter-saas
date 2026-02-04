@@ -57,6 +57,13 @@ const dict: Record<string, Record<Lang, string>> = {
   invalidExperience: { ru: "Неверный стаж (0–80)", ro: "Experiență invalidă (0–80)", en: "Invalid experience (0–80)" },
   createStaff: { ru: "Создать сотрудника", ro: "Creează personal", en: "Create staff" },
   role: { ru: "Роль", ro: "Rol", en: "Role" },
+  roleWaiter: { ru: "Официант", ro: "Chelner", en: "Waiter" },
+  roleHost: { ru: "Хост", ro: "Host", en: "Host" },
+  roleKitchen: { ru: "Кухня", ro: "Bucătărie", en: "Kitchen" },
+  roleBar: { ru: "Бар", ro: "Bar", en: "Bar" },
+  roleAdmin: { ru: "Администратор", ro: "Administrator", en: "Admin" },
+  roleManager: { ru: "Менеджер", ro: "Manager", en: "Manager" },
+  roleSuperAdmin: { ru: "Супер‑админ", ro: "Super‑admin", en: "Super admin" },
   currencies: { ru: "Валюты", ro: "Valute", en: "Currencies" },
   addCurrency: { ru: "Добавить валюту", ro: "Adaugă valută", en: "Add currency" },
   code: { ru: "Код", ro: "Cod", en: "Code" },
@@ -252,6 +259,23 @@ export default function SuperAdminPage() {
   const redirectingRef = useRef(false);
   const [lang, setLang] = useState<Lang>("ru");
   const translate = t;
+
+  const roleLabel = (role?: string | null) => {
+    const r = (role ?? "").toUpperCase();
+    if (r === "WAITER") return t(lang, "roleWaiter");
+    if (r === "HOST") return t(lang, "roleHost");
+    if (r === "KITCHEN") return t(lang, "roleKitchen");
+    if (r === "BAR") return t(lang, "roleBar");
+    if (r === "ADMIN") return t(lang, "roleAdmin");
+    if (r === "MANAGER") return t(lang, "roleManager");
+    if (r === "SUPER_ADMIN") return t(lang, "roleSuperAdmin");
+    return role ?? "";
+  };
+
+  const isWaiterRole = (role?: string | null) => {
+    const r = (role ?? "").toUpperCase();
+    return r === "WAITER" || r === "HOST";
+  };
 
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -1242,9 +1266,12 @@ export default function SuperAdminPage() {
           <input placeholder={t(lang, "username")} value={newStaffUser} onChange={(e) => setNewStaffUser(e.target.value)} />
           <input placeholder={t(lang, "password")} value={newStaffPass} onChange={(e) => setNewStaffPass(e.target.value)} />
           <select value={newStaffRole} onChange={(e) => setNewStaffRole(e.target.value)}>
-            <option value="WAITER">WAITER</option>
-            <option value="KITCHEN">KITCHEN</option>
-            <option value="ADMIN">ADMIN</option>
+            <option value="WAITER">{roleLabel("WAITER")}</option>
+            <option value="HOST">{roleLabel("HOST")}</option>
+            <option value="KITCHEN">{roleLabel("KITCHEN")}</option>
+            <option value="BAR">{roleLabel("BAR")}</option>
+            <option value="ADMIN">{roleLabel("ADMIN")}</option>
+            <option value="MANAGER">{roleLabel("MANAGER")}</option>
           </select>
           <button onClick={createStaff} disabled={!branchId}>{t(lang, "createStaff")}</button>
         </div>
@@ -1262,7 +1289,7 @@ export default function SuperAdminPage() {
           {filteredStaff.map((s) => (
             <div key={s.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "4px 0" }}>
               <strong>{s.username}</strong>
-              <span>{s.role}</span>
+              <span>{roleLabel(s.role)}</span>
               <span>{s.isActive ? t(lang, "active") : t(lang, "inactive")}</span>
               <button onClick={() => {
                 setEditingStaffId(s.id);
@@ -1287,10 +1314,13 @@ export default function SuperAdminPage() {
           <div style={{ marginTop: 10, border: "1px dashed #ddd", padding: 10 }}>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
               <select value={editStaffRole} onChange={(e) => setEditStaffRole(e.target.value)}>
-                <option value="WAITER">WAITER</option>
-                <option value="KITCHEN">KITCHEN</option>
-                <option value="ADMIN">ADMIN</option>
-                <option value="SUPER_ADMIN">SUPER_ADMIN</option>
+                <option value="WAITER">{roleLabel("WAITER")}</option>
+                <option value="HOST">{roleLabel("HOST")}</option>
+                <option value="KITCHEN">{roleLabel("KITCHEN")}</option>
+                <option value="BAR">{roleLabel("BAR")}</option>
+                <option value="ADMIN">{roleLabel("ADMIN")}</option>
+                <option value="MANAGER">{roleLabel("MANAGER")}</option>
+                <option value="SUPER_ADMIN">{roleLabel("SUPER_ADMIN")}</option>
               </select>
               <label><input type="checkbox" checked={editStaffActive} onChange={(e) => setEditStaffActive(e.target.checked)} /> {t(lang, "active")}</label>
               <input placeholder={t(lang, "firstName")} value={editStaffFirstName} onChange={(e) => setEditStaffFirstName(e.target.value)} />
@@ -1530,7 +1560,7 @@ export default function SuperAdminPage() {
         )}
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
           <span style={{ fontSize: 12, color: "#666" }}>{t(lang, "legend")}:</span>
-          {staff.filter((s) => s.role === "WAITER").map((s) => (
+          {staff.filter((s) => isWaiterRole(s.role)).map((s) => (
             <span key={s.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12 }}>
               <span
                 style={{
@@ -1544,7 +1574,7 @@ export default function SuperAdminPage() {
               {s.username} #{s.id}
             </span>
           ))}
-          {staff.filter((s) => s.role === "WAITER").length === 0 && (
+          {staff.filter((s) => isWaiterRole(s.role)).length === 0 && (
             <span style={{ fontSize: 12, color: "#999" }}>{t(lang, "noWaiters")}</span>
           )}
         </div>

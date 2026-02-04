@@ -78,6 +78,29 @@ APP_QR_HMAC_SECRET=СЛОЖНЫЙ_СЕКРЕТ_32_СИМВОЛА_ИЛИ_БОЛЕ
 APP_AUTH_COOKIE_SECRET=ДРУГОЙ_СЛОЖНЫЙ_СЕКРЕТ_32_СИМВОЛА_ИЛИ_БОЛЕЕ
 ```
 
+### Важно про аутентификацию staff
+- Используется `POST /api/auth/login` → httpOnly cookie, Basic Auth отключён.
+- В проде обязательно ставьте:
+  - `APP_AUTH_COOKIE_SECURE=true` (только HTTPS)
+  - `APP_AUTH_COOKIE_SECRET` (сложный ключ, ≥32 символов)
+
+Пример логина (curl):
+```
+curl -i -X POST https://YOUR_DOMAIN/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin1","password":"demo123"}'
+```
+Для запросов после логина передайте cookie из ответа:
+```
+curl -i https://YOUR_DOMAIN/api/admin/branch \
+  -H "Cookie: vw_auth=PASTE_TOKEN"
+```
+Пример выхода (curl):
+```
+curl -i -X POST https://YOUR_DOMAIN/api/auth/logout \
+  -H "Cookie: vw_auth=PASTE_TOKEN"
+```
+
 > Важно для домена:
 > - `APP_PUBLIC_BASE_URL=https://YOUR_DOMAIN`
 > - `NEXT_PUBLIC_API_BASE=https://YOUR_DOMAIN/api`
@@ -112,6 +135,20 @@ APP_AUTH_COOKIE_SECURE=true
 # Push (если не используете FCM — оставьте пустым)
 FCM_SERVER_KEY=
 ```
+
+### SLA‑алерты (push)
+По умолчанию включены. При необходимости можно настроить:
+```
+APP_SLAALERTS_ENABLED=true
+APP_SLAALERTS_POLLMS=60000
+APP_SLAALERTS_ORDERCRITMIN=10
+APP_SLAALERTS_CALLCRITMIN=5
+APP_SLAALERTS_BILLCRITMIN=10
+APP_SLAALERTS_KITCHENCRITMIN=15
+APP_SLAALERTS_COOLDOWNMINUTES=5
+APP_SLAALERTS_LOOKBACKMINUTES=240
+```
+Тексты алертов локализуются по `branch_settings.default_lang` (ru/ro/en).
 
 ### Онлайн‑оплата (MAIB/Paynet/MIA)
 1) В админке включите **Online payments enabled** и выберите провайдера (MAIB/Paynet/MIA).
