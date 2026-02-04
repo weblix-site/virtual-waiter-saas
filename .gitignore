@@ -16,6 +16,8 @@
 **/build/
 **/.flutter-plugins
 **/.flutter-plugins-dependencies
+.flutter/
+.flutter_pub_cache/
 staff-app/flutter_application_1/
 
 # OS

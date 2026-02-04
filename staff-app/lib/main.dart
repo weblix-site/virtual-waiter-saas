@@ -15,6 +15,32 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
 }
 
+class HomeNavRequest {
+  final int tabIndex;
+  final int? orderId;
+  final int? callId;
+  final int? billId;
+  final int? kitchenOrderId;
+
+  const HomeNavRequest({
+    required this.tabIndex,
+    this.orderId,
+    this.callId,
+    this.billId,
+    this.kitchenOrderId,
+  });
+
+  static HomeNavRequest orders(int id) => HomeNavRequest(tabIndex: 0, orderId: id);
+  static HomeNavRequest calls(int id) => HomeNavRequest(tabIndex: 1, callId: id);
+  static HomeNavRequest bills(int id) => HomeNavRequest(tabIndex: 2, billId: id);
+  static HomeNavRequest kitchen(int id) => HomeNavRequest(tabIndex: 3, kitchenOrderId: id);
+}
+
+class HomeNavBus {
+  static final ValueNotifier<HomeNavRequest?> nav = ValueNotifier<HomeNavRequest?>(null);
+  static void request(HomeNavRequest req) => nav.value = req;
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
@@ -218,6 +244,33 @@ String _tr(BuildContext context, String key) {
     'copyId': {'ru': 'Скопировать ID', 'ro': 'Copiază ID', 'en': 'Copy ID'},
     'copied': {'ru': 'Скопировано', 'ro': 'Copiat', 'en': 'Copied'},
     'sortNewest': {'ru': 'Сорт: новые сверху', 'ro': 'Sortare: cele mai noi', 'en': 'Sort: newest first'},
+    'ops': {'ru': 'Оперативно', 'ro': 'Operațional', 'en': 'Ops'},
+    'slaDashboard': {'ru': 'SLA‑дашборд', 'ro': 'SLA dashboard', 'en': 'SLA dashboard'},
+    'focusCards': {'ru': 'Фокус‑карточки', 'ro': 'Carduri focus', 'en': 'Focus cards'},
+    'alerts': {'ru': 'Алерты', 'ro': 'Alerte', 'en': 'Alerts'},
+    'alertsEmpty': {'ru': 'Критичных алертов нет', 'ro': 'Fără alerte critice', 'en': 'No critical alerts'},
+    'alertsHint': {'ru': 'Алерты появляются при превышении SLA', 'ro': 'Alerte apar la depășirea SLA', 'en': 'Alerts appear when SLA is exceeded'},
+    'heatmapPreview': {'ru': 'Heatmap (топ‑столы)', 'ro': 'Heatmap (mese top)', 'en': 'Heatmap (top tables)'},
+    'heatmapHint': {
+      'ru': 'Полная теплокарта — на вкладке «Зал»',
+      'ro': 'Heatmap completă — în fila „Sală”',
+      'en': 'Full heatmap is on the Hall tab'
+    },
+    'lastUpdated': {'ru': 'Обновлено', 'ro': 'Actualizat', 'en': 'Updated'},
+    'ordersSla': {'ru': 'Заказы SLA', 'ro': 'Comenzi SLA', 'en': 'Orders SLA'},
+    'callsSla': {'ru': 'Вызовы SLA', 'ro': 'Apeluri SLA', 'en': 'Calls SLA'},
+    'billsSla': {'ru': 'Счета SLA', 'ro': 'Note SLA', 'en': 'Bills SLA'},
+    'kitchenSla': {'ru': 'Кухня SLA', 'ro': 'Bucătărie SLA', 'en': 'Kitchen SLA'},
+    'alertOrder': {'ru': 'Просрочен заказ', 'ro': 'Comandă întârziată', 'en': 'Order overdue'},
+    'alertCall': {'ru': 'Просрочен вызов', 'ro': 'Apel întârziat', 'en': 'Call overdue'},
+    'alertBill': {'ru': 'Просрочен счет', 'ro': 'Notă întârziată', 'en': 'Bill overdue'},
+    'alertKitchen': {'ru': 'Просрочена кухня', 'ro': 'Bucătărie întârziată', 'en': 'Kitchen overdue'},
+    'slaTrend': {'ru': 'SLA‑тренд', 'ro': 'Trend SLA', 'en': 'SLA trend'},
+    'trendHint': {'ru': 'Последние 20 обновлений', 'ro': 'Ultimele 20 actualizări', 'en': 'Last 20 updates'},
+    'onlyCritical': {'ru': 'Только критичные', 'ro': 'Doar critice', 'en': 'Critical only'},
+    'showCriticalOnly': {'ru': 'Показывать только критичные', 'ro': 'Afișează doar critice', 'en': 'Show critical only'},
+    'openHall': {'ru': 'Открыть «Зал»', 'ro': 'Deschide „Sală”', 'en': 'Open Hall'},
+    'openHallTab': {'ru': 'Открыть «Зал»', 'ro': 'Deschide „Sală”', 'en': 'Open Hall'},
     'sortSla': {'ru': 'Сорт: SLA (старые сверху)', 'ro': 'Sortare: SLA (cele mai vechi)', 'en': 'Sort: SLA (oldest first)'},
     'sortPriority': {'ru': 'Сорт: приоритет → время', 'ro': 'Sortare: prioritate → timp', 'en': 'Sort: priority then time'},
     'kitchenActive': {'ru': 'Активные (NEW/ACCEPTED/IN_PROGRESS)', 'ro': 'Active (NEW/ACCEPTED/IN_PROGRESS)', 'en': 'Active (NEW/ACCEPTED/IN_PROGRESS)'},
@@ -446,6 +499,10 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _index = 0;
+  int? _focusOrderId;
+  int? _focusCallId;
+  int? _focusBillId;
+  int? _focusKitchenOrderId;
   Timer? _timer;
   List<Map<String, dynamic>> _halls = const [];
   int? _hallId;
@@ -724,6 +781,20 @@ class _HomeScreenState extends State<HomeScreen> {
     _poll();
     _registerDevice();
     _loadLastHallPref().then((_) => _loadHalls());
+    HomeNavBus.nav.addListener(_handleNavRequest);
+  }
+
+  void _handleNavRequest() {
+    final req = HomeNavBus.nav.value;
+    if (req == null) return;
+    setState(() {
+      _index = req.tabIndex;
+      _focusOrderId = req.orderId;
+      _focusCallId = req.callId;
+      _focusBillId = req.billId;
+      _focusKitchenOrderId = req.kitchenOrderId;
+    });
+    HomeNavBus.nav.value = null;
   }
 
   Future<void> _loadLastHallPref() async {
@@ -758,6 +829,9 @@ class _HomeScreenState extends State<HomeScreen> {
       if (type == 'ORDER_NEW') {
         _player.play(AssetSource('beep.wav'));
       }
+      if (type == 'SLA_ALERT') {
+        _player.play(AssetSource('beep.wav'));
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('${_tr(context, 'push')}: ${message.data['type'] ?? message.notification?.title ?? _tr(context, 'notification')}')),
@@ -780,16 +854,42 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _timer?.cancel();
     _player.dispose();
+    HomeNavBus.nav.removeListener(_handleNavRequest);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final tabs = [
-      OrdersTab(username: widget.username, password: widget.password, hallId: _hallId),
-      CallsTab(username: widget.username, password: widget.password, hallId: _hallId),
-      BillsTab(username: widget.username, password: widget.password, hallId: _hallId),
-      KitchenTab(username: widget.username, password: widget.password, hallId: _hallId),
+      OrdersTab(
+        username: widget.username,
+        password: widget.password,
+        hallId: _hallId,
+        focusOrderId: _focusOrderId,
+        onFocusHandled: () => setState(() => _focusOrderId = null),
+      ),
+      CallsTab(
+        username: widget.username,
+        password: widget.password,
+        hallId: _hallId,
+        focusCallId: _focusCallId,
+        onFocusHandled: () => setState(() => _focusCallId = null),
+      ),
+      BillsTab(
+        username: widget.username,
+        password: widget.password,
+        hallId: _hallId,
+        focusBillId: _focusBillId,
+        onFocusHandled: () => setState(() => _focusBillId = null),
+      ),
+      KitchenTab(
+        username: widget.username,
+        password: widget.password,
+        hallId: _hallId,
+        focusOrderId: _focusKitchenOrderId,
+        onFocusHandled: () => setState(() => _focusKitchenOrderId = null),
+      ),
+      OpsDashboardTab(username: widget.username, password: widget.password, hallId: _hallId),
       FloorPlanTab(username: widget.username, password: widget.password),
       ChatTab(username: widget.username, password: widget.password, hallId: _hallId),
       HistoryTab(username: widget.username, password: widget.password),
@@ -872,7 +972,7 @@ class _HomeScreenState extends State<HomeScreen> {
             } else if (i == 2) {
               _sinceBills = now;
               _newBills = 0;
-            } else if (i == 5) {
+            } else if (i == 6) {
               _newChats = 0;
             }
           });
@@ -891,6 +991,7 @@ class _HomeScreenState extends State<HomeScreen> {
             label: _tr(context, 'bills'),
           ),
           NavigationDestination(icon: const Icon(Icons.kitchen), label: _tr(context, 'kitchen')),
+          NavigationDestination(icon: const Icon(Icons.dashboard), label: _tr(context, 'ops')),
           NavigationDestination(icon: const Icon(Icons.map), label: _tr(context, 'hall')),
           NavigationDestination(
             icon: _newChats > 0 ? Badge(label: Text('$_newChats'), child: const Icon(Icons.chat)) : const Icon(Icons.chat),
@@ -1357,8 +1458,17 @@ class OrdersTab extends StatefulWidget {
   final String username;
   final String password;
   final int? hallId;
+  final int? focusOrderId;
+  final VoidCallback? onFocusHandled;
 
-  const OrdersTab({super.key, required this.username, required this.password, this.hallId});
+  const OrdersTab({
+    super.key,
+    required this.username,
+    required this.password,
+    this.hallId,
+    this.focusOrderId,
+    this.onFocusHandled,
+  });
 
   @override
   State<OrdersTab> createState() => _OrdersTabState();
@@ -1372,6 +1482,7 @@ class _OrdersTabState extends State<OrdersTab> {
   bool _showFocus = true;
   Timer? _pollTimer;
   DateTime _since = DateTime.now().toUtc();
+  final Map<int, GlobalKey> _itemKeys = {};
 
   String get _auth => base64Encode(utf8.encode('${widget.username}:${widget.password}'));
 
@@ -1390,6 +1501,7 @@ class _OrdersTabState extends State<OrdersTab> {
       final list = body as List<dynamic>;
       setState(() => _orders = list);
       _updateSinceFromOrders(list);
+      _scheduleScrollToFocus();
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
@@ -1432,6 +1544,7 @@ class _OrdersTabState extends State<OrdersTab> {
       final merged = byId.values.toList();
       setState(() => _orders = merged);
       _updateSinceFromOrders(body);
+      _scheduleScrollToFocus();
     } catch (_) {}
   }
 
@@ -1483,12 +1596,34 @@ class _OrdersTabState extends State<OrdersTab> {
       _since = DateTime.now().toUtc();
       _load();
     }
+    if (oldWidget.focusOrderId != widget.focusOrderId) {
+      _scheduleScrollToFocus();
+    }
   }
 
   @override
   void dispose() {
     _pollTimer?.cancel();
     super.dispose();
+  }
+
+  void _scheduleScrollToFocus() {
+    if (widget.focusOrderId == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToFocus());
+  }
+
+  void _scrollToFocus() {
+    final focusId = widget.focusOrderId;
+    if (focusId == null) return;
+    final key = _itemKeys[focusId];
+    if (key?.currentContext != null) {
+      Scrollable.ensureVisible(
+        key!.currentContext!,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeInOut,
+      );
+      widget.onFocusHandled?.call();
+    }
   }
 
   @override
@@ -1597,7 +1732,12 @@ class _OrdersTabState extends State<OrdersTab> {
                     final tableNumber = o['tableNumber'];
                     final assigned = o['assignedWaiterId'];
                     final age = _ageFromIso(o['createdAt']?.toString());
+                    final orderId = (o['id'] as num?)?.toInt() ?? -1;
+                    if (widget.focusOrderId != null && orderId == widget.focusOrderId) {
+                      _itemKeys[orderId] = GlobalKey();
+                    }
                     return ListTile(
+                      key: _itemKeys[orderId],
                       title: Text('${_tr(context, 'table')} #$tableNumber  •  ${_tr(context, 'orders')} #${o['id']}'),
                       subtitle: Text('${_statusLabel(context, o['status']?.toString() ?? '')} • ${items.length} ${_tr(context, 'items')}' + (assigned != null ? ' • ${_tr(context, 'waiter')} #$assigned' : '')),
                       trailing: _slaChip(age, SlaConfig.orderWarn, SlaConfig.orderCrit),
@@ -1626,8 +1766,17 @@ class CallsTab extends StatefulWidget {
   final String username;
   final String password;
   final int? hallId;
+  final int? focusCallId;
+  final VoidCallback? onFocusHandled;
 
-  const CallsTab({super.key, required this.username, required this.password, this.hallId});
+  const CallsTab({
+    super.key,
+    required this.username,
+    required this.password,
+    this.hallId,
+    this.focusCallId,
+    this.onFocusHandled,
+  });
 
   @override
   State<CallsTab> createState() => _CallsTabState();
@@ -1639,6 +1788,7 @@ class _CallsTabState extends State<CallsTab> {
   List<dynamic> _calls = const [];
   String _sortMode = 'time_desc';
   bool _showFocus = true;
+  final Map<int, GlobalKey> _itemKeys = {};
 
   String get _auth => base64Encode(utf8.encode('${widget.username}:${widget.password}'));
 
@@ -1655,6 +1805,7 @@ class _CallsTabState extends State<CallsTab> {
       if (res.statusCode != 200) throw Exception('${_tr(context, 'loadFailed')} (${res.statusCode})');
       final body = jsonDecode(res.body);
       setState(() => _calls = body as List<dynamic>);
+      _scheduleScrollToFocus();
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
@@ -1686,6 +1837,36 @@ class _CallsTabState extends State<CallsTab> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant CallsTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.hallId != widget.hallId) {
+      _load();
+    }
+    if (oldWidget.focusCallId != widget.focusCallId) {
+      _scheduleScrollToFocus();
+    }
+  }
+
+  void _scheduleScrollToFocus() {
+    if (widget.focusCallId == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToFocus());
+  }
+
+  void _scrollToFocus() {
+    final focusId = widget.focusCallId;
+    if (focusId == null) return;
+    final key = _itemKeys[focusId];
+    if (key?.currentContext != null) {
+      Scrollable.ensureVisible(
+        key!.currentContext!,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeInOut,
+      );
+      widget.onFocusHandled?.call();
+    }
   }
 
   @override
@@ -1794,7 +1975,12 @@ class _CallsTabState extends State<CallsTab> {
                             final status = (c['status'] ?? '').toString();
                             final canAck = status == 'NEW';
                             final canClose = status != 'CLOSED';
+                            final callId = (c['id'] as num?)?.toInt() ?? -1;
+                            if (widget.focusCallId != null && callId == widget.focusCallId) {
+                              _itemKeys[callId] = GlobalKey();
+                            }
                             return ListTile(
+                              key: _itemKeys[callId],
                               title: Text('${_tr(context, 'table')} #${c['tableNumber']}'),
                               subtitle: Text('${_statusLabel(context, c['status']?.toString() ?? '')} • ${c['createdAt']}'),
                               leading: const Icon(Icons.notifications_active),
@@ -1937,8 +2123,17 @@ class BillsTab extends StatefulWidget {
   final String username;
   final String password;
   final int? hallId;
+  final int? focusBillId;
+  final VoidCallback? onFocusHandled;
 
-  const BillsTab({super.key, required this.username, required this.password, this.hallId});
+  const BillsTab({
+    super.key,
+    required this.username,
+    required this.password,
+    this.hallId,
+    this.focusBillId,
+    this.onFocusHandled,
+  });
 
   @override
   State<BillsTab> createState() => _BillsTabState();
@@ -1950,6 +2145,7 @@ class _BillsTabState extends State<BillsTab> {
   List<dynamic> _bills = const [];
   String _sortMode = 'time_desc';
   bool _showFocus = true;
+  final Map<int, GlobalKey> _itemKeys = {};
 
   String get _auth => base64Encode(utf8.encode('${widget.username}:${widget.password}'));
 
@@ -1966,6 +2162,7 @@ class _BillsTabState extends State<BillsTab> {
       if (res.statusCode != 200) throw Exception('${_tr(context, 'loadFailed')} (${res.statusCode})');
       final body = jsonDecode(res.body);
       setState(() => _bills = body as List<dynamic>);
+      _scheduleScrollToFocus();
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
@@ -2025,6 +2222,36 @@ class _BillsTabState extends State<BillsTab> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant BillsTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.hallId != widget.hallId) {
+      _load();
+    }
+    if (oldWidget.focusBillId != widget.focusBillId) {
+      _scheduleScrollToFocus();
+    }
+  }
+
+  void _scheduleScrollToFocus() {
+    if (widget.focusBillId == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToFocus());
+  }
+
+  void _scrollToFocus() {
+    final focusId = widget.focusBillId;
+    if (focusId == null) return;
+    final key = _itemKeys[focusId];
+    if (key?.currentContext != null) {
+      Scrollable.ensureVisible(
+        key!.currentContext!,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeInOut,
+      );
+      widget.onFocusHandled?.call();
+    }
   }
 
   @override
@@ -2133,7 +2360,12 @@ class _BillsTabState extends State<BillsTab> {
                     final partyId = b['partyId'];
                     final status = b['status']?.toString();
                     final age = _ageFromIso(b['createdAt']?.toString());
+                    final billId = ((b['billRequestId'] ?? b['id']) as num?)?.toInt() ?? -1;
+                    if (widget.focusBillId != null && billId == widget.focusBillId) {
+                      _itemKeys[billId] = GlobalKey();
+                    }
                     return ExpansionTile(
+                      key: _itemKeys[billId],
                       title: Text('${_tr(context, 'table')} #${b['tableNumber']} • ${b['paymentMethod']}'),
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2213,12 +2445,148 @@ class _BillsTabState extends State<BillsTab> {
   }
 }
 
+class BillDetailsScreen extends StatelessWidget {
+  final Map<String, dynamic> bill;
+  final String username;
+  final String password;
+
+  const BillDetailsScreen({
+    super.key,
+    required this.bill,
+    required this.username,
+    required this.password,
+  });
+
+  String get _auth => base64Encode(utf8.encode('$username:$password'));
+
+  Future<void> _confirmPaid(BuildContext context, int id) async {
+    final ok = await _confirmAction(
+      context,
+      titleKey: 'confirm',
+      contentKey: 'confirmPaidQuestion',
+      confirmKey: 'confirmPaid',
+    );
+    if (!ok) return;
+    final res = await http.post(
+      Uri.parse('$apiBase/api/staff/bill-requests/$id/confirm-paid'),
+      headers: {'Authorization': 'Basic $_auth'},
+    );
+    if (res.statusCode >= 300) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${_tr(context, 'confirmFailed')} (${res.statusCode})')),
+      );
+      return;
+    }
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_tr(context, 'paymentConfirmed'))));
+    Navigator.of(context).pop();
+  }
+
+  Future<void> _cancelBill(BuildContext context, int id) async {
+    final ok = await _confirmAction(
+      context,
+      titleKey: 'confirm',
+      contentKey: 'confirmCancelBill',
+      confirmKey: 'cancelBill',
+    );
+    if (!ok) return;
+    final res = await http.post(
+      Uri.parse('$apiBase/api/staff/bill-requests/$id/cancel'),
+      headers: {'Authorization': 'Basic $_auth'},
+    );
+    if (res.statusCode >= 300) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${_tr(context, 'cancelFailed')} (${res.statusCode})')),
+      );
+      return;
+    }
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_tr(context, 'billCancelled'))));
+    Navigator.of(context).pop();
+  }
+
+  Future<void> _closeParty(BuildContext context, int partyId) async {
+    final ok = await _confirmAction(
+      context,
+      titleKey: 'confirm',
+      contentKey: 'confirmCloseParty',
+      confirmKey: 'closeParty',
+    );
+    if (!ok) return;
+    final res = await http.post(
+      Uri.parse('$apiBase/api/staff/parties/$partyId/close'),
+      headers: {'Authorization': 'Basic $_auth'},
+    );
+    if (res.statusCode >= 300) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${_tr(context, 'closePartyFailed')} (${res.statusCode})')),
+      );
+      return;
+    }
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_tr(context, 'partyClosed'))));
+    Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final items = (bill['items'] as List<dynamic>? ?? const []).cast<Map<String, dynamic>>();
+    final billId = (bill['billRequestId'] ?? bill['id']) as num?;
+    final status = bill['status']?.toString() ?? '';
+    final partyId = bill['partyId'] as num?;
+    return Scaffold(
+      appBar: AppBar(title: Text('${_tr(context, 'billRequests')} #${billId ?? ''}')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text('${_tr(context, 'table')} #${bill['tableNumber']}', style: const TextStyle(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 6),
+          Text('${bill['mode']} • ${bill['paymentMethod']} • $status'),
+          const SizedBox(height: 12),
+          ...items.map((it) => ListTile(
+                title: Text('${it['name']} × ${it['qty']}'),
+                subtitle: Text('${it['lineTotalCents']} ${_tr(context, 'cents')}'),
+              )),
+          const SizedBox(height: 8),
+          if (billId != null)
+            ElevatedButton(
+              onPressed: () => _confirmPaid(context, billId.toInt()),
+              child: Text(_tr(context, 'confirmPaid')),
+            ),
+          if (billId != null && status == 'CREATED')
+            OutlinedButton(
+              onPressed: () => _cancelBill(context, billId.toInt()),
+              child: Text(_tr(context, 'cancelBill')),
+            ),
+          if (partyId != null)
+            OutlinedButton(
+              onPressed: () => _closeParty(context, partyId.toInt()),
+              child: Text(_tr(context, 'closeParty')),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class KitchenTab extends StatefulWidget {
   final String username;
   final String password;
   final int? hallId;
+  final int? focusOrderId;
+  final VoidCallback? onFocusHandled;
 
-  const KitchenTab({super.key, required this.username, required this.password, this.hallId});
+  const KitchenTab({
+    super.key,
+    required this.username,
+    required this.password,
+    this.hallId,
+    this.focusOrderId,
+    this.onFocusHandled,
+  });
 
   @override
   State<KitchenTab> createState() => _KitchenTabState();
@@ -2231,6 +2599,7 @@ class _KitchenTabState extends State<KitchenTab> {
   String _statusFilter = 'NEW,ACCEPTED,IN_PROGRESS';
   String _sortMode = 'time_desc';
   bool _showFocus = true;
+  final Map<int, GlobalKey> _itemKeys = {};
 
   String get _auth => base64Encode(utf8.encode('${widget.username}:${widget.password}'));
 
@@ -2267,6 +2636,7 @@ class _KitchenTabState extends State<KitchenTab> {
       if (res.statusCode != 200) throw Exception('${_tr(context, 'loadFailed')} (${res.statusCode})');
       final body = jsonDecode(res.body);
       setState(() => _orders = body as List<dynamic>);
+      _scheduleScrollToFocus();
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
@@ -2278,6 +2648,36 @@ class _KitchenTabState extends State<KitchenTab> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant KitchenTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.hallId != widget.hallId) {
+      _load();
+    }
+    if (oldWidget.focusOrderId != widget.focusOrderId) {
+      _scheduleScrollToFocus();
+    }
+  }
+
+  void _scheduleScrollToFocus() {
+    if (widget.focusOrderId == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToFocus());
+  }
+
+  void _scrollToFocus() {
+    final focusId = widget.focusOrderId;
+    if (focusId == null) return;
+    final key = _itemKeys[focusId];
+    if (key?.currentContext != null) {
+      Scrollable.ensureVisible(
+        key!.currentContext!,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeInOut,
+      );
+      widget.onFocusHandled?.call();
+    }
   }
 
   @override
@@ -2413,7 +2813,11 @@ class _KitchenTabState extends State<KitchenTab> {
                             final status = (o['status'] ?? '').toString().toUpperCase();
                             final orderId = (o['id'] as num).toInt();
                             final bool canServe = status == 'READY';
+                            if (widget.focusOrderId != null && orderId == widget.focusOrderId) {
+                              _itemKeys[orderId] = GlobalKey();
+                            }
                             return ListTile(
+                              key: _itemKeys[orderId],
                               title: Text('${_tr(context, 'table')} #$tableNumber  •  ${_tr(context, 'orders')} #${o['id']}'),
                               subtitle: Text('${_statusLabel(context, o['status']?.toString() ?? '')} • ${items.length} ${_tr(context, 'items')} • ${ageMin}m'),
                               trailing: Row(
@@ -3482,6 +3886,806 @@ Widget _legendDot(Color color) {
       shape: BoxShape.circle,
     ),
   );
+}
+
+class OpsDashboardTab extends StatefulWidget {
+  final String username;
+  final String password;
+  final int? hallId;
+
+  const OpsDashboardTab({super.key, required this.username, required this.password, this.hallId});
+
+  @override
+  State<OpsDashboardTab> createState() => _OpsDashboardTabState();
+}
+
+class _OpsDashboardTabState extends State<OpsDashboardTab> {
+  bool _loading = true;
+  String? _error;
+  DateTime? _lastUpdated;
+  List<Map<String, dynamic>> _orders = const [];
+  List<Map<String, dynamic>> _calls = const [];
+  List<Map<String, dynamic>> _bills = const [];
+  List<Map<String, dynamic>> _kitchen = const [];
+  Timer? _pollTimer;
+  final Map<String, List<int>> _critSeries = {
+    'orders': [],
+    'calls': [],
+    'bills': [],
+    'kitchen': [],
+  };
+  final Map<String, List<int>> _warnSeries = {
+    'orders': [],
+    'calls': [],
+    'bills': [],
+    'kitchen': [],
+  };
+  final AudioPlayer _alertPlayer = AudioPlayer();
+  final Set<String> _seenAlertKeys = {};
+  bool _criticalOnly = false;
+
+  String get _auth => base64Encode(utf8.encode('${widget.username}:${widget.password}'));
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+    _pollTimer = Timer.periodic(const Duration(seconds: 20), (_) => _load());
+  }
+
+  @override
+  void didUpdateWidget(covariant OpsDashboardTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.hallId != widget.hallId) {
+      _load();
+    }
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    _alertPlayer.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final hall = widget.hallId != null ? "?hallId=${widget.hallId}" : "";
+      final ordersRes = await http.get(
+        Uri.parse('$apiBase/api/staff/orders/active$hall'),
+        headers: {'Authorization': 'Basic $_auth'},
+      );
+      if (ordersRes.statusCode == 200) {
+        _orders = (jsonDecode(ordersRes.body) as List<dynamic>).cast<Map<String, dynamic>>();
+      }
+      final callsRes = await http.get(
+        Uri.parse('$apiBase/api/staff/waiter-calls/active$hall'),
+        headers: {'Authorization': 'Basic $_auth'},
+      );
+      if (callsRes.statusCode == 200) {
+        _calls = (jsonDecode(callsRes.body) as List<dynamic>).cast<Map<String, dynamic>>();
+      }
+      final billsRes = await http.get(
+        Uri.parse('$apiBase/api/staff/bill-requests/active$hall'),
+        headers: {'Authorization': 'Basic $_auth'},
+      );
+      if (billsRes.statusCode == 200) {
+        _bills = (jsonDecode(billsRes.body) as List<dynamic>).cast<Map<String, dynamic>>();
+      }
+      final kitchenRes = await http.get(
+        Uri.parse('$apiBase/api/staff/orders/kitchen?statusIn=NEW,ACCEPTED,IN_PROGRESS${widget.hallId != null ? "&hallId=${widget.hallId}" : ""}'),
+        headers: {'Authorization': 'Basic $_auth'},
+      );
+      if (kitchenRes.statusCode == 200) {
+        _kitchen = (jsonDecode(kitchenRes.body) as List<dynamic>).cast<Map<String, dynamic>>();
+      }
+      _lastUpdated = DateTime.now();
+      _updateTrendsAndAlerts();
+    } catch (e) {
+      _error = e.toString();
+    } finally {
+      if (mounted) {
+        setState(() => _loading = false);
+      }
+    }
+  }
+
+  void _updateTrendsAndAlerts() {
+    final ordersSummary = _slaSummary(_orders, SlaConfig.orderWarn, SlaConfig.orderCrit, 'createdAt');
+    final callsSummary = _slaSummary(_calls, SlaConfig.callWarn, SlaConfig.callCrit, 'createdAt');
+    final billsSummary = _slaSummary(_bills, SlaConfig.billWarn, SlaConfig.billCrit, 'createdAt');
+    final kitchenSummary = _slaSummary(_kitchen, SlaConfig.kitchenWarn, SlaConfig.kitchenCrit, 'ageSeconds');
+
+    _pushTrend('orders', ordersSummary['warn'] as int, ordersSummary['crit'] as int);
+    _pushTrend('calls', callsSummary['warn'] as int, callsSummary['crit'] as int);
+    _pushTrend('bills', billsSummary['warn'] as int, billsSummary['crit'] as int);
+    _pushTrend('kitchen', kitchenSummary['warn'] as int, kitchenSummary['crit'] as int);
+
+    final alerts = _alerts();
+    for (final a in alerts) {
+      final key = '${a['type']}:${a['refId'] ?? ''}';
+      if (_seenAlertKeys.add(key)) {
+        _alertPlayer.play(AssetSource('beep.wav'));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('${_tr(context, a['type'] as String)} • ${_tr(context, 'table')} #${a['tableNumber'] ?? '—'}')),
+          );
+        }
+      }
+    }
+    if (_seenAlertKeys.length > 200) {
+      _seenAlertKeys.remove(_seenAlertKeys.first);
+    }
+  }
+
+  void _pushTrend(String key, int warn, int crit) {
+    final warnList = _warnSeries[key] ?? [];
+    final critList = _critSeries[key] ?? [];
+    warnList.add(warn);
+    critList.add(crit);
+    if (warnList.length > 20) warnList.removeAt(0);
+    if (critList.length > 20) critList.removeAt(0);
+    _warnSeries[key] = warnList;
+    _critSeries[key] = critList;
+  }
+
+  Map<String, dynamic> _slaSummary(List<Map<String, dynamic>> items, int warnMin, int critMin, String ageField) {
+    int warn = 0;
+    int crit = 0;
+    final Map<int, Duration> maxAgeByTable = {};
+    final Map<int, int> countByTable = {};
+    for (final item in items) {
+      final age = ageField == 'ageSeconds'
+          ? Duration(seconds: (item['ageSeconds'] ?? 0) as int)
+          : _ageFromIso(item[ageField]?.toString());
+      final tableNumber = (item['tableNumber'] ?? 0) as int;
+      final prev = maxAgeByTable[tableNumber];
+      if (prev == null || age > prev) {
+        maxAgeByTable[tableNumber] = age;
+      }
+      countByTable[tableNumber] = (countByTable[tableNumber] ?? 0) + 1;
+      if (age.inMinutes >= critMin) crit++;
+      else if (age.inMinutes >= warnMin) warn++;
+    }
+    final focus = maxAgeByTable.entries.toList()..sort((a, b) => b.value.inSeconds.compareTo(a.value.inSeconds));
+    return {
+      'warn': warn,
+      'crit': crit,
+      'focus': focus.take(3).toList(),
+      'counts': countByTable,
+    };
+  }
+
+  List<Map<String, dynamic>> _alerts({bool includeWarn = false}) {
+    final alerts = <Map<String, dynamic>>[];
+    Map<String, dynamic>? addAlert(String typeKey, int? tableNumber, Duration age, int warnMin, int critMin) {
+      final isCritical = age.inMinutes >= critMin;
+      final isWarn = age.inMinutes >= warnMin && !isCritical;
+      if (isCritical || (includeWarn && isWarn)) {
+        final alert = {
+          'type': typeKey,
+          'tableNumber': tableNumber,
+          'age': age,
+          'level': isCritical ? 'CRIT' : 'WARN',
+        };
+        alerts.add(alert);
+        return alert;
+      }
+      return null;
+    }
+
+    for (final o in _orders) {
+      final alert = addAlert(
+        'alertOrder',
+        (o['tableNumber'] ?? 0) as int?,
+        _ageFromIso(o['createdAt']?.toString()),
+        SlaConfig.orderWarn,
+        SlaConfig.orderCrit,
+      );
+      if (alert != null) {
+        alert['refId'] = (o['id'] as num?)?.toInt();
+      }
+    }
+    for (final c in _calls) {
+      final alert = addAlert(
+        'alertCall',
+        (c['tableNumber'] ?? 0) as int?,
+        _ageFromIso(c['createdAt']?.toString()),
+        SlaConfig.callWarn,
+        SlaConfig.callCrit,
+      );
+      if (alert != null) {
+        alert['refId'] = (c['id'] as num?)?.toInt();
+      }
+    }
+    for (final b in _bills) {
+      final alert = addAlert(
+        'alertBill',
+        (b['tableNumber'] ?? 0) as int?,
+        _ageFromIso(b['createdAt']?.toString()),
+        SlaConfig.billWarn,
+        SlaConfig.billCrit,
+      );
+      if (alert != null) {
+        alert['refId'] = (b['billRequestId'] ?? b['id']) as int?;
+      }
+    }
+    for (final k in _kitchen) {
+      final age = Duration(seconds: (k['ageSeconds'] ?? 0) as int);
+      final alert = addAlert(
+        'alertKitchen',
+        (k['tableNumber'] ?? 0) as int?,
+        age,
+        SlaConfig.kitchenWarn,
+        SlaConfig.kitchenCrit,
+      );
+      if (alert != null) {
+        alert['refId'] = (k['id'] as num?)?.toInt();
+      }
+    }
+
+    alerts.sort((a, b) => (b['age'] as Duration).inSeconds.compareTo((a['age'] as Duration).inSeconds));
+    return alerts.take(12).toList();
+  }
+
+  Map<int, double> _heatByTable() {
+    final heat = <int, double>{};
+    void addHeat(int? tableNumber, Duration age, int critMin) {
+      if (tableNumber == null) return;
+      final intensity = (age.inMinutes / max(critMin, 1)).clamp(0.0, 1.0).toDouble();
+      final prev = heat[tableNumber] ?? 0;
+      if (intensity > prev) {
+        heat[tableNumber] = intensity;
+      }
+    }
+
+    for (final o in _orders) {
+      addHeat((o['tableNumber'] ?? 0) as int?, _ageFromIso(o['createdAt']?.toString()), SlaConfig.orderCrit);
+    }
+    for (final c in _calls) {
+      addHeat((c['tableNumber'] ?? 0) as int?, _ageFromIso(c['createdAt']?.toString()), SlaConfig.callCrit);
+    }
+    for (final b in _bills) {
+      addHeat((b['tableNumber'] ?? 0) as int?, _ageFromIso(b['createdAt']?.toString()), SlaConfig.billCrit);
+    }
+    for (final k in _kitchen) {
+      addHeat((k['tableNumber'] ?? 0) as int?, Duration(seconds: (k['ageSeconds'] ?? 0) as int), SlaConfig.kitchenCrit);
+    }
+    return heat;
+  }
+
+  Widget _focusRow(BuildContext context, String title, List<MapEntry<int, Duration>> focus, Map<int, int> counts, int warnMin, int critMin) {
+    if (focus.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+        ),
+        SizedBox(
+          height: 92,
+          child: ListView.separated(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            scrollDirection: Axis.horizontal,
+            itemCount: focus.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 10),
+            itemBuilder: (ctx, i) {
+              final entry = focus[i];
+              final tableNo = entry.key;
+              final age = entry.value;
+              final count = counts[tableNo] ?? 0;
+              final color = _slaColor(age, warnMin, critMin);
+              final minutes = age.inMinutes < 1 ? '<1m' : '${age.inMinutes}m';
+              return Container(
+                width: 180,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: color.withOpacity(0.4)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text('${_tr(context, 'table')} #$tableNo', style: const TextStyle(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 6),
+                    Text('${_tr(context, 'oldest')}: $minutes', style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 4),
+                    Text('${_tr(context, 'items')}: $count', style: const TextStyle(color: Colors.black54)),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ordersSummary = _slaSummary(_orders, SlaConfig.orderWarn, SlaConfig.orderCrit, 'createdAt');
+    final callsSummary = _slaSummary(_calls, SlaConfig.callWarn, SlaConfig.callCrit, 'createdAt');
+    final billsSummary = _slaSummary(_bills, SlaConfig.billWarn, SlaConfig.billCrit, 'createdAt');
+    final kitchenSummary = _slaSummary(_kitchen, SlaConfig.kitchenWarn, SlaConfig.kitchenCrit, 'ageSeconds');
+    final alerts = _criticalOnly ? _alerts() : _alerts(includeWarn: true);
+    final heat = _heatByTable();
+    final hotTables = heat.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(_tr(context, 'ops')),
+        actions: [
+          IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
+        ],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(child: Text(_error!))
+              : ListView(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(_tr(context, 'slaDashboard'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                          if (_lastUpdated != null)
+                            Text(
+                              '${_tr(context, 'lastUpdated')}: ${_lastUpdated!.toLocal().toIso8601String().substring(11, 19)}',
+                              style: const TextStyle(color: Colors.black54, fontSize: 12),
+                            ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Column(
+                        children: [
+                          _dashboardCard(context, _tr(context, 'ordersSla'), ordersSummary['warn'], ordersSummary['crit'], _critSeries['orders'], _warnSeries['orders']),
+                          const SizedBox(height: 8),
+                          _dashboardCard(context, _tr(context, 'callsSla'), callsSummary['warn'], callsSummary['crit'], _critSeries['calls'], _warnSeries['calls']),
+                          const SizedBox(height: 8),
+                          _dashboardCard(context, _tr(context, 'billsSla'), billsSummary['warn'], billsSummary['crit'], _critSeries['bills'], _warnSeries['bills']),
+                          const SizedBox(height: 8),
+                          _dashboardCard(context, _tr(context, 'kitchenSla'), kitchenSummary['warn'], kitchenSummary['crit'], _critSeries['kitchen'], _warnSeries['kitchen']),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(_tr(context, 'slaTrend'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                          Text(_tr(context, 'trendHint'), style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Container(
+                        height: 140,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.black12),
+                          boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0, 2))],
+                        ),
+                        child: _SlaTrendPanel(
+                          orders: _critSeries['orders'] ?? const [],
+                          calls: _critSeries['calls'] ?? const [],
+                          bills: _critSeries['bills'] ?? const [],
+                          kitchen: _critSeries['kitchen'] ?? const [],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                      child: Text(_tr(context, 'focusCards'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                    ),
+                    _focusRow(context, _tr(context, 'orders'), (ordersSummary['focus'] as List<MapEntry<int, Duration>>), ordersSummary['counts'] as Map<int, int>,
+                        SlaConfig.orderWarn, SlaConfig.orderCrit),
+                    _focusRow(context, _tr(context, 'calls'), (callsSummary['focus'] as List<MapEntry<int, Duration>>), callsSummary['counts'] as Map<int, int>,
+                        SlaConfig.callWarn, SlaConfig.callCrit),
+                    _focusRow(context, _tr(context, 'bills'), (billsSummary['focus'] as List<MapEntry<int, Duration>>), billsSummary['counts'] as Map<int, int>,
+                        SlaConfig.billWarn, SlaConfig.billCrit),
+                    _focusRow(context, _tr(context, 'kitchen'), (kitchenSummary['focus'] as List<MapEntry<int, Duration>>), kitchenSummary['counts'] as Map<int, int>,
+                        SlaConfig.kitchenWarn, SlaConfig.kitchenCrit),
+                    const SizedBox(height: 6),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(_tr(context, 'heatmapPreview'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                          TextButton(
+                            onPressed: _openHallWithHeatmap,
+                            child: Text(_tr(context, 'openHall')),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
+                      child: Text(_tr(context, 'heatmapHint'), style: const TextStyle(color: Colors.black54)),
+                    ),
+                    if (hotTables.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: hotTables.take(10).map((entry) {
+                            final tableNo = entry.key;
+                            final intensity = entry.value;
+                            final color = Color.lerp(Colors.green, Colors.red, intensity) ?? Colors.green;
+                            return Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: color.withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(999),
+                                border: Border.all(color: color, width: 1),
+                              ),
+                              child: Text('#$tableNo • ${(intensity * 100).toStringAsFixed(0)}%'),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    const SizedBox(height: 12),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(_tr(context, 'alerts'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                          Row(
+                            children: [
+                              Text(_tr(context, 'onlyCritical'), style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                              const SizedBox(width: 6),
+                              Switch(
+                                value: _criticalOnly,
+                                onChanged: (v) => setState(() => _criticalOnly = v),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+                      child: Text(_tr(context, 'alertsHint'), style: const TextStyle(color: Colors.black54)),
+                    ),
+                    if (alerts.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                        child: Text(_tr(context, 'alertsEmpty'), style: const TextStyle(color: Colors.black54)),
+                      ),
+                    ...alerts.map((a) {
+                      final tableNo = a['tableNumber'] as int?;
+                      final age = a['age'] as Duration;
+                      final minutes = age.inMinutes < 1 ? '<1m' : '${age.inMinutes}m';
+                      final level = (a['level'] ?? 'CRIT').toString();
+                      final levelColor = level == 'WARN' ? Colors.orange : Colors.redAccent;
+                      return ListTile(
+                        leading: Icon(Icons.warning_amber_rounded, color: levelColor),
+                        title: Text(_tr(context, a['type'] as String)),
+                        subtitle: Text('${_tr(context, 'table')} #${tableNo ?? '—'} • ${_tr(context, 'age')}: $minutes'),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.open_in_new),
+                          onPressed: () => _openAlert(a),
+                        ),
+                        onTap: () => _jumpToTab(a),
+                      );
+                    }).toList(),
+                  ],
+                ),
+    );
+  }
+
+  Widget _dashboardCard(BuildContext context, String title, int warn, int crit, List<int>? critSeries, List<int>? warnSeries) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.black12),
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0, 2))],
+      ),
+      child: Row(
+        children: [
+          Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.w600))),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              _slaSummaryRow(context, warn, crit),
+              const SizedBox(height: 4),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(_tr(context, 'slaTrend'), style: const TextStyle(fontSize: 10, color: Colors.black54)),
+                  const SizedBox(width: 6),
+                  SizedBox(
+                    width: 90,
+                    height: 22,
+                    child: _TrendSparkline(
+                      critSeries ?? const [],
+                      warnSeries ?? const [],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _openAlert(Map<String, dynamic> alert) {
+    final type = alert['type'] as String;
+    final refId = alert['refId'];
+    if (refId == null) return;
+    if (type == 'alertOrder' || type == 'alertKitchen') {
+      final source = type == 'alertKitchen' ? _kitchen : _orders;
+      final order = source.firstWhere(
+        (o) => (o['id'] as num?)?.toInt() == refId,
+        orElse: () => const {},
+      );
+      if (order.isEmpty) return;
+      Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => OrderDetailsScreen(
+          order: order,
+          username: widget.username,
+          password: widget.password,
+          actions: type == 'alertKitchen'
+              ? const ['ACCEPTED', 'IN_PROGRESS', 'READY', 'SERVED', 'CLOSED']
+              : const ['ACCEPTED', 'IN_PROGRESS', 'READY'],
+        ),
+      ));
+      return;
+    }
+    if (type == 'alertCall') {
+      final call = _calls.firstWhere(
+        (c) => (c['id'] as num?)?.toInt() == refId,
+        orElse: () => const {},
+      );
+      if (call.isEmpty) return;
+      Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => WaiterCallDetailsScreen(
+          call: call,
+          username: widget.username,
+          password: widget.password,
+        ),
+      ));
+      return;
+    }
+    if (type == 'alertBill') {
+      final bill = _bills.firstWhere(
+        (b) => ((b['billRequestId'] ?? b['id']) as num?)?.toInt() == refId,
+        orElse: () => const {},
+      );
+      if (bill.isEmpty) return;
+      Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => BillDetailsScreen(
+          bill: bill,
+          username: widget.username,
+          password: widget.password,
+        ),
+      ));
+    }
+  }
+
+  void _jumpToTab(Map<String, dynamic> alert) {
+    final type = alert['type'] as String;
+    final refId = alert['refId'];
+    if (refId == null) return;
+    if (type == 'alertOrder') {
+      HomeNavBus.request(HomeNavRequest.orders(refId));
+      return;
+    }
+    if (type == 'alertKitchen') {
+      HomeNavBus.request(HomeNavRequest.kitchen(refId));
+      return;
+    }
+    if (type == 'alertCall') {
+      HomeNavBus.request(HomeNavRequest.calls(refId));
+      return;
+    }
+    if (type == 'alertBill') {
+      HomeNavBus.request(HomeNavRequest.bills(refId));
+    }
+  }
+
+  void _openHallWithHeatmap() {
+    HomeNavBus.request(const HomeNavRequest(tabIndex: 5));
+  }
+}
+
+class _TrendSparkline extends StatelessWidget {
+  final List<int> critSeries;
+  final List<int> warnSeries;
+
+  const _TrendSparkline(this.critSeries, this.warnSeries);
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      painter: _TrendSparklinePainter(critSeries, warnSeries),
+    );
+  }
+}
+
+class _TrendSparklinePainter extends CustomPainter {
+  final List<int> critSeries;
+  final List<int> warnSeries;
+
+  _TrendSparklinePainter(this.critSeries, this.warnSeries);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (critSeries.isEmpty && warnSeries.isEmpty) return;
+    final maxVal = [
+      ...critSeries,
+      ...warnSeries,
+      1,
+    ].reduce((a, b) => a > b ? a : b);
+    final maxLen = max(max(critSeries.length, warnSeries.length), 1);
+    final dx = size.width / maxLen;
+    final warnPaint = Paint()
+      ..color = Colors.orange.withOpacity(0.8)
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+    final critPaint = Paint()
+      ..color = Colors.red.withOpacity(0.8)
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+
+    Path buildPath(List<int> series) {
+      final path = Path();
+      for (int i = 0; i < series.length; i++) {
+        final x = i * dx;
+        final y = size.height - (series[i] / maxVal) * size.height;
+        if (i == 0) {
+          path.moveTo(x, y);
+        } else {
+          path.lineTo(x, y);
+        }
+      }
+      return path;
+    }
+
+    if (warnSeries.isNotEmpty) {
+      canvas.drawPath(buildPath(warnSeries), warnPaint);
+    }
+    if (critSeries.isNotEmpty) {
+      canvas.drawPath(buildPath(critSeries), critPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _TrendSparklinePainter oldDelegate) {
+    return oldDelegate.critSeries != critSeries || oldDelegate.warnSeries != warnSeries;
+  }
+}
+
+class _SlaTrendPanel extends StatelessWidget {
+  final List<int> orders;
+  final List<int> calls;
+  final List<int> bills;
+  final List<int> kitchen;
+
+  const _SlaTrendPanel({
+    required this.orders,
+    required this.calls,
+    required this.bills,
+    required this.kitchen,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Expanded(
+          child: CustomPaint(
+            painter: _SlaTrendPanelPainter(orders, calls, bills, kitchen),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 10,
+          runSpacing: 6,
+          children: [
+            _trendLegendDot(Colors.blue, _tr(context, 'orders')),
+            _trendLegendDot(Colors.orange, _tr(context, 'calls')),
+            _trendLegendDot(Colors.green, _tr(context, 'bills')),
+            _trendLegendDot(Colors.purple, _tr(context, 'kitchen')),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+Widget _trendLegendDot(Color color, String label) {
+  return Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+      const SizedBox(width: 4),
+      Text(label, style: const TextStyle(fontSize: 11, color: Colors.black54)),
+    ],
+  );
+}
+
+class _SlaTrendPanelPainter extends CustomPainter {
+  final List<int> orders;
+  final List<int> calls;
+  final List<int> bills;
+  final List<int> kitchen;
+
+  _SlaTrendPanelPainter(this.orders, this.calls, this.bills, this.kitchen);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final all = [orders, calls, bills, kitchen];
+    final maxVal = all.expand((e) => e).fold<int>(1, (p, v) => v > p ? v : p);
+    if (maxVal <= 0) return;
+    final padding = 6.0;
+    final width = size.width - padding * 2;
+    final height = size.height - padding * 2;
+    final dx = width / max(_maxLen(all) - 1, 1);
+
+    void drawSeries(List<int> series, Color color) {
+      if (series.isEmpty) return;
+      final paint = Paint()
+        ..color = color.withOpacity(0.85)
+        ..strokeWidth = 2
+        ..style = PaintingStyle.stroke;
+      final path = Path();
+      for (int i = 0; i < series.length; i++) {
+        final x = padding + i * dx;
+        final y = padding + (1 - (series[i] / maxVal)) * height;
+        if (i == 0) {
+          path.moveTo(x, y);
+        } else {
+          path.lineTo(x, y);
+        }
+      }
+      canvas.drawPath(path, paint);
+    }
+
+    drawSeries(orders, Colors.blue);
+    drawSeries(calls, Colors.orange);
+    drawSeries(bills, Colors.green);
+    drawSeries(kitchen, Colors.purple);
+  }
+
+  int _maxLen(List<List<int>> lists) {
+    int maxLen = 0;
+    for (final l in lists) {
+      if (l.length > maxLen) maxLen = l.length;
+    }
+    return maxLen;
+  }
+
+  @override
+  bool shouldRepaint(covariant _SlaTrendPanelPainter oldDelegate) {
+    return oldDelegate.orders != orders ||
+        oldDelegate.calls != calls ||
+        oldDelegate.bills != bills ||
+        oldDelegate.kitchen != kitchen;
+  }
 }
 
 Widget _activePlanLabel(BuildContext context, Map<String, dynamic> plan, bool isActive) {
