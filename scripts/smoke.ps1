@@ -38,6 +38,17 @@ function Ensure-Backend {
 
 Ensure-Backend
 
+Write-Host "==> Admin login"
+$loginBody = @{ username = $AdminUser; password = $AdminPass } | ConvertTo-Json -Depth 4
+$loginResp = Invoke-WebRequest -Method Post -Uri "$ApiBase/api/auth/login" -ContentType "application/json" -Body $loginBody -UseBasicParsing
+$cookieHeader = $loginResp.Headers["Set-Cookie"] | Select-Object -First 1
+if (-not $cookieHeader) {
+  Write-Host "Admin login did not return a cookie."
+  exit 1
+}
+$adminCookie = $cookieHeader.Split(";")[0]
+$adminHeaders = @{ Cookie = $adminCookie }
+
 if (-not $TablePublicId) {
   Write-Host "Set TABLE_PUBLIC_ID before running."
   exit 1
@@ -56,9 +67,6 @@ function Invoke-Json($method, $url, $body = $null, $headers = $null) {
   $resp = Invoke-RestMethod @options
   return $resp
 }
-
-$basic = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("$AdminUser`:$AdminPass"))
-$adminHeaders = @{ Authorization = "Basic $basic" }
 
 Write-Host "==> Fetch signed URL for table $TablePublicId"
 $signed = Invoke-Json "GET" "$ApiBase/api/admin/tables/$TablePublicId/signed-url" $null $adminHeaders
@@ -133,10 +141,15 @@ if ($halls.Count -gt 0) {
     $planId = $plans[0].id
     $null = Invoke-Json "GET" "$ApiBase/api/admin/hall-plans/$planId/versions" $null $adminHeaders
   } else {
-    Write-Host "No plans found; skip versions check."
+    Write-Host "No hall plans found; creating demo plan."
+    $plan = Invoke-Json "POST" "$ApiBase/api/admin/halls/$hallId/plans" @{ name = "Demo plan"; sortOrder = 1 } $adminHeaders
+    $null = Invoke-Json "GET" "$ApiBase/api/admin/hall-plans/$($plan.id)/versions" $null $adminHeaders
   }
 } else {
-  Write-Host "No halls found; skip versions check."
+  Write-Host "No halls found; creating demo hall + plan."
+  $hall = Invoke-Json "POST" "$ApiBase/api/admin/halls" @{ name = "Main hall"; sortOrder = 1 } $adminHeaders
+  $plan = Invoke-Json "POST" "$ApiBase/api/admin/halls/$($hall.id)/plans" @{ name = "Demo plan"; sortOrder = 1 } $adminHeaders
+  $null = Invoke-Json "GET" "$ApiBase/api/admin/hall-plans/$($plan.id)/versions" $null $adminHeaders
 }
 
 Write-Host "Smoke tests completed."

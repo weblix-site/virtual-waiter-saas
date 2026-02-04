@@ -91,9 +91,27 @@ ensure_backend() {
 
 ensure_backend
 
+echo "==> Admin login"
+LOGIN_HEADERS="$(curl -sS -D - -o /dev/null \
+  -H "Content-Type: application/json" \
+  -X POST "${API_BASE}/api/auth/login" \
+  -d "{\"username\":\"${ADMIN_USER}\",\"password\":\"${ADMIN_PASS}\"}")"
+LOGIN_STATUS="$(printf '%s' "$LOGIN_HEADERS" | awk 'NR==1{print $2}')"
+if [[ "$LOGIN_STATUS" != "200" ]]; then
+  echo "Admin login failed: HTTP $LOGIN_STATUS"
+  printf '%s\n' "$LOGIN_HEADERS"
+  exit 1
+fi
+ADMIN_COOKIE="$(printf '%s' "$LOGIN_HEADERS" | awk -F': ' 'tolower($1)=="set-cookie"{print $2}' | head -n1 | cut -d';' -f1)"
+if [[ -z "${ADMIN_COOKIE}" ]]; then
+  echo "Admin login did not return a cookie."
+  printf '%s\n' "$LOGIN_HEADERS"
+  exit 1
+fi
+
 if [[ -z "$TABLE_PUBLIC_ID" ]]; then
   echo "==> Resolve tablePublicId"
-  TABLES_RESP="$(curl -sS -u "${ADMIN_USER}:${ADMIN_PASS}" -w "HTTPSTATUS:%{http_code}" \
+  TABLES_RESP="$(curl -sS -H "Cookie: ${ADMIN_COOKIE}" -w "HTTPSTATUS:%{http_code}" \
     "${API_BASE}/api/admin/tables")"
   TABLES_BODY="${TABLES_RESP%HTTPSTATUS:*}"
   TABLES_STATUS="${TABLES_RESP##*HTTPSTATUS:}"
@@ -113,7 +131,7 @@ print(val)' <<<"$TABLES_BODY")"; then
   fi
   if [[ -z "$TABLE_PUBLIC_ID" ]]; then
     echo "==> Create table"
-    CREATED_RESP="$(curl -sS -u "${ADMIN_USER}:${ADMIN_PASS}" -w "HTTPSTATUS:%{http_code}" \
+    CREATED_RESP="$(curl -sS -H "Cookie: ${ADMIN_COOKIE}" -w "HTTPSTATUS:%{http_code}" \
       -H "Content-Type: application/json" \
       -X POST "${API_BASE}/api/admin/tables" \
       -d "{\"number\":1}")"
@@ -140,7 +158,7 @@ print(val)' <<<"$CREATED_BODY")"; then
 fi
 
 echo "==> Fetch signed URL for table ${TABLE_PUBLIC_ID}"
-SIGNED_RESP="$(curl -sS -u "${ADMIN_USER}:${ADMIN_PASS}" -w "HTTPSTATUS:%{http_code}" \
+SIGNED_RESP="$(curl -sS -H "Cookie: ${ADMIN_COOKIE}" -w "HTTPSTATUS:%{http_code}" \
   "${API_BASE}/api/admin/tables/${TABLE_PUBLIC_ID}/signed-url")"
 SIGNED_BODY="${SIGNED_RESP%HTTPSTATUS:*}"
 SIGNED_STATUS="${SIGNED_RESP##*HTTPSTATUS:}"
@@ -191,7 +209,7 @@ MENU_JSON="$(curl -sS "${API_BASE}/api/public/menu?tablePublicId=${TABLE_PUBLIC_
 FIRST_ITEM_ID="$(python3 -c 'import json,sys; data=json.load(sys.stdin); items=[]; [items.extend(c.get("items",[])) for c in data.get("categories",[])]; print(items[0]["id"] if items else "")' <<<"$MENU_JSON")"
 if [[ -z "$FIRST_ITEM_ID" ]]; then
   echo "==> No menu items found; creating demo category + item"
-  CAT_RESP="$(curl -sS -u "${ADMIN_USER}:${ADMIN_PASS}" -w "HTTPSTATUS:%{http_code}" \
+  CAT_RESP="$(curl -sS -H "Cookie: ${ADMIN_COOKIE}" -w "HTTPSTATUS:%{http_code}" \
     -H "Content-Type: application/json" \
     -X POST "${API_BASE}/api/admin/menu/categories" \
     -d "{\"nameRu\":\"Тест\",\"nameRo\":\"Test\",\"nameEn\":\"Test\",\"sortOrder\":1,\"isActive\":true}")"
@@ -203,7 +221,7 @@ if [[ -z "$FIRST_ITEM_ID" ]]; then
     exit 1
   fi
   CAT_ID="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<<"$CAT_BODY")"
-  ITEM_RESP="$(curl -sS -u "${ADMIN_USER}:${ADMIN_PASS}" -w "HTTPSTATUS:%{http_code}" \
+  ITEM_RESP="$(curl -sS -H "Cookie: ${ADMIN_COOKIE}" -w "HTTPSTATUS:%{http_code}" \
     -H "Content-Type: application/json" \
     -X POST "${API_BASE}/api/admin/menu/items" \
     -d "{\"categoryId\":${CAT_ID},\"nameRu\":\"Тест\",\"nameRo\":\"Test\",\"nameEn\":\"Test\",\"descriptionRu\":\"\",\"descriptionRo\":\"\",\"descriptionEn\":\"\",\"price\":10,\"isActive\":true}")"
@@ -241,16 +259,54 @@ curl -sS -X POST "${API_BASE}/api/public/bill-request/create" \
   -d "{\"guestSessionId\":${GUEST_SESSION_ID},\"mode\":\"MY\",\"paymentMethod\":\"CASH\",\"tipsPercent\":5}" >/dev/null
 
 echo "==> Hall plans versions"
-HALL_ID="$(curl -sS -u "${ADMIN_USER}:${ADMIN_PASS}" "${API_BASE}/api/admin/halls" | python3 -c 'import json,sys; data=json.load(sys.stdin); print(data[0]["id"] if data else "")')"
+HALL_ID="$(curl -sS -H "Cookie: ${ADMIN_COOKIE}" "${API_BASE}/api/admin/halls" | python3 -c 'import json,sys; data=json.load(sys.stdin); print(data[0]["id"] if data else "")')"
 if [[ -n "$HALL_ID" ]]; then
-  PLAN_ID="$(curl -sS -u "${ADMIN_USER}:${ADMIN_PASS}" "${API_BASE}/api/admin/halls/${HALL_ID}/plans" | python3 -c 'import json,sys; data=json.load(sys.stdin); print(data[0]["id"] if data else "")')"
+  PLAN_ID="$(curl -sS -H "Cookie: ${ADMIN_COOKIE}" "${API_BASE}/api/admin/halls/${HALL_ID}/plans" | python3 -c 'import json,sys; data=json.load(sys.stdin); print(data[0]["id"] if data else "")')"
   if [[ -n "$PLAN_ID" ]]; then
-    curl -sS -u "${ADMIN_USER}:${ADMIN_PASS}" "${API_BASE}/api/admin/hall-plans/${PLAN_ID}/versions" >/dev/null
+    curl -sS -H "Cookie: ${ADMIN_COOKIE}" "${API_BASE}/api/admin/hall-plans/${PLAN_ID}/versions" >/dev/null
   else
-    echo "No hall plans found; skip versions check."
+    echo "No hall plans found; creating demo plan."
+    PLAN_CREATE_RESP="$(curl -sS -H "Cookie: ${ADMIN_COOKIE}" -w "HTTPSTATUS:%{http_code}" \
+      -H "Content-Type: application/json" \
+      -X POST "${API_BASE}/api/admin/halls/${HALL_ID}/plans" \
+      -d "{\"name\":\"Demo plan\",\"sortOrder\":1}")"
+    PLAN_CREATE_BODY="${PLAN_CREATE_RESP%HTTPSTATUS:*}"
+    PLAN_CREATE_STATUS="${PLAN_CREATE_RESP##*HTTPSTATUS:}"
+    if [[ "$PLAN_CREATE_STATUS" != "200" ]]; then
+      echo "Create hall plan failed: HTTP $PLAN_CREATE_STATUS"
+      echo "$PLAN_CREATE_BODY"
+      exit 1
+    fi
+    PLAN_ID="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<<"$PLAN_CREATE_BODY")"
+    curl -sS -H "Cookie: ${ADMIN_COOKIE}" "${API_BASE}/api/admin/hall-plans/${PLAN_ID}/versions" >/dev/null
   fi
 else
-  echo "No halls found; skip hall plans check."
+  echo "No halls found; creating demo hall + plan."
+  HALL_CREATE_RESP="$(curl -sS -H "Cookie: ${ADMIN_COOKIE}" -w "HTTPSTATUS:%{http_code}" \
+    -H "Content-Type: application/json" \
+    -X POST "${API_BASE}/api/admin/halls" \
+    -d "{\"name\":\"Main hall\",\"sortOrder\":1}")"
+  HALL_CREATE_BODY="${HALL_CREATE_RESP%HTTPSTATUS:*}"
+  HALL_CREATE_STATUS="${HALL_CREATE_RESP##*HTTPSTATUS:}"
+  if [[ "$HALL_CREATE_STATUS" != "200" ]]; then
+    echo "Create hall failed: HTTP $HALL_CREATE_STATUS"
+    echo "$HALL_CREATE_BODY"
+    exit 1
+  fi
+  HALL_ID="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<<"$HALL_CREATE_BODY")"
+  PLAN_CREATE_RESP="$(curl -sS -H "Cookie: ${ADMIN_COOKIE}" -w "HTTPSTATUS:%{http_code}" \
+    -H "Content-Type: application/json" \
+    -X POST "${API_BASE}/api/admin/halls/${HALL_ID}/plans" \
+    -d "{\"name\":\"Demo plan\",\"sortOrder\":1}")"
+  PLAN_CREATE_BODY="${PLAN_CREATE_RESP%HTTPSTATUS:*}"
+  PLAN_CREATE_STATUS="${PLAN_CREATE_RESP##*HTTPSTATUS:}"
+  if [[ "$PLAN_CREATE_STATUS" != "200" ]]; then
+    echo "Create hall plan failed: HTTP $PLAN_CREATE_STATUS"
+    echo "$PLAN_CREATE_BODY"
+    exit 1
+  fi
+  PLAN_ID="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<<"$PLAN_CREATE_BODY")"
+  curl -sS -H "Cookie: ${ADMIN_COOKIE}" "${API_BASE}/api/admin/hall-plans/${PLAN_ID}/versions" >/dev/null
 fi
 
 echo "Smoke tests completed."
