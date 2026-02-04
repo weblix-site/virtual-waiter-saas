@@ -15,6 +15,7 @@ export function PwaClient() {
   const [langParam, setLangParam] = useState("");
 
   const label = useMemo(() => {
+    if (typeof navigator === "undefined") return "Install app";
     const lang = (langParam || (navigator.language || "en")).toLowerCase();
     if (lang.startsWith("ru")) return "Установить приложение";
     if (lang.startsWith("ro")) return "Instalează aplicația";
@@ -26,7 +27,7 @@ export function PwaClient() {
       const params = new URLSearchParams(window.location.search);
       setLangParam(params.get("lang") || "");
     }
-    if ("serviceWorker" in navigator) {
+    if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => undefined);
     }
     const onPrompt = (e: Event) => {

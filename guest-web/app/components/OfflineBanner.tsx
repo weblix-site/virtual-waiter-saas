@@ -8,6 +8,7 @@ type Lang = "ru" | "ro" | "en";
 function resolveLang(langParam: string | null) : Lang {
   const raw = (langParam || "").toLowerCase();
   if (raw === "ru" || raw === "ro" || raw === "en") return raw;
+  if (typeof navigator === "undefined") return "en";
   const nav = (navigator.language || "en").toLowerCase();
   if (nav.startsWith("ru")) return "ru";
   if (nav.startsWith("ro")) return "ro";
