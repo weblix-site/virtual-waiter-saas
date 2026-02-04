@@ -70,6 +70,27 @@ public class BranchSettings {
   @Column(name = "online_pay_currency_code")
   public String onlinePayCurrencyCode;
 
+  @Column(name = "online_pay_request_url")
+  public String onlinePayRequestUrl;
+
+  @Column(name = "online_pay_cacert_path")
+  public String onlinePayCacertPath;
+
+  @Column(name = "online_pay_pcert_path")
+  public String onlinePayPcertPath;
+
+  @Column(name = "online_pay_pcert_password")
+  public String onlinePayPcertPassword;
+
+  @Column(name = "online_pay_key_path")
+  public String onlinePayKeyPath;
+
+  @Column(name = "online_pay_redirect_url")
+  public String onlinePayRedirectUrl;
+
+  @Column(name = "online_pay_return_url")
+  public String onlinePayReturnUrl;
+
   @Column(name = "pay_cash_enabled")
   public Boolean payCashEnabled;
 

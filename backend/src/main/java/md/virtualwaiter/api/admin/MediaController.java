@@ -46,7 +46,7 @@ public class MediaController {
     StaffUser u = staffUserRepo.findByUsername(auth.getName())
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unknown user"));
     String role = u.role == null ? "" : u.role.toUpperCase(Locale.ROOT);
-    if (!Set.of("ADMIN", "MANAGER", "SUPER_ADMIN").contains(role)) {
+    if (!Set.of("ADMIN", "MANAGER", "SUPER_ADMIN", "OWNER").contains(role)) {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Admin role required");
     }
     return u;

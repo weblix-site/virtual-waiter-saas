@@ -121,6 +121,20 @@ const dict: Record<string, Record<Lang, string>> = {
   onlinePayProvider: { ru: "Провайдер онлайн‑оплаты", ro: "Furnizor plăți online", en: "Online payment provider" },
   onlinePayCurrency: { ru: "Валюта онлайн‑оплаты", ro: "Monedă plăți online", en: "Online payment currency" },
   onlinePayProviderHint: { ru: "Оплата только через провайдера", ro: "Plata doar prin furnizor", en: "Payment only via provider" },
+  onlinePayRequestUrl: { ru: "Ссылка запроса к PSP", ro: "URL cerere PSP", en: "PSP request URL" },
+  onlinePayCacertPath: { ru: "Путь к cacert.pem", ro: "Cale cacert.pem", en: "cacert.pem path" },
+  onlinePayPcertPath: { ru: "Путь к pcert.pem", ro: "Cale pcert.pem", en: "pcert.pem path" },
+  onlinePayPcertPassword: { ru: "Пароль pcert.pem", ro: "Parolă pcert.pem", en: "pcert.pem password" },
+  onlinePayKeyPath: { ru: "Путь к key.pem", ro: "Cale key.pem", en: "key.pem path" },
+  onlinePayRedirectUrl: { ru: "URL страницы оплаты", ro: "URL pagină plată", en: "Payment redirect URL" },
+  onlinePayReturnUrl: { ru: "URL возврата после оплаты", ro: "URL întoarcere după plată", en: "Return URL after payment" },
+  onlinePayRequestUrlHelp: { ru: "HTTPS URL запроса к платежной системе (PSP).", ro: "URL HTTPS pentru cererea către PSP.", en: "HTTPS URL for PSP request." },
+  onlinePayCacertPathHelp: { ru: "Полный путь к cacert.pem на сервере.", ro: "Calea completă către cacert.pem pe server.", en: "Full path to cacert.pem on server." },
+  onlinePayPcertPathHelp: { ru: "Полный путь к pcert.pem на сервере.", ro: "Calea completă către pcert.pem pe server.", en: "Full path to pcert.pem on server." },
+  onlinePayPcertPasswordHelp: { ru: "Пароль для pcert.pem.", ro: "Parola pentru pcert.pem.", en: "Password for pcert.pem." },
+  onlinePayKeyPathHelp: { ru: "Полный путь к key.pem на сервере.", ro: "Calea completă către key.pem pe server.", en: "Full path to key.pem on server." },
+  onlinePayRedirectUrlHelp: { ru: "URL страницы оплаты провайдера.", ro: "URL-ul paginii de plată a providerului.", en: "Provider payment page URL." },
+  onlinePayReturnUrlHelp: { ru: "URL возврата клиента после оплаты.", ro: "URL întoarcere client după plată.", en: "Customer return URL after payment." },
   loyaltyEnabled: { ru: "Лояльность включена", ro: "Loialitate activă", en: "Loyalty enabled" },
   loyaltyPointsPer100: { ru: "Баллы за 1.00", ro: "Puncte per 1.00", en: "Points per 1.00" },
   loyaltyTitle: { ru: "Лояльность / CRM", ro: "Loialitate / CRM", en: "Loyalty / CRM" },
@@ -153,6 +167,37 @@ const dict: Record<string, Record<Lang, string>> = {
   inventorySave: { ru: "Сохранить", ro: "Salvează", en: "Save" },
   inventoryDelete: { ru: "Удалить", ro: "Șterge", en: "Delete" },
   inventoryLowStock: { ru: "Низкий остаток", ro: "Stoc scăzut", en: "Low stock" },
+  inventoryLowStockEmpty: { ru: "Все позиции в норме", ro: "Totul este în regulă", en: "All items are within limits" },
+  inventoryLowStockBadge: { ru: "Низкий остаток:", ro: "Stoc scăzut:", en: "Low stock:" },
+  onboardingTitle: { ru: "Онбординг за 15 минут", ro: "Onboarding 15 min", en: "15‑minute onboarding" },
+  onboardingReady: { ru: "Готово к запуску", ro: "Gata de lansare", en: "Ready to launch" },
+  onboardingNotReady: { ru: "Нужно завершить настройки", ro: "Necesită configurare", en: "Setup required" },
+  onboardingSeed: { ru: "Создать демо‑данные", ro: "Creează date demo", en: "Create demo data" },
+  onboardingClear: { ru: "Удалить демо‑данные", ro: "Șterge datele demo", en: "Delete demo data" },
+  onboardingWizard: { ru: "Мастер настройки", ro: "Wizard", en: "Setup wizard" },
+  onboardingNext: { ru: "Далее", ro: "Următor", en: "Next" },
+  onboardingPrev: { ru: "Назад", ro: "Înapoi", en: "Back" },
+  onboardingGo: { ru: "Перейти", ro: "Deschide", en: "Open" },
+  onboardingProgress: { ru: "Готовность", ro: "Progres", en: "Progress" },
+  onboardingTemplateExport: { ru: "Экспорт шаблона", ro: "Export șablon", en: "Export template" },
+  onboardingTemplateImport: { ru: "Импорт шаблона", ro: "Import șablon", en: "Import template" },
+  onboardingTemplateImportHint: { ru: "JSON‑шаблон онбординга", ro: "Șablon onboarding JSON", en: "Onboarding JSON template" },
+  onboardingImportError: { ru: "Ошибка импорта шаблона", ro: "Eroare import șablon", en: "Template import failed" },
+  onboardingTemplateNote: { ru: "Экспорт не включает пользователей/пароли.", ro: "Exportul nu include utilizatori/parole.", en: "Export does not include users/passwords." },
+  onboardingImportLast: { ru: "Последний импорт", ro: "Ultimul import", en: "Last import" },
+  onboardingImportExample: { ru: "Пример: JSON с halls/tables/categories/items/settings.", ro: "Exemplu: JSON cu halls/tables/categories/items/settings.", en: "Example: JSON with halls/tables/categories/items/settings." },
+  onboardingImportErrors: { ru: "Ошибки импорта", ro: "Erori import", en: "Import errors" },
+  onboardingExampleDownload: { ru: "Скачать пример", ro: "Descarcă exemplu", en: "Download example" },
+  onboardingAuditNote: { ru: "Импорт записывается в аудит.", ro: "Importul este salvat în audit.", en: "Import is logged to audit." },
+  onboardingStepSettings: { ru: "Настройки и валюта", ro: "Setări și valută", en: "Settings & currency" },
+  onboardingStepHalls: { ru: "Залы и план", ro: "Săli și plan", en: "Halls & plan" },
+  onboardingStepTables: { ru: "Столы", ro: "Mese", en: "Tables" },
+  onboardingStepMenuCats: { ru: "Категории меню", ro: "Categorii meniu", en: "Menu categories" },
+  onboardingStepMenuItems: { ru: "Позиции меню", ro: "Articole meniu", en: "Menu items" },
+  onboardingStepStaff: { ru: "Персонал", ro: "Personal", en: "Staff" },
+  onboardingRefresh: { ru: "Проверить готовность", ro: "Verifică", en: "Check readiness" },
+  onboardingChecklist: { ru: "Чек‑лист готовности", ro: "Checklist", en: "Readiness checklist" },
+  onboardingDemoNote: { ru: "Демо‑данные можно удалить позже.", ro: "Datele demo pot fi șterse mai târziu.", en: "Demo data can be removed later." },
   inventoryIngredientsTitle: { ru: "Рецептура", ro: "Rețetă", en: "Recipe" },
   inventorySelectItem: { ru: "Выберите блюдо", ro: "Selectează fel", en: "Select menu item" },
   inventoryAddIngredient: { ru: "Добавить ингредиент", ro: "Adaugă ingredient", en: "Add ingredient" },
@@ -362,6 +407,7 @@ const dict: Record<string, Record<Lang, string>> = {
   roleBar: { ru: "Бармен", ro: "Barman", en: "Bar" },
   roleAdmin: { ru: "Администратор", ro: "Administrator", en: "Admin" },
   roleManager: { ru: "Менеджер", ro: "Manager", en: "Manager" },
+  roleOwner: { ru: "Владелец", ro: "Proprietar", en: "Owner" },
   firstName: { ru: "Имя", ro: "Prenume", en: "First name" },
   lastName: { ru: "Фамилия", ro: "Nume", en: "Last name" },
   age: { ru: "Возраст", ro: "Vârstă", en: "Age" },
@@ -620,6 +666,20 @@ type InventoryItemDto = {
   isActive: boolean;
 };
 
+type OnboardingCheckItem = {
+  key: string;
+  title: string;
+  ok: boolean;
+  hint: string;
+};
+
+type OnboardingStatus = {
+  branchName: string;
+  ready: boolean;
+  demoSeeded: boolean;
+  items: OnboardingCheckItem[];
+};
+
 type IngredientView = {
   inventoryItemId: number;
   nameRu: string;
@@ -650,6 +710,13 @@ type BranchSettings = {
   onlinePayEnabled?: boolean;
   onlinePayProvider?: string | null;
   onlinePayCurrencyCode?: string | null;
+  onlinePayRequestUrl?: string | null;
+  onlinePayCacertPath?: string | null;
+  onlinePayPcertPath?: string | null;
+  onlinePayPcertPassword?: string | null;
+  onlinePayKeyPath?: string | null;
+  onlinePayRedirectUrl?: string | null;
+  onlinePayReturnUrl?: string | null;
   payCashEnabled: boolean;
   payTerminalEnabled: boolean;
   currencyCode?: string;
@@ -801,6 +868,7 @@ export default function AdminPage() {
     if (r === "BAR") return t(lang, "roleBar");
     if (r === "ADMIN") return t(lang, "roleAdmin");
     if (r === "MANAGER") return t(lang, "roleManager");
+    if (r === "OWNER") return t(lang, "roleOwner");
     return role ?? "";
   };
 
@@ -986,6 +1054,19 @@ export default function AdminPage() {
   const [adminFiltersCount, setAdminFiltersCount] = useState(0);
 
   const [inventoryItems, setInventoryItems] = useState<InventoryItemDto[]>([]);
+  const [inventoryLowStock, setInventoryLowStock] = useState<InventoryItemDto[]>([]);
+  const [onboardingStatus, setOnboardingStatus] = useState<OnboardingStatus | null>(null);
+  const [onboardingLoading, setOnboardingLoading] = useState(false);
+  const [onboardingWizardStep, setOnboardingWizardStep] = useState(0);
+  const [onboardingWizardOpen, setOnboardingWizardOpen] = useState(false);
+  const [onboardingImporting, setOnboardingImporting] = useState(false);
+  const [onboardingImportError, setOnboardingImportError] = useState<string | null>(null);
+  const [onboardingImportInfo, setOnboardingImportInfo] = useState<{ at: number; status: "ok" | "error"; message: string } | null>(null);
+  const [onboardingImportHistory, setOnboardingImportHistory] = useState<{ at: number; status: "ok" | "error"; message: string }[]>([]);
+  const [onboardingImportErrors, setOnboardingImportErrors] = useState<string[]>([]);
+  const [onboardingShowErrors, setOnboardingShowErrors] = useState(false);
+  const [onboardingAuditLogs, setOnboardingAuditLogs] = useState<AuditLog[]>([]);
+  const onboardingAutoStepRef = useRef(false);
   const [newInventoryNameRu, setNewInventoryNameRu] = useState("");
   const [newInventoryNameRo, setNewInventoryNameRo] = useState("");
   const [newInventoryNameEn, setNewInventoryNameEn] = useState("");
@@ -1504,7 +1585,7 @@ export default function AdminPage() {
     if (!authReady) return;
     setError(null);
     try {
-      const [catsRes, itemsRes, tablesRes, staffRes, settingsRes, modGroupsRes, partiesRes, hallsRes, currenciesRes, discountsRes, inventoryRes] = await Promise.all([
+      const [catsRes, itemsRes, tablesRes, staffRes, settingsRes, modGroupsRes, partiesRes, hallsRes, currenciesRes, discountsRes, inventoryRes, inventoryLowRes, onboardingRes, onboardingAuditRes] = await Promise.all([
         api("/api/admin/menu/categories"),
         api("/api/admin/menu/items"),
         api("/api/admin/tables"),
@@ -1516,6 +1597,9 @@ export default function AdminPage() {
         api("/api/admin/currencies"),
         api("/api/admin/discounts"),
         api("/api/admin/inventory/items"),
+        api("/api/admin/inventory/low-stock"),
+        api("/api/admin/onboarding/status"),
+        api("/api/admin/audit-logs?action=ONBOARDING_IMPORT&limit=20"),
       ]);
       setCategories(await catsRes.json());
       setItems(await itemsRes.json());
@@ -1530,6 +1614,9 @@ export default function AdminPage() {
       setCurrencies(await currenciesRes.json());
       setDiscounts(await discountsRes.json());
       setInventoryItems(await inventoryRes.json());
+      setInventoryLowStock(await inventoryLowRes.json());
+      setOnboardingStatus(await onboardingRes.json());
+      setOnboardingAuditLogs(await onboardingAuditRes.json());
       if (!hallId && hallsBody.length > 0) {
         setHallId(hallsBody[0].id);
       }
@@ -1538,6 +1625,215 @@ export default function AdminPage() {
       }
     } catch (e: any) {
       setError(e?.message ?? "Load error");
+    }
+  }
+
+  async function refreshOnboarding() {
+    if (!authReady) return;
+    setOnboardingLoading(true);
+    try {
+      const res = await api("/api/admin/onboarding/status");
+      setOnboardingStatus(await res.json());
+    } finally {
+      setOnboardingLoading(false);
+    }
+  }
+
+  async function seedOnboarding() {
+    if (!authReady) return;
+    setOnboardingLoading(true);
+    try {
+      const res = await api("/api/admin/onboarding/seed", { method: "POST" });
+      setOnboardingStatus(await res.json());
+      await loadAll();
+    } finally {
+      setOnboardingLoading(false);
+    }
+  }
+
+  async function clearOnboardingSeed() {
+    if (!authReady) return;
+    setOnboardingLoading(true);
+    try {
+      const res = await api("/api/admin/onboarding/seed", { method: "DELETE" });
+      setOnboardingStatus(await res.json());
+      await loadAll();
+    } finally {
+      setOnboardingLoading(false);
+    }
+  }
+
+  async function exportOnboardingTemplate() {
+    if (!authReady) return;
+    setOnboardingLoading(true);
+    try {
+      const res = await api("/api/admin/onboarding/template/export");
+      const data = await res.json();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "onboarding-template.json";
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setOnboardingLoading(false);
+    }
+  }
+
+  async function downloadOnboardingExample() {
+    const sample = {
+      halls: [{ name: "Демо‑зал", layoutBgUrl: "", layoutZonesJson: "[]" }],
+      tables: [{ number: 1, publicId: "T1", hallName: "Демо‑зал", layoutX: 5, layoutY: 5, layoutW: 10, layoutH: 10, layoutShape: "ROUND", layoutRotation: 0, layoutZone: "A" }],
+      categories: [{ nameRu: "Основное", nameRo: "", nameEn: "", sortOrder: 1, isActive: true }],
+      items: [{ categoryName: "Основное", nameRu: "Блюдо", nameRo: "", nameEn: "", descRu: "", descRo: "", descEn: "", ingredientsRu: "", ingredientsRo: "", ingredientsEn: "", allergens: "", weight: "", tags: "", photos: "", kcal: 0, protein: 0, fat: 0, carbs: 0, price: 100, currencyCode: "MDL", isActive: true, stopList: false }],
+      settings: { currencyCode: "MDL", payCashEnabled: true, payTerminalEnabled: false, onlinePayEnabled: false },
+    };
+    const blob = new Blob([JSON.stringify(sample, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "onboarding-template-example.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  const validateOnboardingTemplate = (payload: any): string[] => {
+    const errors: string[] = [];
+    if (!payload || typeof payload !== "object") {
+      errors.push("root: expected object");
+      return errors;
+    }
+    const ensureArray = (key: string) => {
+      if (!Array.isArray(payload[key])) errors.push(`${key}: expected array`);
+    };
+    ensureArray("halls");
+    ensureArray("tables");
+    ensureArray("categories");
+    ensureArray("items");
+    if (typeof payload.settings !== "object" || payload.settings === null) {
+      errors.push("settings: expected object");
+    }
+    if (Array.isArray(payload.halls)) {
+      payload.halls.forEach((h: any, i: number) => {
+        if (!h || typeof h !== "object") {
+          errors.push(`halls[${i}]: expected object`);
+          return;
+        }
+        if (!h.name) errors.push(`halls[${i}].name: required`);
+      });
+    }
+    if (Array.isArray(payload.tables)) {
+      payload.tables.forEach((t: any, i: number) => {
+        if (!t || typeof t !== "object") {
+          errors.push(`tables[${i}]: expected object`);
+          return;
+        }
+        if (!t.number && t.number !== 0) errors.push(`tables[${i}].number: required`);
+        if (!t.hallName) errors.push(`tables[${i}].hallName: required`);
+      });
+    }
+    if (Array.isArray(payload.categories)) {
+      payload.categories.forEach((c: any, i: number) => {
+        if (!c || typeof c !== "object") {
+          errors.push(`categories[${i}]: expected object`);
+          return;
+        }
+        if (!c.nameRu && !c.nameEn && !c.nameRo) errors.push(`categories[${i}].name*: at least one`);
+      });
+    }
+    if (Array.isArray(payload.items)) {
+      payload.items.forEach((it: any, i: number) => {
+        if (!it || typeof it !== "object") {
+          errors.push(`items[${i}]: expected object`);
+          return;
+        }
+        if (!it.categoryName) errors.push(`items[${i}].categoryName: required`);
+        if (!it.nameRu && !it.nameEn && !it.nameRo) errors.push(`items[${i}].name*: at least one`);
+      });
+    }
+    return errors;
+  };
+
+  async function importOnboardingTemplate(file: File) {
+    if (!authReady) return;
+    setOnboardingImporting(true);
+    setOnboardingImportError(null);
+    setOnboardingImportErrors([]);
+    setOnboardingShowErrors(false);
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text);
+      const errors = validateOnboardingTemplate(payload);
+      if (errors.length > 0) {
+        setOnboardingImportErrors(errors);
+        throw new Error(`${t(lang, "onboardingImportError")}: ${errors.slice(0, 5).join(", ")}`);
+      }
+      await api("/api/admin/onboarding/template/import", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      await refreshOnboarding();
+      await loadAll();
+      const info = { at: Date.now(), status: "ok" as const, message: "OK" };
+      setOnboardingImportInfo(info);
+      setOnboardingImportHistory((prev) => [info, ...prev].slice(0, 5));
+    } catch (e: any) {
+      const message = e?.message ?? t(lang, "onboardingImportError");
+      setOnboardingImportError(message);
+      const info = { at: Date.now(), status: "error" as const, message };
+      setOnboardingImportInfo(info);
+      setOnboardingImportHistory((prev) => [info, ...prev].slice(0, 5));
+    } finally {
+      setOnboardingImporting(false);
+    }
+  }
+
+  const onboardingSteps = [
+    { id: "settings-section", title: t(lang, "onboardingStepSettings") },
+    { id: "floorplan-section", title: t(lang, "onboardingStepHalls") },
+    { id: "tables-section", title: t(lang, "onboardingStepTables") },
+    { id: "categories-section", title: t(lang, "onboardingStepMenuCats") },
+    { id: "items-section", title: t(lang, "onboardingStepMenuItems") },
+    { id: "staff-section", title: t(lang, "onboardingStepStaff") },
+  ];
+
+  const onboardingProgress = useMemo(() => {
+    if (!onboardingStatus) return null;
+    const total = onboardingStatus.items.length;
+    const done = onboardingStatus.items.filter((it) => it.ok).length;
+    const percent = total === 0 ? 0 : Math.round((done / total) * 100);
+    return { total, done, percent };
+  }, [onboardingStatus]);
+
+  useEffect(() => {
+    if (!onboardingWizardOpen || !onboardingStatus) {
+      onboardingAutoStepRef.current = false;
+      return;
+    }
+    if (onboardingAutoStepRef.current) return;
+    const keyToStep: Record<string, number> = {
+      halls: 1,
+      tables: 2,
+      menu_categories: 3,
+      menu_items: 4,
+      staff: 5,
+      currency: 0,
+      payments: 0,
+    };
+    const nextKey = onboardingStatus.items.find((it) => !it.ok && keyToStep[it.key] !== undefined);
+    if (nextKey) {
+      const idx = keyToStep[nextKey.key];
+      setOnboardingWizardStep(idx);
+      scrollToSection(onboardingSteps[idx].id);
+    }
+    onboardingAutoStepRef.current = true;
+  }, [onboardingWizardOpen, onboardingStatus, onboardingSteps]);
+
+  function scrollToSection(id: string) {
+    const el = document.getElementById(id);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }
 
@@ -2338,6 +2634,13 @@ export default function AdminPage() {
         onlinePayEnabled: settings.onlinePayEnabled,
         onlinePayProvider: settings.onlinePayProvider,
         onlinePayCurrencyCode: settings.onlinePayCurrencyCode,
+        onlinePayRequestUrl: settings.onlinePayRequestUrl,
+        onlinePayCacertPath: settings.onlinePayCacertPath,
+        onlinePayPcertPath: settings.onlinePayPcertPath,
+        onlinePayPcertPassword: settings.onlinePayPcertPassword,
+        onlinePayKeyPath: settings.onlinePayKeyPath,
+        onlinePayRedirectUrl: settings.onlinePayRedirectUrl,
+        onlinePayReturnUrl: settings.onlinePayReturnUrl,
         payCashEnabled: settings.payCashEnabled,
         payTerminalEnabled: settings.payTerminalEnabled,
         currencyCode: settings.currencyCode,
@@ -2350,6 +2653,40 @@ export default function AdminPage() {
       }),
     });
     loadAll();
+  }
+
+  function missingOnlinePayFields() {
+    if (!settings?.onlinePayEnabled) return [];
+    const missing: string[] = [];
+    if (!settings.onlinePayRequestUrl?.trim()) missing.push(t(lang, "onlinePayRequestUrl"));
+    if (!settings.onlinePayCacertPath?.trim()) missing.push(t(lang, "onlinePayCacertPath"));
+    if (!settings.onlinePayPcertPath?.trim()) missing.push(t(lang, "onlinePayPcertPath"));
+    if (!settings.onlinePayPcertPassword?.trim()) missing.push(t(lang, "onlinePayPcertPassword"));
+    if (!settings.onlinePayKeyPath?.trim()) missing.push(t(lang, "onlinePayKeyPath"));
+    if (!settings.onlinePayRedirectUrl?.trim()) missing.push(t(lang, "onlinePayRedirectUrl"));
+    if (!settings.onlinePayReturnUrl?.trim()) missing.push(t(lang, "onlinePayReturnUrl"));
+    return missing;
+  }
+
+  function onlinePayFieldStyle(value?: string | null) {
+    if (!settings?.onlinePayEnabled) return undefined;
+    const missing = !value || !value.trim();
+    return missing ? { border: "1px solid #dc2626" } : undefined;
+  }
+
+  function onlinePayFieldError(kind: "url" | "pem" | "returnUrl", value?: string | null) {
+    if (!settings?.onlinePayEnabled) return "";
+    const v = (value ?? "").trim();
+    if (!v) return "";
+    if (kind === "url" || kind === "returnUrl") {
+      if (!/^https?:\/\//i.test(v)) return "URL должен начинаться с http:// или https://";
+      if (kind !== "returnUrl" && !/^https:\/\//i.test(v)) return "Рекомендуется использовать https://";
+    }
+    if (kind === "pem") {
+      if (!v.endsWith(".pem")) return "Ожидается путь к *.pem";
+      if (!v.startsWith("/")) return "Ожидается абсолютный путь";
+    }
+    return "";
   }
 
   async function loadLoyalty() {
@@ -2936,6 +3273,166 @@ export default function AdminPage() {
       {error && <div style={{ color: "#b11e46", marginTop: 8 }}>{error}</div>}
 
       <section style={{ marginTop: 24 }}>
+        <h2>{t(lang, "onboardingTitle")}</h2>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          {onboardingStatus && (
+            <span
+              style={{
+                fontSize: 12,
+                padding: "4px 10px",
+                borderRadius: 999,
+                background: onboardingStatus.ready ? "#dcfce7" : "#fee2e2",
+                color: onboardingStatus.ready ? "#166534" : "#991b1b",
+                fontWeight: 600,
+              }}
+            >
+              {onboardingStatus.ready ? t(lang, "onboardingReady") : t(lang, "onboardingNotReady")}
+            </span>
+          )}
+          <button onClick={refreshOnboarding} disabled={onboardingLoading}>
+            {t(lang, "onboardingRefresh")}
+          </button>
+          <button onClick={seedOnboarding} disabled={onboardingLoading}>
+            {t(lang, "onboardingSeed")}
+          </button>
+          <button onClick={exportOnboardingTemplate} disabled={onboardingLoading || onboardingImporting}>
+            {t(lang, "onboardingTemplateExport")}
+          </button>
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: onboardingImporting ? "not-allowed" : "pointer" }}>
+            {t(lang, "onboardingTemplateImport")}
+            <input
+              type="file"
+              accept="application/json"
+              disabled={onboardingImporting || onboardingLoading}
+              style={{ display: "none" }}
+              onChange={(e) => {
+                const file = e.currentTarget.files?.[0];
+                if (!file) return;
+                importOnboardingTemplate(file);
+                e.currentTarget.value = "";
+              }}
+            />
+          </label>
+          <button onClick={() => setOnboardingWizardOpen((v) => !v)} disabled={onboardingLoading}>
+            {t(lang, "onboardingWizard")}
+          </button>
+          {onboardingStatus?.demoSeeded && (
+            <button onClick={clearOnboardingSeed} disabled={onboardingLoading}>
+              {t(lang, "onboardingClear")}
+            </button>
+          )}
+          <span style={{ fontSize: 12, color: "#6b7280" }}>{t(lang, "onboardingDemoNote")}</span>
+          <span style={{ fontSize: 12, color: "#6b7280" }}>{t(lang, "onboardingTemplateNote")}</span>
+        </div>
+        <div style={{ marginTop: 6, fontSize: 12, color: "#6b7280" }}>{t(lang, "onboardingImportExample")}</div>
+        <div style={{ marginTop: 6, display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button onClick={downloadOnboardingExample} disabled={onboardingLoading || onboardingImporting}>
+            {t(lang, "onboardingExampleDownload")}
+          </button>
+          <span style={{ fontSize: 12, color: "#6b7280" }}>{t(lang, "onboardingAuditNote")}</span>
+        </div>
+        {onboardingProgress && (
+          <div style={{ marginTop: 8, maxWidth: 420 }}>
+            <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 6 }}>
+              {t(lang, "onboardingProgress")}: {onboardingProgress.done}/{onboardingProgress.total} ({onboardingProgress.percent}%)
+            </div>
+            <div style={{ height: 8, background: "#e5e7eb", borderRadius: 999, overflow: "hidden" }}>
+              <div style={{ width: `${onboardingProgress.percent}%`, height: "100%", background: "#22c55e" }} />
+            </div>
+          </div>
+        )}
+        {onboardingImportInfo && (
+          <div style={{ marginTop: 6, fontSize: 12, color: onboardingImportInfo.status === "ok" ? "#166534" : "#b11e46" }}>
+            {t(lang, "onboardingImportLast")}: {new Date(onboardingImportInfo.at).toLocaleString()} — {onboardingImportInfo.message}
+          </div>
+        )}
+        {onboardingImportHistory.length > 1 && (
+          <div style={{ marginTop: 6, fontSize: 12, color: "#6b7280" }}>
+            {onboardingImportHistory.map((h, idx) => (
+              <div key={`${h.at}-${idx}`}>
+                {new Date(h.at).toLocaleString()} — {h.status === "ok" ? "OK" : "ERR"} — {h.message}
+              </div>
+            ))}
+          </div>
+        )}
+        {onboardingImportError && <div style={{ marginTop: 8, color: "#b11e46", fontSize: 12 }}>{onboardingImportError}</div>}
+        {onboardingImportErrors.length > 0 && (
+          <div style={{ marginTop: 8 }}>
+            <button onClick={() => setOnboardingShowErrors((v) => !v)}>{t(lang, "onboardingImportErrors")}</button>
+            {onboardingShowErrors && (
+              <div style={{ marginTop: 6, fontSize: 12, color: "#b11e46" }}>
+                {onboardingImportErrors.map((err, idx) => (
+                  <div key={`${err}-${idx}`}>{err}</div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {onboardingAuditLogs.length > 0 && (
+          <div style={{ marginTop: 10 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>{t(lang, "onboardingImportLast")}</div>
+            <div style={{ fontSize: 12, color: "#6b7280", display: "grid", gap: 4 }}>
+              {onboardingAuditLogs.slice(0, 5).map((log) => (
+                <div key={log.id}>
+                  {new Date(log.createdAt).toLocaleString()} — {log.actorUsername ?? "system"} — {log.detailsJson ?? log.action}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {onboardingStatus && (
+          <div style={{ marginTop: 10 }}>
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>{t(lang, "onboardingChecklist")}</div>
+            <div style={{ display: "grid", gap: 6 }}>
+              {onboardingStatus.items.map((it) => (
+                <div key={it.key} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <span style={{ fontSize: 14, color: it.ok ? "#16a34a" : "#dc2626" }}>{it.ok ? "✓" : "✕"}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 600 }}>{it.title}</div>
+                    {!it.ok && <div style={{ fontSize: 12, color: "#6b7280" }}>{it.hint}</div>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {onboardingWizardOpen && (
+          <div style={{ marginTop: 12, padding: 12, border: "1px solid #e5e7eb", borderRadius: 12 }}>
+            <div style={{ fontWeight: 700, marginBottom: 8 }}>{t(lang, "onboardingWizard")}</div>
+            <div style={{ display: "grid", gap: 8 }}>
+              {onboardingSteps.map((step, idx) => (
+                <div key={step.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ width: 20, height: 20, borderRadius: 999, background: idx === onboardingWizardStep ? "#2563eb" : "#e5e7eb", color: idx === onboardingWizardStep ? "#fff" : "#374151", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>
+                    {idx + 1}
+                  </div>
+                  <div style={{ flex: 1 }}>{step.title}</div>
+                  <button onClick={() => scrollToSection(step.id)}>{t(lang, "onboardingGo")}</button>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+              <button
+                onClick={() => setOnboardingWizardStep((v) => Math.max(0, v - 1))}
+                disabled={onboardingWizardStep === 0}
+              >
+                {t(lang, "onboardingPrev")}
+              </button>
+              <button
+                onClick={() => {
+                  const next = Math.min(onboardingSteps.length - 1, onboardingWizardStep + 1);
+                  setOnboardingWizardStep(next);
+                  scrollToSection(onboardingSteps[next].id);
+                }}
+                disabled={onboardingWizardStep >= onboardingSteps.length - 1}
+              >
+                {t(lang, "onboardingNext")}
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section id="settings-section" style={{ marginTop: 24 }}>
         <h2>{t(lang, "settings")}</h2>
         {settings && (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
@@ -3000,6 +3497,59 @@ export default function AdminPage() {
                 {currencies.length === 0 && <option value="MDL">MDL</option>}
               </select>
             </label>
+            <label>
+              {t(lang, "onlinePayRequestUrl")}
+              <input value={settings.onlinePayRequestUrl ?? ""} style={onlinePayFieldStyle(settings.onlinePayRequestUrl)} onChange={(e) => setSettings({ ...settings, onlinePayRequestUrl: e.target.value })} />
+              <div style={{ fontSize: 12, color: "#6b7280" }}>{t(lang, "onlinePayRequestUrlHelp")}</div>
+              {onlinePayFieldError("url", settings.onlinePayRequestUrl) && (
+                <div style={{ fontSize: 12, color: "#b11e46" }}>{onlinePayFieldError("url", settings.onlinePayRequestUrl)}</div>
+              )}
+            </label>
+            <label>
+              {t(lang, "onlinePayCacertPath")}
+              <input value={settings.onlinePayCacertPath ?? ""} style={onlinePayFieldStyle(settings.onlinePayCacertPath)} onChange={(e) => setSettings({ ...settings, onlinePayCacertPath: e.target.value })} />
+              <div style={{ fontSize: 12, color: "#6b7280" }}>{t(lang, "onlinePayCacertPathHelp")}</div>
+              {onlinePayFieldError("pem", settings.onlinePayCacertPath) && (
+                <div style={{ fontSize: 12, color: "#b11e46" }}>{onlinePayFieldError("pem", settings.onlinePayCacertPath)}</div>
+              )}
+            </label>
+            <label>
+              {t(lang, "onlinePayPcertPath")}
+              <input value={settings.onlinePayPcertPath ?? ""} style={onlinePayFieldStyle(settings.onlinePayPcertPath)} onChange={(e) => setSettings({ ...settings, onlinePayPcertPath: e.target.value })} />
+              <div style={{ fontSize: 12, color: "#6b7280" }}>{t(lang, "onlinePayPcertPathHelp")}</div>
+              {onlinePayFieldError("pem", settings.onlinePayPcertPath) && (
+                <div style={{ fontSize: 12, color: "#b11e46" }}>{onlinePayFieldError("pem", settings.onlinePayPcertPath)}</div>
+              )}
+            </label>
+            <label>
+              {t(lang, "onlinePayPcertPassword")}
+              <input type="password" value={settings.onlinePayPcertPassword ?? ""} style={onlinePayFieldStyle(settings.onlinePayPcertPassword)} onChange={(e) => setSettings({ ...settings, onlinePayPcertPassword: e.target.value })} />
+              <div style={{ fontSize: 12, color: "#6b7280" }}>{t(lang, "onlinePayPcertPasswordHelp")}</div>
+            </label>
+            <label>
+              {t(lang, "onlinePayKeyPath")}
+              <input value={settings.onlinePayKeyPath ?? ""} style={onlinePayFieldStyle(settings.onlinePayKeyPath)} onChange={(e) => setSettings({ ...settings, onlinePayKeyPath: e.target.value })} />
+              <div style={{ fontSize: 12, color: "#6b7280" }}>{t(lang, "onlinePayKeyPathHelp")}</div>
+              {onlinePayFieldError("pem", settings.onlinePayKeyPath) && (
+                <div style={{ fontSize: 12, color: "#b11e46" }}>{onlinePayFieldError("pem", settings.onlinePayKeyPath)}</div>
+              )}
+            </label>
+            <label>
+              {t(lang, "onlinePayRedirectUrl")}
+              <input value={settings.onlinePayRedirectUrl ?? ""} style={onlinePayFieldStyle(settings.onlinePayRedirectUrl)} onChange={(e) => setSettings({ ...settings, onlinePayRedirectUrl: e.target.value })} />
+              <div style={{ fontSize: 12, color: "#6b7280" }}>{t(lang, "onlinePayRedirectUrlHelp")}</div>
+              {onlinePayFieldError("url", settings.onlinePayRedirectUrl) && (
+                <div style={{ fontSize: 12, color: "#b11e46" }}>{onlinePayFieldError("url", settings.onlinePayRedirectUrl)}</div>
+              )}
+            </label>
+            <label>
+              {t(lang, "onlinePayReturnUrl")}
+              <input value={settings.onlinePayReturnUrl ?? ""} style={onlinePayFieldStyle(settings.onlinePayReturnUrl)} onChange={(e) => setSettings({ ...settings, onlinePayReturnUrl: e.target.value })} />
+              <div style={{ fontSize: 12, color: "#6b7280" }}>{t(lang, "onlinePayReturnUrlHelp")}</div>
+              {onlinePayFieldError("returnUrl", settings.onlinePayReturnUrl) && (
+                <div style={{ fontSize: 12, color: "#b11e46" }}>{onlinePayFieldError("returnUrl", settings.onlinePayReturnUrl)}</div>
+              )}
+            </label>
             <label><input type="checkbox" checked={settings.payCashEnabled} onChange={(e) => setSettings({ ...settings, payCashEnabled: e.target.checked })} /> {t(lang, "payCashEnabled")}</label>
             <label><input type="checkbox" checked={settings.payTerminalEnabled} onChange={(e) => setSettings({ ...settings, payTerminalEnabled: e.target.checked })} /> {t(lang, "payTerminalEnabled")}</label>
             <label>
@@ -3038,10 +3588,21 @@ export default function AdminPage() {
             <label>{t(lang, "tipsPercentages")} <input value={settings.tipsPercentages.join(",")} onChange={(e) => setSettings({ ...settings, tipsPercentages: e.target.value.split(",").map((x) => parseInt(x.trim(), 10)).filter((v) => !Number.isNaN(v)) })} /></label>
           </div>
         )}
-        <button onClick={saveSettings} style={{ marginTop: 12, padding: "8px 12px" }}>{t(lang, "saveSettings")}</button>
+        {settings && settings.onlinePayEnabled && missingOnlinePayFields().length > 0 && (
+          <div style={{ marginTop: 10, color: "#b11e46", fontSize: 13 }}>
+            {t(lang, "onlinePayProviderHint")}: {missingOnlinePayFields().join(", ")}
+          </div>
+        )}
+        <button
+          onClick={saveSettings}
+          disabled={settings?.onlinePayEnabled && missingOnlinePayFields().length > 0}
+          style={{ marginTop: 12, padding: "8px 12px" }}
+        >
+          {t(lang, "saveSettings")}
+        </button>
       </section>
 
-      <section style={{ marginTop: 24 }}>
+      <section id="loyalty-section" style={{ marginTop: 24 }}>
         <h2>{t(lang, "loyaltyTitle")}</h2>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <label>{t(lang, "loyaltyPhone")}</label>
@@ -3856,7 +4417,7 @@ export default function AdminPage() {
         )}
       </section>
 
-      <section style={{ marginTop: 24 }}>
+      <section id="categories-section" style={{ marginTop: 24 }}>
         <h2>{t(lang, "categories")}</h2>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <input placeholder={t(lang, "menuCategoryNameRu")} value={newCatNameRu} onChange={(e) => setNewCatNameRu(e.target.value)} />
@@ -3898,7 +4459,7 @@ export default function AdminPage() {
         </div>
       </section>
 
-      <section style={{ marginTop: 24 }}>
+      <section id="items-section" style={{ marginTop: 24 }}>
         <h2>{t(lang, "items")}</h2>
         <div style={{ marginBottom: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <input
@@ -4124,8 +4685,15 @@ export default function AdminPage() {
         </div>
       </section>
 
-      <section style={{ marginTop: 24 }}>
-        <h2>{t(lang, "inventoryTitle")}</h2>
+      <section id="floorplan-section" style={{ marginTop: 24 }}>
+        <h2>
+          {t(lang, "inventoryTitle")}
+          {inventoryLowStock.length > 0 && (
+            <span style={{ marginLeft: 8, fontSize: 12, padding: "2px 8px", borderRadius: 999, background: "#fee2e2", color: "#991b1b" }}>
+              {t(lang, "inventoryLowStockBadge")} {inventoryLowStock.length}
+            </span>
+          )}
+        </h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
           <div>
             <h3 style={{ marginTop: 0 }}>{t(lang, "inventoryTitle")}</h3>
@@ -4172,6 +4740,21 @@ export default function AdminPage() {
             </div>
           </div>
           <div>
+            <h3 style={{ marginTop: 0 }}>{t(lang, "inventoryLowStock")}</h3>
+            {inventoryLowStock.length === 0 ? (
+              <div style={{ color: "#666", fontSize: 12 }}>{t(lang, "inventoryLowStockEmpty")}</div>
+            ) : (
+              <div style={{ display: "grid", gap: 6, marginBottom: 12 }}>
+                {inventoryLowStock.map((it) => (
+                  <div key={it.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 8px", border: "1px solid #fee2e2", borderRadius: 8, background: "#fff7ed" }}>
+                    <strong>{it.nameRu}</strong>
+                    <span style={{ color: "#b11e46", fontSize: 12 }}>
+                      {it.qtyOnHand} {it.unit} / {t(lang, "inventoryMinQty")}: {it.minQty}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
             <h3 style={{ marginTop: 0 }}>{t(lang, "inventoryIngredientsTitle")}</h3>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
               <select
@@ -5118,7 +5701,7 @@ export default function AdminPage() {
         </div>
       </section>
 
-      <section style={{ marginTop: 24 }}>
+      <section id="tables-section" style={{ marginTop: 24 }}>
         <h2>{t(lang, "tables")}</h2>
         <div style={{ marginBottom: 8, color: "#666" }}>
           {t(lang, "qrNote")}
@@ -5258,7 +5841,7 @@ export default function AdminPage() {
         </div>
       </section>
 
-      <section style={{ marginTop: 24 }}>
+      <section id="staff-section" style={{ marginTop: 24 }}>
         <h2>{t(lang, "staff")}</h2>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <input placeholder={t(lang, "staffUsername")} value={newStaffUser} onChange={(e) => setNewStaffUser(e.target.value)} />
@@ -5270,6 +5853,7 @@ export default function AdminPage() {
             <option value="BAR">{roleLabel("BAR")}</option>
             <option value="ADMIN">{roleLabel("ADMIN")}</option>
             <option value="MANAGER">{roleLabel("MANAGER")}</option>
+            <option value="OWNER">{roleLabel("OWNER")}</option>
           </select>
           <button onClick={createStaff}>{t(lang, "add")}</button>
         </div>
@@ -5283,6 +5867,7 @@ export default function AdminPage() {
             <option value="BAR">{roleLabel("BAR")}</option>
             <option value="ADMIN">{roleLabel("ADMIN")}</option>
             <option value="MANAGER">{roleLabel("MANAGER")}</option>
+            <option value="OWNER">{roleLabel("OWNER")}</option>
           </select>
           <select value={staffFilterActive} onChange={(e) => setStaffFilterActive(e.target.value)}>
             <option value="">{t(lang, "allStatuses")}</option>
@@ -5325,6 +5910,7 @@ export default function AdminPage() {
               <option value="BAR">{roleLabel("BAR")}</option>
               <option value="ADMIN">{roleLabel("ADMIN")}</option>
               <option value="MANAGER">{roleLabel("MANAGER")}</option>
+              <option value="OWNER">{roleLabel("OWNER")}</option>
             </select>
             <select value={bulkActive} onChange={(e) => setBulkActive(e.target.value)}>
               <option value="__SKIP__">{t(lang, "staffBulkActive")} — {t(lang, "staffBulkSkip")}</option>
@@ -5429,6 +6015,7 @@ export default function AdminPage() {
                 <option value="BAR">{roleLabel("BAR")}</option>
                 <option value="ADMIN">{roleLabel("ADMIN")}</option>
                 <option value="MANAGER">{roleLabel("MANAGER")}</option>
+                <option value="OWNER">{roleLabel("OWNER")}</option>
               </select>
               <span>{su.isActive ? t(lang, "active") : t(lang, "inactive")}</span>
               <button onClick={() => resetStaffPassword(su)}>{t(lang, "resetPassword")}</button>

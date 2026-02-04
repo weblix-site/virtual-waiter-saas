@@ -231,7 +231,7 @@ public class AdminController {
   private StaffUser requireAdmin(Authentication auth) {
     StaffUser u = current(auth);
     String role = u.role == null ? "" : u.role.toUpperCase(Locale.ROOT);
-    if (!Set.of("ADMIN", "MANAGER", "SUPER_ADMIN").contains(role)) {
+    if (!Set.of("ADMIN", "MANAGER", "SUPER_ADMIN", "OWNER").contains(role)) {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Admin role required");
     }
     return u;
@@ -920,6 +920,13 @@ public class AdminController {
     boolean onlinePayEnabled,
     String onlinePayProvider,
     String onlinePayCurrencyCode,
+    String onlinePayRequestUrl,
+    String onlinePayCacertPath,
+    String onlinePayPcertPath,
+    String onlinePayPcertPassword,
+    String onlinePayKeyPath,
+    String onlinePayRedirectUrl,
+    String onlinePayReturnUrl,
     boolean payCashEnabled,
     boolean payTerminalEnabled,
     String currencyCode,
@@ -957,6 +964,13 @@ public class AdminController {
       s.onlinePayEnabled(),
       s.onlinePayProvider(),
       s.onlinePayCurrencyCode(),
+      s.onlinePayRequestUrl(),
+      s.onlinePayCacertPath(),
+      s.onlinePayPcertPath(),
+      s.onlinePayPcertPassword(),
+      s.onlinePayKeyPath(),
+      s.onlinePayRedirectUrl(),
+      s.onlinePayReturnUrl(),
       s.payCashEnabled(),
       s.payTerminalEnabled(),
       s.currencyCode(),
@@ -989,6 +1003,13 @@ public class AdminController {
     Boolean onlinePayEnabled,
     String onlinePayProvider,
     String onlinePayCurrencyCode,
+    String onlinePayRequestUrl,
+    String onlinePayCacertPath,
+    String onlinePayPcertPath,
+    String onlinePayPcertPassword,
+    String onlinePayKeyPath,
+    String onlinePayRedirectUrl,
+    String onlinePayReturnUrl,
     Boolean payCashEnabled,
     Boolean payTerminalEnabled,
     String currencyCode,
@@ -1053,6 +1074,13 @@ public class AdminController {
       }
       s.onlinePayCurrencyCode = code;
     }
+    if (req.onlinePayRequestUrl != null) s.onlinePayRequestUrl = normalizeUrlOrNull(req.onlinePayRequestUrl);
+    if (req.onlinePayCacertPath != null) s.onlinePayCacertPath = normalizePathOrNull(req.onlinePayCacertPath);
+    if (req.onlinePayPcertPath != null) s.onlinePayPcertPath = normalizePathOrNull(req.onlinePayPcertPath);
+    if (req.onlinePayPcertPassword != null) s.onlinePayPcertPassword = normalizeSecretOrNull(req.onlinePayPcertPassword);
+    if (req.onlinePayKeyPath != null) s.onlinePayKeyPath = normalizePathOrNull(req.onlinePayKeyPath);
+    if (req.onlinePayRedirectUrl != null) s.onlinePayRedirectUrl = normalizeUrlOrNull(req.onlinePayRedirectUrl);
+    if (req.onlinePayReturnUrl != null) s.onlinePayReturnUrl = normalizeUrlOrNull(req.onlinePayReturnUrl);
     if (req.payCashEnabled != null) s.payCashEnabled = req.payCashEnabled;
     if (req.payTerminalEnabled != null) s.payTerminalEnabled = req.payTerminalEnabled;
     if (req.currencyCode != null && !req.currencyCode.isBlank()) {
@@ -1091,6 +1119,18 @@ public class AdminController {
     if (Boolean.TRUE.equals(s.onlinePayEnabled) && (s.onlinePayProvider == null || s.onlinePayProvider.isBlank())) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Online payment provider required");
     }
+    if (Boolean.TRUE.equals(s.onlinePayEnabled)) {
+      if (isBlank(s.onlinePayRequestUrl)
+        || isBlank(s.onlinePayCacertPath)
+        || isBlank(s.onlinePayPcertPath)
+        || isBlank(s.onlinePayPcertPassword)
+        || isBlank(s.onlinePayKeyPath)
+        || isBlank(s.onlinePayRedirectUrl)
+        || isBlank(s.onlinePayReturnUrl)
+      ) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Online payment PSP settings required");
+      }
+    }
 
     settingsRepo.save(s);
     if (req.currencyCode != null && !req.currencyCode.isBlank()) {
@@ -1125,6 +1165,13 @@ public class AdminController {
       r.onlinePayEnabled(),
       r.onlinePayProvider(),
       r.onlinePayCurrencyCode(),
+      r.onlinePayRequestUrl(),
+      r.onlinePayCacertPath(),
+      r.onlinePayPcertPath(),
+      r.onlinePayPcertPassword(),
+      r.onlinePayKeyPath(),
+      r.onlinePayRedirectUrl(),
+      r.onlinePayReturnUrl(),
       r.payCashEnabled(),
       r.payTerminalEnabled(),
       r.currencyCode(),
@@ -1135,6 +1182,501 @@ public class AdminController {
       r.commissionOrderPercent(),
       r.commissionOrderFixedCents()
     );
+  }
+
+  // --- Onboarding ---
+  public record OnboardingCheckItem(String key, String title, boolean ok, String hint) {}
+  public record OnboardingStatusResponse(String branchName, boolean ready, boolean demoSeeded, List<OnboardingCheckItem> items) {}
+  public record OnboardingTemplate(
+    List<OnboardingHall> halls,
+    List<OnboardingTable> tables,
+    List<OnboardingCategory> categories,
+    List<OnboardingItem> items,
+    OnboardingSettings settings
+  ) {}
+  public record OnboardingHall(String name, String layoutBgUrl, String layoutZonesJson) {}
+  public record OnboardingTable(
+    int number,
+    String publicId,
+    String hallName,
+    Double layoutX,
+    Double layoutY,
+    Double layoutW,
+    Double layoutH,
+    String layoutShape,
+    Integer layoutRotation,
+    String layoutZone
+  ) {}
+  public record OnboardingCategory(String nameRu, String nameRo, String nameEn, Integer sortOrder, boolean isActive) {}
+  public record OnboardingItem(
+    String categoryNameRu,
+    String nameRu,
+    String nameRo,
+    String nameEn,
+    String descriptionRu,
+    String descriptionRo,
+    String descriptionEn,
+    int priceCents,
+    String currency,
+    boolean isActive
+  ) {}
+  public record OnboardingSettings(String currencyCode, Boolean payCashEnabled, Boolean payTerminalEnabled, Boolean onlinePayEnabled) {}
+
+  @GetMapping("/onboarding/status")
+  public OnboardingStatusResponse onboardingStatus(
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    return buildOnboardingStatus(bid);
+  }
+
+  @PostMapping("/onboarding/seed")
+  @Transactional
+  public OnboardingStatusResponse seedOnboarding(
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+
+    if (hallRepo.findByBranchId(bid).stream().noneMatch(h -> "Демо‑зал".equalsIgnoreCase(h.name))) {
+      BranchHall h = new BranchHall();
+      h.branchId = bid;
+      h.name = "Демо‑зал";
+      h.isActive = true;
+      h.sortOrder = 0;
+      hallRepo.save(h);
+    }
+
+    List<CafeTable> existingTables = tableRepo.findByBranchId(bid);
+    boolean hasDemoTables = existingTables.stream().anyMatch(t -> "DEMO".equalsIgnoreCase(t.layoutZone));
+    if (!hasDemoTables) {
+      List<BranchHall> halls = hallRepo.findByBranchId(bid);
+      Long hallId = halls.stream().filter(h -> "Демо‑зал".equalsIgnoreCase(h.name)).map(h -> h.id).findFirst()
+        .orElse(halls.isEmpty() ? null : halls.get(0).id);
+      for (int i = 1; i <= 10; i++) {
+        CafeTable t = new CafeTable();
+        t.branchId = bid;
+        t.number = 900 + i;
+        t.publicId = generatePublicId();
+        t.hallId = hallId;
+        t.layoutX = 20.0 + i * 12.0;
+        t.layoutY = 20.0;
+        t.layoutW = 50.0;
+        t.layoutH = 50.0;
+        t.layoutShape = "rect";
+        t.layoutZone = "DEMO";
+        tableRepo.save(t);
+      }
+    }
+
+    List<MenuCategory> categories = categoryRepo.findByBranchIdOrderBySortOrderAsc(bid);
+    MenuCategory cat = categories.stream().filter(c -> "Демо‑меню".equalsIgnoreCase(c.nameRu)).findFirst().orElse(null);
+    if (cat == null) {
+      cat = new MenuCategory();
+      cat.branchId = bid;
+      cat.nameRu = "Демо‑меню";
+      cat.nameRo = "Meniu demo";
+      cat.nameEn = "Demo menu";
+      cat.sortOrder = 0;
+      cat.isActive = true;
+      cat = categoryRepo.save(cat);
+    }
+
+    if (itemRepo.findByCategoryId(cat.id).isEmpty()) {
+      BranchSettings s = settingsRepo.findById(bid).orElse(null);
+      String currency = s != null && s.currencyCode != null && !s.currencyCode.isBlank() ? s.currencyCode : "MDL";
+      MenuItem it = new MenuItem();
+      it.categoryId = cat.id;
+      it.nameRu = "Демо блюдо";
+      it.nameRo = "Preparat demo";
+      it.nameEn = "Demo dish";
+      it.descriptionRu = "Демо‑позиция для быстрого старта";
+      it.descriptionRo = "Poziție demo pentru start rapid";
+      it.descriptionEn = "Demo item for quick start";
+      it.priceCents = 9900;
+      it.currency = currency;
+      it.isActive = true;
+      itemRepo.save(it);
+    }
+
+    long staffCount = staffUserRepo.findByBranchId(bid).stream()
+      .filter(su -> su.role != null)
+      .filter(su -> !Set.of("ADMIN", "SUPER_ADMIN", "MANAGER", "OWNER").contains(su.role.toUpperCase(Locale.ROOT)))
+      .count();
+    if (staffCount == 0) {
+      StaffUser su = new StaffUser();
+      su.branchId = bid;
+      su.username = "waiter_demo";
+      su.passwordHash = passwordEncoder.encode("demo123");
+      su.role = "WAITER";
+      su.isActive = true;
+      staffUserRepo.save(su);
+      auditService.log(u, "CREATE", "StaffUser", su.id, "demo-seed");
+    }
+
+    BranchSettings s = settingsRepo.findById(bid).orElse(null);
+    if (s != null) {
+      if (s.currencyCode == null || s.currencyCode.isBlank()) {
+        s.currencyCode = "MDL";
+      }
+      if (s.payCashEnabled == null && s.payTerminalEnabled == null && s.onlinePayEnabled == null) {
+        s.payCashEnabled = true;
+      }
+      settingsRepo.save(s);
+    }
+
+    auditService.log(u, "ONBOARDING_SEED", "Branch", bid, "demo-seed");
+    return buildOnboardingStatus(bid);
+  }
+
+  @GetMapping("/onboarding/template/export")
+  public OnboardingTemplate exportOnboardingTemplate(
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+
+    List<BranchHall> halls = hallRepo.findByBranchId(bid);
+    List<OnboardingHall> hallDtos = new ArrayList<>();
+    for (BranchHall h : halls) {
+      hallDtos.add(new OnboardingHall(h.name, h.layoutBgUrl, h.layoutZonesJson));
+    }
+
+    List<CafeTable> tables = tableRepo.findByBranchId(bid);
+    Map<Long, String> hallNameById = new HashMap<>();
+    for (BranchHall h : halls) hallNameById.put(h.id, h.name);
+    List<OnboardingTable> tableDtos = new ArrayList<>();
+    for (CafeTable t : tables) {
+      tableDtos.add(new OnboardingTable(
+        t.number,
+        t.publicId,
+        hallNameById.get(t.hallId),
+        t.layoutX,
+        t.layoutY,
+        t.layoutW,
+        t.layoutH,
+        t.layoutShape,
+        t.layoutRotation,
+        t.layoutZone
+      ));
+    }
+
+    List<MenuCategory> cats = categoryRepo.findByBranchIdOrderBySortOrderAsc(bid);
+    List<OnboardingCategory> catDtos = new ArrayList<>();
+    for (MenuCategory c : cats) {
+      catDtos.add(new OnboardingCategory(c.nameRu, c.nameRo, c.nameEn, c.sortOrder, c.isActive));
+    }
+
+    List<MenuItem> items = new ArrayList<>();
+    if (!cats.isEmpty()) {
+      List<Long> catIds = cats.stream().map(c -> c.id).toList();
+      items = itemRepo.findByCategoryIdIn(catIds);
+    }
+    Map<Long, String> catNameById = new HashMap<>();
+    for (MenuCategory c : cats) catNameById.put(c.id, c.nameRu);
+    List<OnboardingItem> itemDtos = new ArrayList<>();
+    for (MenuItem it : items) {
+      itemDtos.add(new OnboardingItem(
+        catNameById.get(it.categoryId),
+        it.nameRu,
+        it.nameRo,
+        it.nameEn,
+        it.descriptionRu,
+        it.descriptionRo,
+        it.descriptionEn,
+        it.priceCents,
+        it.currency,
+        it.isActive
+      ));
+    }
+
+    BranchSettings s = settingsRepo.findById(bid).orElse(null);
+    OnboardingSettings set = new OnboardingSettings(
+      s == null ? null : s.currencyCode,
+      s == null ? null : s.payCashEnabled,
+      s == null ? null : s.payTerminalEnabled,
+      s == null ? null : s.onlinePayEnabled
+    );
+    return new OnboardingTemplate(hallDtos, tableDtos, catDtos, itemDtos, set);
+  }
+
+  @PostMapping("/onboarding/template/import")
+  @Transactional
+  public OnboardingStatusResponse importOnboardingTemplate(
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @RequestBody OnboardingTemplate tpl,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+
+    Map<String, BranchHall> hallByName = new HashMap<>();
+    for (BranchHall h : hallRepo.findByBranchId(bid)) hallByName.put(h.name, h);
+
+    if (tpl != null && tpl.halls != null) {
+      for (OnboardingHall h : tpl.halls) {
+        if (h == null || h.name == null || h.name.isBlank()) continue;
+        BranchHall existing = hallByName.get(h.name);
+        if (existing == null) {
+          BranchHall nh = new BranchHall();
+          nh.branchId = bid;
+          nh.name = h.name.trim();
+          nh.layoutBgUrl = h.layoutBgUrl;
+          nh.layoutZonesJson = h.layoutZonesJson;
+          nh.isActive = true;
+          nh.sortOrder = 0;
+          hallRepo.save(nh);
+          hallByName.put(nh.name, nh);
+        }
+      }
+    }
+
+    Map<Integer, CafeTable> tableByNumber = new HashMap<>();
+    for (CafeTable t : tableRepo.findByBranchId(bid)) tableByNumber.put(t.number, t);
+
+    if (tpl != null && tpl.tables != null) {
+      for (OnboardingTable t : tpl.tables) {
+        if (t == null) continue;
+        CafeTable existing = tableByNumber.get(t.number);
+        if (existing != null) continue;
+        CafeTable nt = new CafeTable();
+        nt.branchId = bid;
+        nt.number = t.number;
+        nt.publicId = (t.publicId == null || t.publicId.isBlank()) ? generatePublicId() : t.publicId.trim();
+        BranchHall hall = t.hallName == null ? null : hallByName.get(t.hallName);
+        nt.hallId = hall == null ? null : hall.id;
+        nt.layoutX = t.layoutX;
+        nt.layoutY = t.layoutY;
+        nt.layoutW = t.layoutW;
+        nt.layoutH = t.layoutH;
+        nt.layoutShape = t.layoutShape;
+        nt.layoutRotation = t.layoutRotation;
+        nt.layoutZone = t.layoutZone;
+        tableRepo.save(nt);
+      }
+    }
+
+    List<MenuCategory> cats = categoryRepo.findByBranchIdOrderBySortOrderAsc(bid);
+    Map<String, MenuCategory> catByName = new HashMap<>();
+    for (MenuCategory c : cats) catByName.put(c.nameRu, c);
+
+    if (tpl != null && tpl.categories != null) {
+      for (OnboardingCategory c : tpl.categories) {
+        if (c == null || c.nameRu == null || c.nameRu.isBlank()) continue;
+        MenuCategory existing = catByName.get(c.nameRu);
+        if (existing == null) {
+          MenuCategory nc = new MenuCategory();
+          nc.branchId = bid;
+          nc.nameRu = c.nameRu.trim();
+          nc.nameRo = c.nameRo;
+          nc.nameEn = c.nameEn;
+          nc.sortOrder = c.sortOrder == null ? 0 : c.sortOrder;
+          nc.isActive = c.isActive;
+          nc = categoryRepo.save(nc);
+          catByName.put(nc.nameRu, nc);
+        }
+      }
+    }
+
+    if (tpl != null && tpl.items != null) {
+      for (OnboardingItem it : tpl.items) {
+        if (it == null || it.nameRu == null || it.nameRu.isBlank() || it.categoryNameRu == null || it.categoryNameRu.isBlank()) continue;
+        MenuCategory cat = catByName.get(it.categoryNameRu);
+        if (cat == null) continue;
+        boolean exists = itemRepo.findByCategoryId(cat.id).stream().anyMatch(x -> it.nameRu.equalsIgnoreCase(x.nameRu));
+        if (exists) continue;
+        MenuItem ni = new MenuItem();
+        ni.categoryId = cat.id;
+        ni.nameRu = it.nameRu.trim();
+        ni.nameRo = it.nameRo;
+        ni.nameEn = it.nameEn;
+        ni.descriptionRu = it.descriptionRu;
+        ni.descriptionRo = it.descriptionRo;
+        ni.descriptionEn = it.descriptionEn;
+        ni.priceCents = it.priceCents;
+        ni.currency = it.currency == null || it.currency.isBlank() ? "MDL" : it.currency.trim().toUpperCase(Locale.ROOT);
+        ni.isActive = it.isActive;
+        itemRepo.save(ni);
+      }
+    }
+
+    if (tpl != null && tpl.settings != null) {
+      BranchSettings s = settingsRepo.findById(bid).orElseGet(() -> {
+        BranchSettings ns = new BranchSettings();
+        ns.branchId = bid;
+        return ns;
+      });
+      if ((s.currencyCode == null || s.currencyCode.isBlank()) && tpl.settings.currencyCode != null && !tpl.settings.currencyCode.isBlank()) {
+        s.currencyCode = tpl.settings.currencyCode.trim().toUpperCase(Locale.ROOT);
+      }
+      if (s.payCashEnabled == null && tpl.settings.payCashEnabled != null) s.payCashEnabled = tpl.settings.payCashEnabled;
+      if (s.payTerminalEnabled == null && tpl.settings.payTerminalEnabled != null) s.payTerminalEnabled = tpl.settings.payTerminalEnabled;
+      if (s.onlinePayEnabled == null && tpl.settings.onlinePayEnabled != null) s.onlinePayEnabled = tpl.settings.onlinePayEnabled;
+      settingsRepo.save(s);
+    }
+
+    auditService.log(u, "ONBOARDING_IMPORT", "Branch", bid, "template-import");
+    AuditLog log = new AuditLog();
+    log.branchId = bid;
+    log.actorUserId = u.id;
+    log.actorUsername = u.username;
+    log.actorRole = u.role;
+    log.action = "ONBOARDING_IMPORT";
+    log.entityType = "ONBOARDING";
+    log.detailsJson = "Imported onboarding template";
+    log.createdAt = Instant.now();
+    auditLogRepo.save(log);
+    return buildOnboardingStatus(bid);
+  }
+
+  @DeleteMapping("/onboarding/seed")
+  @Transactional
+  public OnboardingStatusResponse clearOnboardingSeed(
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+
+    // delete demo staff
+    List<StaffUser> staff = staffUserRepo.findByBranchId(bid);
+    for (StaffUser su : staff) {
+      if ("waiter_demo".equalsIgnoreCase(su.username)) {
+        staffUserRepo.delete(su);
+      }
+    }
+
+    // delete demo menu item + category if only demo
+    List<MenuCategory> categories = categoryRepo.findByBranchIdOrderBySortOrderAsc(bid);
+    for (MenuCategory cat : categories) {
+      if ("Демо‑меню".equalsIgnoreCase(cat.nameRu)) {
+        List<MenuItem> items = itemRepo.findByCategoryId(cat.id);
+        for (MenuItem it : items) {
+          if ("Демо блюдо".equalsIgnoreCase(it.nameRu) && "Демо‑позиция для быстрого старта".equals(it.descriptionRu)) {
+            itemRepo.delete(it);
+          }
+        }
+        if (itemRepo.findByCategoryId(cat.id).isEmpty()) {
+          categoryRepo.delete(cat);
+        }
+      }
+    }
+
+    // delete demo tables (if no orders)
+    List<CafeTable> tables = tableRepo.findByBranchId(bid);
+    for (CafeTable t : tables) {
+      if (!"DEMO".equalsIgnoreCase(t.layoutZone)) continue;
+      if (orderRepo.findTop50ByTableIdOrderByCreatedAtDesc(t.id).isEmpty()) {
+        tableRepo.delete(t);
+      }
+    }
+
+    // delete demo hall if empty
+    List<BranchHall> halls = hallRepo.findByBranchId(bid);
+    for (BranchHall h : halls) {
+      if (!"Демо‑зал".equalsIgnoreCase(h.name)) continue;
+      boolean hasTables = tableRepo.findByBranchId(bid).stream().anyMatch(t -> Objects.equals(t.hallId, h.id));
+      if (!hasTables) {
+        hallRepo.delete(h);
+      }
+    }
+
+    auditService.log(u, "ONBOARDING_CLEAR", "Branch", bid, "demo-clear");
+    return buildOnboardingStatus(bid);
+  }
+
+  private OnboardingStatusResponse buildOnboardingStatus(long bid) {
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+
+    List<OnboardingCheckItem> items = new ArrayList<>();
+    boolean hallsOk = !hallRepo.findByBranchId(bid).isEmpty();
+    items.add(new OnboardingCheckItem(
+      "halls",
+      "Залы",
+      hallsOk,
+      hallsOk ? "Ок" : "Добавьте хотя бы один зал"
+    ));
+
+    boolean tablesOk = !tableRepo.findByBranchId(bid).isEmpty();
+    items.add(new OnboardingCheckItem(
+      "tables",
+      "Столы",
+      tablesOk,
+      tablesOk ? "Ок" : "Добавьте столы"
+    ));
+
+    List<MenuCategory> categories = categoryRepo.findByBranchIdOrderBySortOrderAsc(bid);
+    boolean catsOk = !categories.isEmpty();
+    items.add(new OnboardingCheckItem(
+      "menu_categories",
+      "Категории меню",
+      catsOk,
+      catsOk ? "Ок" : "Добавьте категории меню"
+    ));
+
+    boolean itemsOk = false;
+    if (catsOk) {
+      List<Long> catIds = categories.stream().map(c -> c.id).toList();
+      itemsOk = !itemRepo.findByCategoryIdIn(catIds).isEmpty();
+    }
+    items.add(new OnboardingCheckItem(
+      "menu_items",
+      "Позиции меню",
+      itemsOk,
+      itemsOk ? "Ок" : "Добавьте позиции меню"
+    ));
+
+    List<StaffUser> staff = staffUserRepo.findByBranchId(bid);
+    long staffCount = staff.stream()
+      .filter(su -> su.role != null)
+      .filter(su -> !Set.of("ADMIN", "SUPER_ADMIN", "MANAGER", "OWNER").contains(su.role.toUpperCase(Locale.ROOT)))
+      .count();
+    boolean staffOk = staffCount > 0;
+    items.add(new OnboardingCheckItem(
+      "staff",
+      "Персонал",
+      staffOk,
+      staffOk ? "Ок" : "Добавьте персонал (официант/повар/бар/хост)"
+    ));
+
+    BranchSettings s = settingsRepo.findById(bid).orElse(null);
+    boolean currencyOk = s != null && s.currencyCode != null && !s.currencyCode.isBlank();
+    items.add(new OnboardingCheckItem(
+      "currency",
+      "Валюта",
+      currencyOk,
+      currencyOk ? "Ок" : "Выберите валюту в настройках"
+    ));
+
+    boolean paymentsOk = s != null && (
+      Boolean.TRUE.equals(s.payCashEnabled) ||
+      Boolean.TRUE.equals(s.payTerminalEnabled) ||
+      Boolean.TRUE.equals(s.onlinePayEnabled)
+    );
+    items.add(new OnboardingCheckItem(
+      "payments",
+      "Методы оплаты",
+      paymentsOk,
+      paymentsOk ? "Ок" : "Включите хотя бы один способ оплаты"
+    ));
+
+    boolean demoSeeded = staffUserRepo.findByBranchId(bid).stream().anyMatch(su -> "waiter_demo".equalsIgnoreCase(su.username))
+      || hallRepo.findByBranchId(bid).stream().anyMatch(h -> "Демо‑зал".equalsIgnoreCase(h.name))
+      || tableRepo.findByBranchId(bid).stream().anyMatch(t -> "DEMO".equalsIgnoreCase(t.layoutZone));
+
+    boolean ready = items.stream().allMatch(OnboardingCheckItem::ok);
+    return new OnboardingStatusResponse(b.name, ready, demoSeeded, items);
   }
 
   // --- Currencies (super admin) ---
@@ -2195,7 +2737,7 @@ public class AdminController {
     StaffUser u = requireAdmin(auth);
     long bid = resolveBranchId(u, branchId);
     String role = req.role.trim().toUpperCase(Locale.ROOT);
-    if (!Set.of("WAITER", "KITCHEN", "ADMIN", "HOST", "BAR", "MANAGER").contains(role)) {
+    if (!Set.of("WAITER", "KITCHEN", "ADMIN", "HOST", "BAR", "MANAGER", "OWNER").contains(role)) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported role");
     }
     StaffUser su = new StaffUser();
@@ -3334,7 +3876,7 @@ public class AdminController {
     }
     if (req.role != null) {
       String role = req.role.trim().toUpperCase(Locale.ROOT);
-      if (!Set.of("WAITER", "KITCHEN", "ADMIN", "HOST", "BAR", "MANAGER").contains(role)) {
+      if (!Set.of("WAITER", "KITCHEN", "ADMIN", "HOST", "BAR", "MANAGER", "OWNER").contains(role)) {
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported role");
       }
       su.role = role;
@@ -3552,5 +4094,27 @@ public class AdminController {
   private String normalizeType(String v) {
     String t = v == null ? "" : v.trim().toUpperCase(Locale.ROOT);
     return t.isEmpty() ? "PERCENT" : t;
+  }
+
+  private static boolean isBlank(String v) {
+    return v == null || v.isBlank();
+  }
+
+  private static String normalizeUrlOrNull(String v) {
+    if (v == null) return null;
+    String t = v.trim();
+    return t.isEmpty() ? null : t;
+  }
+
+  private static String normalizePathOrNull(String v) {
+    if (v == null) return null;
+    String t = v.trim();
+    return t.isEmpty() ? null : t;
+  }
+
+  private static String normalizeSecretOrNull(String v) {
+    if (v == null) return null;
+    String t = v.trim();
+    return t.isEmpty() ? null : t;
   }
 }

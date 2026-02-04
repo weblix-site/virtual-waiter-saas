@@ -126,7 +126,7 @@ type LoyaltyProfileResponse = {
   phone: string | null;
   pointsBalance: number;
   favorites: { menuItemId: number; name: string; qtyTotal: number }[];
-  offers: { id: number; title: string; body?: string | null; discountCode?: string | null }[];
+  offers: { id: number; title: string; body?: string | null; discountCode?: string | null; startsAt?: string | null; endsAt?: string | null; isActive?: boolean | null }[];
 };
 
 type ModOption = { id: number; name: string; priceCents: number };
@@ -172,6 +172,7 @@ export default function TablePage({ params, searchParams }: any) {
   const [billPayMethod, setBillPayMethod] = useState<'CASH' | 'TERMINAL' | 'ONLINE'>('CASH');
   const [billTipsPercent, setBillTipsPercent] = useState<number | ''>('');
   const [billPromoCode, setBillPromoCode] = useState('');
+  const [promoApplied, setPromoApplied] = useState(false);
   const [billSummary, setBillSummary] = useState<BillRequestResponse | null>(null);
   const [billLoading, setBillLoading] = useState(false);
   const [billOptionsLoading, setBillOptionsLoading] = useState(false);
@@ -209,6 +210,33 @@ export default function TablePage({ params, searchParams }: any) {
   const [branchReviewError, setBranchReviewError] = useState<string | null>(null);
   const [loyaltyProfile, setLoyaltyProfile] = useState<LoyaltyProfileResponse | null>(null);
   const [loyaltyLoading, setLoyaltyLoading] = useState(false);
+  const [revealedOffers, setRevealedOffers] = useState<Record<number, boolean>>({});
+  const [offersFilter, setOffersFilter] = useState<"ALL" | "ACTIVE" | "EXPIRING">("ALL");
+
+  const menuItemById = useMemo(() => {
+    const map = new Map<number, MenuItem>();
+    if (menu?.categories) {
+      for (const c of menu.categories) {
+        for (const it of c.items) {
+          map.set(it.id, it);
+        }
+      }
+    }
+    return map;
+  }, [menu]);
+
+  const formatOfferDate = useCallback((iso?: string | null) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleString(lang === "ru" ? "ru-RU" : lang === "ro" ? "ro-RO" : "en-US", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }, [lang]);
 
   const cartTotalCents = useMemo(() => cart.reduce((sum, l) => sum + l.item.priceCents * l.qty, 0), [cart]);
   const myChargesCents = useMemo(() => (billOptions?.myItems ?? []).reduce((sum, it) => sum + it.lineTotalCents, 0), [billOptions]);
@@ -288,6 +316,27 @@ export default function TablePage({ params, searchParams }: any) {
     if (!session) return;
     loadLoyaltyProfile();
   }, [session, loadLoyaltyProfile]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const saved = window.localStorage.getItem("vw_offers_filter");
+    if (saved === "ALL" || saved === "ACTIVE" || saved === "EXPIRING") {
+      setOffersFilter(saved);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (tablePublicId) {
+      window.localStorage.removeItem("vw_offers_filter");
+      setOffersFilter("ALL");
+    }
+  }, [tablePublicId, lang]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("vw_offers_filter", offersFilter);
+  }, [offersFilter]);
 
   async function addToCart(item: MenuItem) {
     setOrderId(null);
@@ -902,6 +951,7 @@ export default function TablePage({ params, searchParams }: any) {
       setBillRequestId(body.billRequestId);
       setBillStatus(body.status);
       setBillSummary(body);
+      setPromoApplied(!!billPromoCode.trim());
       alert(t(lang, "billRequested"));
     } catch (e: any) {
       setBillError(e?.message ?? t(lang, "billRequestFailed"));
@@ -1305,34 +1355,152 @@ export default function TablePage({ params, searchParams }: any) {
               {(loyaltyProfile?.favorites?.length ?? 0) === 0 ? (
                 <div style={{ color: "#666", fontSize: 12 }}>{t(lang, "noFavorites")}</div>
               ) : (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {loyaltyProfile?.favorites?.map((f) => (
-                    <span key={f.menuItemId} style={{ border: "1px solid #ddd", borderRadius: 999, padding: "4px 8px", fontSize: 12 }}>
-                      {f.name} × {f.qtyTotal}
-                    </span>
-                  ))}
+                <div style={{ display: "grid", gap: 6 }}>
+                  {loyaltyProfile?.favorites?.map((f) => {
+                    const item = menuItemById.get(f.menuItemId);
+                    return (
+                      <div key={f.menuItemId} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                        <span style={{ border: "1px solid #ddd", borderRadius: 999, padding: "4px 8px", fontSize: 12 }}>
+                          {f.name} × {f.qtyTotal}
+                        </span>
+                        {item && (
+                          <button onClick={() => addToCart(item)} style={{ padding: "4px 8px", fontSize: 12 }}>
+                            {t(lang, "addToCart")}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
             <div style={{ marginTop: 10 }}>
-              <div style={{ fontWeight: 600, marginBottom: 4 }}>{t(lang, "personalOffers")}</div>
-              {(loyaltyProfile?.offers?.length ?? 0) === 0 ? (
-                <div style={{ color: "#666", fontSize: 12 }}>{t(lang, "noOffers")}</div>
-              ) : (
-                <div style={{ display: "grid", gap: 8 }}>
-                  {loyaltyProfile?.offers?.map((o) => (
-                    <div key={o.id} style={{ border: "1px solid #eee", borderRadius: 8, padding: 8 }}>
-                      <div style={{ fontWeight: 600 }}>{o.title}</div>
-                      {o.body && <div style={{ fontSize: 12, color: "#555", marginTop: 4 }}>{o.body}</div>}
-                      {o.discountCode && (
-                        <div style={{ marginTop: 6, fontSize: 12 }}>
-                          {t(lang, "promoCode")}: <strong>{o.discountCode}</strong>
-                        </div>
-                      )}
-                    </div>
-                  ))}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
+                <div style={{ fontWeight: 600 }}>{t(lang, "personalOffers")}</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <button
+                    onClick={() => setOffersFilter("ALL")}
+                    style={{ padding: "4px 8px", fontSize: 12, border: offersFilter === "ALL" ? "2px solid #111" : "1px solid #ddd", borderRadius: 999 }}
+                  >
+                    {t(lang, "offersFilterAll")}
+                  </button>
+                  <button
+                    onClick={() => setOffersFilter("ACTIVE")}
+                    style={{ padding: "4px 8px", fontSize: 12, border: offersFilter === "ACTIVE" ? "2px solid #111" : "1px solid #ddd", borderRadius: 999 }}
+                  >
+                    {t(lang, "offersFilterActive")}
+                  </button>
+                  <button
+                    onClick={() => setOffersFilter("EXPIRING")}
+                    style={{ padding: "4px 8px", fontSize: 12, border: offersFilter === "EXPIRING" ? "2px solid #111" : "1px solid #ddd", borderRadius: 999 }}
+                  >
+                    {t(lang, "offersFilterExpiring")}
+                  </button>
                 </div>
-              )}
+              </div>
+              {(() => {
+                const now = Date.now();
+                const list = (loyaltyProfile?.offers ?? []).filter((o) => {
+                  if (o.isActive === false) return false;
+                  const startOk = !o.startsAt || Date.parse(o.startsAt) <= now;
+                  const endOk = !o.endsAt || Date.parse(o.endsAt) >= now;
+                  if (!startOk || !endOk) return false;
+                  if (offersFilter === "EXPIRING") {
+                    if (!o.endsAt) return false;
+                    const endMs = Date.parse(o.endsAt);
+                    if (Number.isNaN(endMs)) return false;
+                    const diffHours = (endMs - now) / (1000 * 60 * 60);
+                    return diffHours > 0 && diffHours <= 72;
+                  }
+                  return true;
+                }).sort((a, b) => {
+                  const aEnd = a.endsAt ? Date.parse(a.endsAt) : Number.POSITIVE_INFINITY;
+                  const bEnd = b.endsAt ? Date.parse(b.endsAt) : Number.POSITIVE_INFINITY;
+                  return aEnd - bEnd;
+                });
+                if (list.length === 0) {
+                  return <div style={{ color: "#666", fontSize: 12 }}>{t(lang, "noOffers")}</div>;
+                }
+                return (
+                  <div style={{ display: "grid", gap: 8 }}>
+                    {list.map((o) => {
+                      const endMs = o.endsAt ? Date.parse(o.endsAt) : null;
+                      const nowDate = new Date();
+                      const endDate = endMs ? new Date(endMs) : null;
+                      const sameDay = endDate ? nowDate.toDateString() === endDate.toDateString() : false;
+                      const diffHours = endMs ? (endMs - now) / (1000 * 60 * 60) : null;
+                      const expiringSoon = diffHours != null && diffHours > 0 && diffHours <= 72;
+                      const cardBorder = sameDay ? "1px solid #f59e0b" : expiringSoon ? "1px solid #fbbf24" : "1px solid #eee";
+                      const cardBg = sameDay ? "#fffbeb" : expiringSoon ? "#fffbf5" : "#fff";
+                      return (
+                      <div key={o.id} style={{ border: cardBorder, background: cardBg, borderRadius: 8, padding: 8 }}>
+                        <div style={{ fontWeight: 600 }}>{o.title}</div>
+                        {o.body && <div style={{ fontSize: 12, color: "#555", marginTop: 4 }}>{o.body}</div>}
+                        <div style={{ marginTop: 6, fontSize: 12, color: "#666" }}>
+                          {o.startsAt && (
+                            <div>{t(lang, "offerValidFrom")}: {formatOfferDate(o.startsAt)}</div>
+                          )}
+                          {o.endsAt && (
+                            <div>{t(lang, "offerValidUntil")}: {formatOfferDate(o.endsAt)}</div>
+                          )}
+                        </div>
+                        {sameDay && (
+                          <div style={{ marginTop: 6, fontSize: 12, color: "#b45309", fontWeight: 600 }}>{t(lang, "offerExpiresToday")}</div>
+                        )}
+                        {!sameDay && expiringSoon && (
+                          <div style={{ marginTop: 6, fontSize: 12, color: "#b45309", fontWeight: 600 }}>{t(lang, "offerExpiresSoon")}</div>
+                        )}
+                        {diffHours != null && diffHours > 0 && (
+                          <div style={{ marginTop: 4, fontSize: 12, color: "#6b7280" }}>
+                            {t(lang, "offerHoursLeft")}: {Math.ceil(diffHours)}
+                          </div>
+                        )}
+                        {o.discountCode && (
+                          <div style={{ marginTop: 6, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                            {!revealedOffers[o.id] ? (
+                              <button
+                                onClick={() => setRevealedOffers((prev) => ({ ...prev, [o.id]: true }))}
+                                style={{ padding: "4px 8px", fontSize: 12 }}
+                              >
+                                {t(lang, "showPromo")}
+                              </button>
+                            ) : (
+                              <>
+                                <div style={{ fontSize: 12 }}>
+                                  {t(lang, "promoCode")}: <strong>{o.discountCode}</strong>
+                                </div>
+                                <button
+                                  onClick={() => setRevealedOffers((prev) => ({ ...prev, [o.id]: false }))}
+                                  style={{ padding: "4px 8px", fontSize: 12 }}
+                                >
+                                  {t(lang, "hidePromo")}
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        )}
+                        {o.discountCode && revealedOffers[o.id] && (
+                          <button
+                            onClick={() => {
+                              setBillPromoCode(o.discountCode ?? "");
+                              setPromoApplied(true);
+                              setTimeout(() => setPromoApplied(false), 2000);
+                              const el = document.getElementById("bill-section");
+                              if (el) {
+                                el.scrollIntoView({ behavior: "smooth", block: "start" });
+                              }
+                            }}
+                            style={{ marginTop: 6, padding: "4px 8px", fontSize: 12 }}
+                          >
+                            {t(lang, "usePromo")}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         )}
@@ -1690,7 +1858,7 @@ export default function TablePage({ params, searchParams }: any) {
         </div>
       )}
 
-      <h2 style={{ marginTop: 24 }}>{t(lang, "payment")}</h2>
+      <h2 id="bill-section" style={{ marginTop: 24 }}>{t(lang, "payment")}</h2>
       {!billOptions ? (
         <p style={{ color: "#666" }}>{t(lang, "loading")}</p>
       ) : (
@@ -1819,6 +1987,9 @@ export default function TablePage({ params, searchParams }: any) {
               placeholder={t(lang, "promoCodePlaceholder")}
               style={{ padding: "6px 10px", border: "1px solid #ddd", borderRadius: 8, minWidth: 180 }}
             />
+            {promoApplied && (
+              <span style={{ fontSize: 12, color: "#059669" }}>{t(lang, "promoApplied")}</span>
+            )}
           </div>
 
           {billSummary && (

@@ -96,6 +96,17 @@ app:
     allowedPhotoExts: ${APP_MEDIA_ALLOWED_PHOTO_EXTS:jpg,jpeg,png,webp,gif}
   log:
     maxPayloadChars: ${APP_LOG_MAX_PAYLOAD_CHARS:2000}
+  alerts:
+    inventory:
+      enabled: ${APP_ALERTS_INVENTORY_ENABLED:false}
+    email:
+      enabled: ${APP_ALERTS_EMAIL_ENABLED:false}
+      to: ${APP_ALERTS_EMAIL_TO:}
+      from: ${APP_ALERTS_EMAIL_FROM:}
+    telegram:
+      enabled: ${APP_ALERTS_TELEGRAM_ENABLED:false}
+      botToken: ${APP_ALERTS_TELEGRAM_BOT_TOKEN:}
+      chatId: ${APP_ALERTS_TELEGRAM_CHAT_ID:}
 
   tips:
     enabled: false

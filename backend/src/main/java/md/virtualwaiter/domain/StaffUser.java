@@ -6,6 +6,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.time.Instant;
 
 @Entity
 @Table(name = "staff_users")
@@ -23,7 +24,7 @@ public class StaffUser {
   @Column(name = "password_hash", nullable = false)
   public String passwordHash;
 
-  /** WAITER | KITCHEN | ADMIN | SUPER_ADMIN */
+  /** WAITER | KITCHEN | BAR | HOST | ADMIN | MANAGER | SUPER_ADMIN | OWNER */
   @Column(nullable = false)
   public String role;
 
@@ -57,4 +58,7 @@ public class StaffUser {
 
   @Column(name = "favorite_items")
   public String favoriteItems;
+
+  @Column(name = "shift_started_at")
+  public Instant shiftStartedAt;
 }

@@ -14,8 +14,10 @@ import md.virtualwaiter.domain.BranchHall;
 import md.virtualwaiter.domain.HallPlan;
 import md.virtualwaiter.domain.ChatMessage;
 import md.virtualwaiter.domain.ChatRead;
+import md.virtualwaiter.domain.InventoryItem;
 import md.virtualwaiter.repo.CafeTableRepo;
 import md.virtualwaiter.repo.GuestSessionRepo;
+import md.virtualwaiter.repo.InventoryItemRepo;
 import md.virtualwaiter.repo.OrderItemRepo;
 import md.virtualwaiter.repo.OrderRepo;
 import md.virtualwaiter.repo.StaffUserRepo;
@@ -39,8 +41,11 @@ import md.virtualwaiter.repo.NotificationEventRepo;
 import md.virtualwaiter.domain.NotificationEvent;
 import md.virtualwaiter.repo.StaffDeviceTokenRepo;
 import md.virtualwaiter.domain.StaffDeviceToken;
+import md.virtualwaiter.repo.AuditLogRepo;
+import md.virtualwaiter.domain.AuditLog;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -87,6 +92,8 @@ public class StaffController {
   private final StaffNotificationService notificationService;
   private final NotificationEventRepo notificationEventRepo;
   private final StaffDeviceTokenRepo staffDeviceTokenRepo;
+  private final InventoryItemRepo inventoryItemRepo;
+  private final AuditLogRepo auditLogRepo;
   private final PartyService partyService;
   private final BillProperties billProperties;
   private final StatsService statsService;
@@ -113,6 +120,8 @@ public class StaffController {
     StaffNotificationService notificationService,
     NotificationEventRepo notificationEventRepo,
     StaffDeviceTokenRepo staffDeviceTokenRepo,
+    InventoryItemRepo inventoryItemRepo,
+    AuditLogRepo auditLogRepo,
     PartyService partyService,
     BillProperties billProperties,
     StatsService statsService,
@@ -138,6 +147,8 @@ public class StaffController {
     this.notificationService = notificationService;
     this.notificationEventRepo = notificationEventRepo;
     this.staffDeviceTokenRepo = staffDeviceTokenRepo;
+    this.inventoryItemRepo = inventoryItemRepo;
+    this.auditLogRepo = auditLogRepo;
     this.partyService = partyService;
     this.billProperties = billProperties;
     this.statsService = statsService;
@@ -145,7 +156,7 @@ public class StaffController {
     this.auditService = auditService;
   }
 
-  private static final Set<String> ROLE_ADMIN_LIKE = Set.of("ADMIN", "MANAGER", "SUPER_ADMIN");
+  private static final Set<String> ROLE_ADMIN_LIKE = Set.of("ADMIN", "MANAGER", "SUPER_ADMIN", "OWNER");
   private static final Set<String> ROLE_WAITER_LIKE = Set.of("WAITER", "HOST");
   private static final Set<String> ROLE_KITCHEN_LIKE = Set.of("KITCHEN", "BAR");
 
@@ -1262,6 +1273,115 @@ public class StaffController {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "token required");
     }
     staffDeviceTokenRepo.deleteByToken(req.token.trim());
+  }
+
+  // --- Shift control ---
+  public record ShiftStatus(String startedAt) {}
+
+  @GetMapping("/shift")
+  public ShiftStatus getShift(Authentication auth) {
+    StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
+    return new ShiftStatus(u.shiftStartedAt == null ? null : u.shiftStartedAt.toString());
+  }
+
+  @PostMapping("/shift/start")
+  public ShiftStatus startShift(Authentication auth) {
+    StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
+    u.shiftStartedAt = Instant.now();
+    staffUserRepo.save(u);
+    return new ShiftStatus(u.shiftStartedAt.toString());
+  }
+
+  @PostMapping("/shift/clear")
+  public void clearShift(Authentication auth) {
+    StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
+    u.shiftStartedAt = null;
+    staffUserRepo.save(u);
+  }
+
+  // --- Ops audit events ---
+  public record AuditLogDto(
+    long id,
+    String action,
+    String entityType,
+    Long entityId,
+    String actorUsername,
+    String actorRole,
+    String detailsJson,
+    String createdAt
+  ) {}
+
+  @GetMapping("/ops/audit")
+  public List<AuditLogDto> opsAudit(
+    @RequestParam(value = "action", required = false) String action,
+    @RequestParam(value = "entityType", required = false) String entityType,
+    @RequestParam(value = "fromTs", required = false) String fromTs,
+    @RequestParam(value = "toTs", required = false) String toTs,
+    @RequestParam(value = "limit", required = false, defaultValue = "50") Integer limit,
+    Authentication auth
+  ) {
+    StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
+    int safeLimit = limit == null ? 50 : Math.max(1, Math.min(200, limit));
+    Instant from = null;
+    Instant to = null;
+    if (fromTs != null && !fromTs.isBlank()) {
+      try { from = Instant.parse(fromTs); } catch (Exception ignored) {}
+    }
+    if (toTs != null && !toTs.isBlank()) {
+      try { to = Instant.parse(toTs); } catch (Exception ignored) {}
+    }
+    List<AuditLog> logs = auditLogRepo.findFiltered(
+      u.branchId,
+      action,
+      entityType,
+      null,
+      from,
+      to,
+      null,
+      null,
+      PageRequest.of(0, safeLimit)
+    );
+    List<AuditLogDto> out = new ArrayList<>();
+    for (AuditLog a : logs) {
+      out.add(new AuditLogDto(
+        a.id,
+        a.action,
+        a.entityType,
+        a.entityId,
+        a.actorUsername,
+        a.actorRole,
+        a.detailsJson,
+        a.createdAt == null ? null : a.createdAt.toString()
+      ));
+    }
+    return out;
+  }
+
+  // --- Inventory (low stock) ---
+  public record InventoryItemDto(
+    long id,
+    String nameRu,
+    String nameRo,
+    String nameEn,
+    String unit,
+    Double qtyOnHand,
+    Double minQty,
+    boolean isActive
+  ) {}
+
+  @GetMapping("/inventory/low-stock")
+  public List<InventoryItemDto> lowStockInventory(Authentication auth) {
+    StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
+    List<InventoryItem> items = inventoryItemRepo.findByBranchIdAndIsActiveTrueOrderByIdDesc(u.branchId);
+    List<InventoryItemDto> out = new ArrayList<>();
+    for (InventoryItem it : items) {
+      double qty = it.qtyOnHand == null ? 0.0 : it.qtyOnHand;
+      double min = it.minQty == null ? 0.0 : it.minQty;
+      if (min > 0 && qty <= min) {
+        out.add(new InventoryItemDto(it.id, it.nameRu, it.nameRo, it.nameEn, it.unit, qty, min, it.isActive));
+      }
+    }
+    return out;
   }
 
   private static Instant parseInstantOrDate(String v, boolean isStart) {

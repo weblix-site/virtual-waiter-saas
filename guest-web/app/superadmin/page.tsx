@@ -65,6 +65,7 @@ const dict: Record<string, Record<Lang, string>> = {
   roleBar: { ru: "Бармен", ro: "Barman", en: "Bar" },
   roleAdmin: { ru: "Администратор", ro: "Administrator", en: "Admin" },
   roleManager: { ru: "Менеджер", ro: "Manager", en: "Manager" },
+  roleOwner: { ru: "Владелец", ro: "Proprietar", en: "Owner" },
   roleSuperAdmin: { ru: "Супер‑админ", ro: "Super‑admin", en: "Super admin" },
   currencies: { ru: "Валюты", ro: "Valute", en: "Currencies" },
   addCurrency: { ru: "Добавить валюту", ro: "Adaugă valută", en: "Add currency" },
@@ -166,6 +167,24 @@ const dict: Record<string, Record<Lang, string>> = {
   editEntity: { ru: "Редактировать", ro: "Editează", en: "Edit" },
   cancelEdit: { ru: "Отменить", ro: "Anulează", en: "Cancel" },
   saveEntity: { ru: "Сохранить", ro: "Salvează", en: "Save" },
+  onlinePayEnabled: { ru: "Онлайн‑оплата включена", ro: "Plata online activă", en: "Online payments enabled" },
+  onlinePayProvider: { ru: "Провайдер онлайн‑оплаты", ro: "Furnizor plăți online", en: "Online payment provider" },
+  onlinePayCurrency: { ru: "Валюта онлайн‑оплаты", ro: "Monedă plăți online", en: "Online payment currency" },
+  onlinePayProviderHint: { ru: "Оплата только через провайдера", ro: "Plata doar prin furnizor", en: "Payment only via provider" },
+  onlinePayRequestUrl: { ru: "Ссылка запроса к PSP", ro: "URL cerere PSP", en: "PSP request URL" },
+  onlinePayCacertPath: { ru: "Путь к cacert.pem", ro: "Cale cacert.pem", en: "cacert.pem path" },
+  onlinePayPcertPath: { ru: "Путь к pcert.pem", ro: "Cale pcert.pem", en: "pcert.pem path" },
+  onlinePayPcertPassword: { ru: "Пароль pcert.pem", ro: "Parolă pcert.pem", en: "pcert.pem password" },
+  onlinePayKeyPath: { ru: "Путь к key.pem", ro: "Cale key.pem", en: "key.pem path" },
+  onlinePayRedirectUrl: { ru: "URL страницы оплаты", ro: "URL pagină plată", en: "Payment redirect URL" },
+  onlinePayReturnUrl: { ru: "URL возврата после оплаты", ro: "URL întoarcere după plată", en: "Return URL after payment" },
+  onlinePayRequestUrlHelp: { ru: "HTTPS URL запроса к платежной системе (PSP).", ro: "URL HTTPS pentru cererea către PSP.", en: "HTTPS URL for PSP request." },
+  onlinePayCacertPathHelp: { ru: "Полный путь к cacert.pem на сервере.", ro: "Calea completă către cacert.pem pe server.", en: "Full path to cacert.pem on server." },
+  onlinePayPcertPathHelp: { ru: "Полный путь к pcert.pem на сервере.", ro: "Calea completă către pcert.pem pe server.", en: "Full path to pcert.pem on server." },
+  onlinePayPcertPasswordHelp: { ru: "Пароль для pcert.pem.", ro: "Parola pentru pcert.pem.", en: "Password for pcert.pem." },
+  onlinePayKeyPathHelp: { ru: "Полный путь к key.pem на сервере.", ro: "Calea completă către key.pem pe server.", en: "Full path to key.pem on server." },
+  onlinePayRedirectUrlHelp: { ru: "URL страницы оплаты провайдера.", ro: "URL-ul paginii de plată a providerului.", en: "Provider payment page URL." },
+  onlinePayReturnUrlHelp: { ru: "URL возврата клиента после оплаты.", ro: "URL întoarcere client după plată.", en: "Customer return URL after payment." },
 };
 
 const t = (lang: Lang, key: string) => dict[key]?.[lang] ?? key;
@@ -191,7 +210,20 @@ type Branch = {
   contactPerson?: string | null;
   isActive: boolean;
 };
-type BranchSettings = { branchId: number; defaultLang?: string };
+type BranchSettings = {
+  branchId: number;
+  defaultLang?: string;
+  onlinePayEnabled?: boolean;
+  onlinePayProvider?: string | null;
+  onlinePayCurrencyCode?: string | null;
+  onlinePayRequestUrl?: string | null;
+  onlinePayCacertPath?: string | null;
+  onlinePayPcertPath?: string | null;
+  onlinePayPcertPassword?: string | null;
+  onlinePayKeyPath?: string | null;
+  onlinePayRedirectUrl?: string | null;
+  onlinePayReturnUrl?: string | null;
+};
 type StaffUser = {
   id: number;
   branchId: number | null;
@@ -297,6 +329,7 @@ export default function SuperAdminPage() {
     if (r === "BAR") return t(lang, "roleBar");
     if (r === "ADMIN") return t(lang, "roleAdmin");
     if (r === "MANAGER") return t(lang, "roleManager");
+    if (r === "OWNER") return t(lang, "roleOwner");
     if (r === "SUPER_ADMIN") return t(lang, "roleSuperAdmin");
     return role ?? "";
   };
@@ -778,9 +811,53 @@ export default function SuperAdminPage() {
       method: "PUT",
       body: JSON.stringify({
         defaultLang: branchSettings.defaultLang ?? "ru",
+        onlinePayEnabled: branchSettings.onlinePayEnabled,
+        onlinePayProvider: branchSettings.onlinePayProvider,
+        onlinePayCurrencyCode: branchSettings.onlinePayCurrencyCode,
+        onlinePayRequestUrl: branchSettings.onlinePayRequestUrl,
+        onlinePayCacertPath: branchSettings.onlinePayCacertPath,
+        onlinePayPcertPath: branchSettings.onlinePayPcertPath,
+        onlinePayPcertPassword: branchSettings.onlinePayPcertPassword,
+        onlinePayKeyPath: branchSettings.onlinePayKeyPath,
+        onlinePayRedirectUrl: branchSettings.onlinePayRedirectUrl,
+        onlinePayReturnUrl: branchSettings.onlinePayReturnUrl,
       }),
     });
     loadBranchSettings();
+  }
+
+  function missingOnlinePayFields() {
+    if (!branchSettings?.onlinePayEnabled) return [];
+    const missing: string[] = [];
+    if (!branchSettings.onlinePayRequestUrl?.trim()) missing.push(t(lang, "onlinePayRequestUrl"));
+    if (!branchSettings.onlinePayCacertPath?.trim()) missing.push(t(lang, "onlinePayCacertPath"));
+    if (!branchSettings.onlinePayPcertPath?.trim()) missing.push(t(lang, "onlinePayPcertPath"));
+    if (!branchSettings.onlinePayPcertPassword?.trim()) missing.push(t(lang, "onlinePayPcertPassword"));
+    if (!branchSettings.onlinePayKeyPath?.trim()) missing.push(t(lang, "onlinePayKeyPath"));
+    if (!branchSettings.onlinePayRedirectUrl?.trim()) missing.push(t(lang, "onlinePayRedirectUrl"));
+    if (!branchSettings.onlinePayReturnUrl?.trim()) missing.push(t(lang, "onlinePayReturnUrl"));
+    return missing;
+  }
+
+  function onlinePayFieldStyle(value?: string | null) {
+    if (!branchSettings?.onlinePayEnabled) return undefined;
+    const missing = !value || !value.trim();
+    return missing ? { border: "1px solid #dc2626" } : undefined;
+  }
+
+  function onlinePayFieldError(kind: "url" | "pem" | "returnUrl", value?: string | null) {
+    if (!branchSettings?.onlinePayEnabled) return "";
+    const v = (value ?? "").trim();
+    if (!v) return "";
+    if (kind === "url" || kind === "returnUrl") {
+      if (!/^https?:\/\//i.test(v)) return "URL должен начинаться с http:// или https://";
+      if (kind !== "returnUrl" && !/^https:\/\//i.test(v)) return "Рекомендуется использовать https://";
+    }
+    if (kind === "pem") {
+      if (!v.endsWith(".pem")) return "Ожидается путь к *.pem";
+      if (!v.startsWith("/")) return "Ожидается абсолютный путь";
+    }
+    return "";
   }
 
   async function saveTableLayout() {
@@ -1523,7 +1600,7 @@ export default function SuperAdminPage() {
           <button onClick={loadBranchSettings} disabled={!branchId}>{t(lang, "load")}</button>
         </div>
         {branchSettings && (
-          <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 10, alignItems: "center" }}>
             <label>
               {t(lang, "defaultLanguage")}
               <select
@@ -1535,7 +1612,92 @@ export default function SuperAdminPage() {
                 <option value="en">{t(lang, "langEn")}</option>
               </select>
             </label>
-            <button onClick={saveBranchSettings}>{t(lang, "save")}</button>
+            <label><input type="checkbox" checked={!!branchSettings.onlinePayEnabled} onChange={(e) => setBranchSettings({ ...branchSettings, onlinePayEnabled: e.target.checked })} /> {t(lang, "onlinePayEnabled")}</label>
+            <label>
+              {t(lang, "onlinePayProvider")}
+              <select
+                value={branchSettings.onlinePayProvider ?? ""}
+                onChange={(e) => setBranchSettings({ ...branchSettings, onlinePayProvider: e.target.value })}
+              >
+                <option value="">{t(lang, "onlinePayProviderHint")}</option>
+                <option value="MAIB">MAIB</option>
+                <option value="PAYNET">Paynet</option>
+                <option value="MIA">MIA</option>
+              </select>
+            </label>
+            <label>
+              {t(lang, "onlinePayCurrency")}
+              <select
+                value={branchSettings.onlinePayCurrencyCode ?? "MDL"}
+                onChange={(e) => setBranchSettings({ ...branchSettings, onlinePayCurrencyCode: e.target.value })}
+              >
+                {currencies.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.code} — {c.name}
+                  </option>
+                ))}
+                {currencies.length === 0 && <option value="MDL">MDL</option>}
+              </select>
+            </label>
+            <label>
+              {t(lang, "onlinePayRequestUrl")}
+              <input value={branchSettings.onlinePayRequestUrl ?? ""} style={onlinePayFieldStyle(branchSettings.onlinePayRequestUrl)} onChange={(e) => setBranchSettings({ ...branchSettings, onlinePayRequestUrl: e.target.value })} />
+              <div style={{ fontSize: 12, color: "#6b7280" }}>{t(lang, "onlinePayRequestUrlHelp")}</div>
+              {onlinePayFieldError("url", branchSettings.onlinePayRequestUrl) && (
+                <div style={{ fontSize: 12, color: "#b11e46" }}>{onlinePayFieldError("url", branchSettings.onlinePayRequestUrl)}</div>
+              )}
+            </label>
+            <label>
+              {t(lang, "onlinePayCacertPath")}
+              <input value={branchSettings.onlinePayCacertPath ?? ""} style={onlinePayFieldStyle(branchSettings.onlinePayCacertPath)} onChange={(e) => setBranchSettings({ ...branchSettings, onlinePayCacertPath: e.target.value })} />
+              <div style={{ fontSize: 12, color: "#6b7280" }}>{t(lang, "onlinePayCacertPathHelp")}</div>
+              {onlinePayFieldError("pem", branchSettings.onlinePayCacertPath) && (
+                <div style={{ fontSize: 12, color: "#b11e46" }}>{onlinePayFieldError("pem", branchSettings.onlinePayCacertPath)}</div>
+              )}
+            </label>
+            <label>
+              {t(lang, "onlinePayPcertPath")}
+              <input value={branchSettings.onlinePayPcertPath ?? ""} style={onlinePayFieldStyle(branchSettings.onlinePayPcertPath)} onChange={(e) => setBranchSettings({ ...branchSettings, onlinePayPcertPath: e.target.value })} />
+              <div style={{ fontSize: 12, color: "#6b7280" }}>{t(lang, "onlinePayPcertPathHelp")}</div>
+              {onlinePayFieldError("pem", branchSettings.onlinePayPcertPath) && (
+                <div style={{ fontSize: 12, color: "#b11e46" }}>{onlinePayFieldError("pem", branchSettings.onlinePayPcertPath)}</div>
+              )}
+            </label>
+            <label>
+              {t(lang, "onlinePayPcertPassword")}
+              <input type="password" value={branchSettings.onlinePayPcertPassword ?? ""} style={onlinePayFieldStyle(branchSettings.onlinePayPcertPassword)} onChange={(e) => setBranchSettings({ ...branchSettings, onlinePayPcertPassword: e.target.value })} />
+              <div style={{ fontSize: 12, color: "#6b7280" }}>{t(lang, "onlinePayPcertPasswordHelp")}</div>
+            </label>
+            <label>
+              {t(lang, "onlinePayKeyPath")}
+              <input value={branchSettings.onlinePayKeyPath ?? ""} style={onlinePayFieldStyle(branchSettings.onlinePayKeyPath)} onChange={(e) => setBranchSettings({ ...branchSettings, onlinePayKeyPath: e.target.value })} />
+              <div style={{ fontSize: 12, color: "#6b7280" }}>{t(lang, "onlinePayKeyPathHelp")}</div>
+              {onlinePayFieldError("pem", branchSettings.onlinePayKeyPath) && (
+                <div style={{ fontSize: 12, color: "#b11e46" }}>{onlinePayFieldError("pem", branchSettings.onlinePayKeyPath)}</div>
+              )}
+            </label>
+            <label>
+              {t(lang, "onlinePayRedirectUrl")}
+              <input value={branchSettings.onlinePayRedirectUrl ?? ""} style={onlinePayFieldStyle(branchSettings.onlinePayRedirectUrl)} onChange={(e) => setBranchSettings({ ...branchSettings, onlinePayRedirectUrl: e.target.value })} />
+              <div style={{ fontSize: 12, color: "#6b7280" }}>{t(lang, "onlinePayRedirectUrlHelp")}</div>
+              {onlinePayFieldError("url", branchSettings.onlinePayRedirectUrl) && (
+                <div style={{ fontSize: 12, color: "#b11e46" }}>{onlinePayFieldError("url", branchSettings.onlinePayRedirectUrl)}</div>
+              )}
+            </label>
+            <label>
+              {t(lang, "onlinePayReturnUrl")}
+              <input value={branchSettings.onlinePayReturnUrl ?? ""} style={onlinePayFieldStyle(branchSettings.onlinePayReturnUrl)} onChange={(e) => setBranchSettings({ ...branchSettings, onlinePayReturnUrl: e.target.value })} />
+              <div style={{ fontSize: 12, color: "#6b7280" }}>{t(lang, "onlinePayReturnUrlHelp")}</div>
+              {onlinePayFieldError("returnUrl", branchSettings.onlinePayReturnUrl) && (
+                <div style={{ fontSize: 12, color: "#b11e46" }}>{onlinePayFieldError("returnUrl", branchSettings.onlinePayReturnUrl)}</div>
+              )}
+            </label>
+            {branchSettings.onlinePayEnabled && missingOnlinePayFields().length > 0 && (
+              <div style={{ color: "#b11e46", fontSize: 12 }}>
+                {t(lang, "onlinePayProviderHint")}: {missingOnlinePayFields().join(", ")}
+              </div>
+            )}
+            <button onClick={saveBranchSettings} disabled={branchSettings.onlinePayEnabled && missingOnlinePayFields().length > 0}>{t(lang, "save")}</button>
           </div>
         )}
       </section>
@@ -1561,6 +1723,7 @@ export default function SuperAdminPage() {
             <option value="BAR">{roleLabel("BAR")}</option>
             <option value="ADMIN">{roleLabel("ADMIN")}</option>
             <option value="MANAGER">{roleLabel("MANAGER")}</option>
+            <option value="OWNER">{roleLabel("OWNER")}</option>
           </select>
           <button onClick={createStaff} disabled={!branchId}>{t(lang, "createStaff")}</button>
         </div>
@@ -1609,6 +1772,7 @@ export default function SuperAdminPage() {
                 <option value="BAR">{roleLabel("BAR")}</option>
                 <option value="ADMIN">{roleLabel("ADMIN")}</option>
                 <option value="MANAGER">{roleLabel("MANAGER")}</option>
+                <option value="OWNER">{roleLabel("OWNER")}</option>
                 <option value="SUPER_ADMIN">{roleLabel("SUPER_ADMIN")}</option>
               </select>
               <label><input type="checkbox" checked={editStaffActive} onChange={(e) => setEditStaffActive(e.target.checked)} /> {t(lang, "active")}</label>

@@ -208,6 +208,15 @@ String _tr(BuildContext context, String key) {
     'resetHall': {'ru': 'Сбросить зал', 'ro': 'Resetează sala', 'en': 'Reset hall'},
     'history': {'ru': 'История', 'ro': 'Istoric', 'en': 'History'},
     'events': {'ru': 'События', 'ro': 'Evenimente', 'en': 'Events'},
+    'inventory': {'ru': 'Склад', 'ro': 'Inventar', 'en': 'Inventory'},
+    'inventoryLowStockTitle': {'ru': 'Низкий остаток склада', 'ro': 'Stoc scăzut', 'en': 'Low stock'},
+    'inventoryLowStockLoading': {'ru': 'Проверяем остатки...', 'ro': 'Verificare stoc...', 'en': 'Checking stock...'},
+    'inventoryLowStockEmpty': {'ru': 'Все позиции в норме', 'ro': 'Totul este în regulă', 'en': 'All items are within limits'},
+    'inventoryLowStockCount': {'ru': 'Позиции', 'ro': 'Poziții', 'en': 'Items'},
+    'inventoryLowStockRefresh': {'ru': 'Обновить остатки', 'ro': 'Reîmprospătează stoc', 'en': 'Refresh stock'},
+    'inventoryItemFallback': {'ru': 'Товар', 'ro': 'Articol', 'en': 'Item'},
+    'inventoryQtyLabel': {'ru': 'Остаток', 'ro': 'Stoc', 'en': 'On hand'},
+    'inventoryMinLabel': {'ru': 'Минимум', 'ro': 'Minim', 'en': 'Min'},
     'profile': {'ru': 'Профиль', 'ro': 'Profil', 'en': 'Profile'},
     'myProfile': {'ru': 'Мой профиль', 'ro': 'Profilul meu', 'en': 'My profile'},
     'chat': {'ru': 'Чат', 'ro': 'Chat', 'en': 'Chat'},
@@ -247,6 +256,20 @@ String _tr(BuildContext context, String key) {
     'ops': {'ru': 'Оперативно', 'ro': 'Operațional', 'en': 'Ops'},
     'slaDashboard': {'ru': 'SLA‑дашборд', 'ro': 'SLA dashboard', 'en': 'SLA dashboard'},
     'focusCards': {'ru': 'Фокус‑карточки', 'ro': 'Carduri focus', 'en': 'Focus cards'},
+    'focusCardsShift': {'ru': 'Фокус‑карточки смены', 'ro': 'Carduri focus schimb', 'en': 'Shift focus cards'},
+    'slaEventsTitle': {'ru': 'SLA‑события', 'ro': 'Evenimente SLA', 'en': 'SLA events'},
+    'slaEventsHint': {'ru': 'История изменений по аудиту', 'ro': 'Istoric pe baza auditului', 'en': 'History from audit logs'},
+    'slaEventsEmpty': {'ru': 'Событий нет', 'ro': 'Nu există evenimente', 'en': 'No events'},
+    'slaEventsTab': {'ru': 'SLA‑события', 'ro': 'Evenimente SLA', 'en': 'SLA events'},
+    'filterAll': {'ru': 'Все', 'ro': 'Toate', 'en': 'All'},
+    'filterOrders': {'ru': 'Заказы', 'ro': 'Comenzi', 'en': 'Orders'},
+    'filterCalls': {'ru': 'Вызовы', 'ro': 'Apeluri', 'en': 'Calls'},
+    'filterBills': {'ru': 'Счета', 'ro': 'Note', 'en': 'Bills'},
+    'filterParties': {'ru': 'Party', 'ro': 'Party', 'en': 'Party'},
+    'fromDate': {'ru': 'С даты', 'ro': 'De la', 'en': 'From'},
+    'toDate': {'ru': 'По дату', 'ro': 'Până la', 'en': 'To'},
+    'clearDate': {'ru': 'Сбросить даты', 'ro': 'Resetare date', 'en': 'Clear dates'},
+    'openItem': {'ru': 'Открыть', 'ro': 'Deschide', 'en': 'Open'},
     'alerts': {'ru': 'Алерты', 'ro': 'Alerte', 'en': 'Alerts'},
     'alertsEmpty': {'ru': 'Критичных алертов нет', 'ro': 'Fără alerte critice', 'en': 'No critical alerts'},
     'alertsHint': {'ru': 'Алерты появляются при превышении SLA', 'ro': 'Alerte apar la depășirea SLA', 'en': 'Alerts appear when SLA is exceeded'},
@@ -256,6 +279,10 @@ String _tr(BuildContext context, String key) {
       'ro': 'Heatmap completă — în fila „Sală”',
       'en': 'Full heatmap is on the Hall tab'
     },
+    'shiftNotStarted': {'ru': 'Смена не начата', 'ro': 'Schimbul nu a început', 'en': 'Shift not started'},
+    'shiftActiveSince': {'ru': 'Смена с', 'ro': 'Schimb din', 'en': 'Shift since'},
+    'shiftStartNow': {'ru': 'Начать смену', 'ro': 'Pornește schimbul', 'en': 'Start shift'},
+    'shiftClear': {'ru': 'Сбросить смену', 'ro': 'Resetează schimbul', 'en': 'Clear shift'},
     'lastUpdated': {'ru': 'Обновлено', 'ro': 'Actualizat', 'en': 'Updated'},
     'ordersSla': {'ru': 'Заказы SLA', 'ro': 'Comenzi SLA', 'en': 'Orders SLA'},
     'callsSla': {'ru': 'Вызовы SLA', 'ro': 'Apeluri SLA', 'en': 'Calls SLA'},
@@ -897,7 +924,13 @@ class _HomeScreenState extends State<HomeScreen> {
       FloorPlanTab(username: widget.username, password: widget.password),
       ChatTab(username: widget.username, password: widget.password, hallId: _hallId),
       HistoryTab(username: widget.username, password: widget.password),
-      NotificationsTab(events: _events),
+      InventoryTab(username: widget.username, password: widget.password),
+      NotificationsTab(
+        events: _events,
+        username: widget.username,
+        password: widget.password,
+      ),
+      SlaEventsTab(username: widget.username, password: widget.password),
       ProfileTab(username: widget.username, password: widget.password),
     ];
     return Scaffold(
@@ -1002,7 +1035,9 @@ class _HomeScreenState extends State<HomeScreen> {
             label: _tr(context, 'chat'),
           ),
           NavigationDestination(icon: const Icon(Icons.history), label: _tr(context, 'history')),
+          NavigationDestination(icon: const Icon(Icons.inventory_2), label: _tr(context, 'inventory')),
           NavigationDestination(icon: const Icon(Icons.notifications), label: _tr(context, 'events')),
+          NavigationDestination(icon: const Icon(Icons.query_stats), label: _tr(context, 'slaEventsTab')),
           NavigationDestination(icon: const Icon(Icons.person), label: _tr(context, 'profile')),
         ],
       ),
@@ -1010,28 +1045,184 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-class NotificationsTab extends StatelessWidget {
-  final List<Map<String, dynamic>> events;
+class InventoryTab extends StatefulWidget {
+  final String username;
+  final String password;
 
-  const NotificationsTab({super.key, required this.events});
+  const InventoryTab({super.key, required this.username, required this.password});
+
+  @override
+  State<InventoryTab> createState() => _InventoryTabState();
+}
+
+class _InventoryTabState extends State<InventoryTab> {
+  bool _loading = true;
+  String? _error;
+  List<Map<String, dynamic>> _lowStock = const [];
+
+  String get _auth => base64Encode(utf8.encode('${widget.username}:${widget.password}'));
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final res = await http.get(
+        Uri.parse('$apiBase/api/staff/inventory/low-stock'),
+        headers: {'Authorization': 'Basic $_auth'},
+      );
+      if (res.statusCode != 200) {
+        throw Exception('${_tr(context, 'loadFailed')} (${res.statusCode})');
+      }
+      final body = (jsonDecode(res.body) as List<dynamic>).cast<Map<String, dynamic>>();
+      setState(() => _lowStock = body);
+    } catch (e) {
+      setState(() => _error = e.toString());
+    } finally {
+      setState(() => _loading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(_tr(context, 'events'))),
-      body: events.isEmpty
-          ? Center(child: Text(_tr(context, 'noEvents')))
-          : ListView.separated(
-              itemCount: events.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
-              itemBuilder: (ctx, i) {
-                final e = events[i];
-                return ListTile(
+      appBar: AppBar(
+        title: Text(_tr(context, 'inventory')),
+        actions: [
+          IconButton(
+            tooltip: _tr(context, 'inventoryLowStockRefresh'),
+            onPressed: _load,
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+      ),
+      body: _loading
+          ? Center(child: Text(_tr(context, 'inventoryLowStockLoading')))
+          : _error != null
+              ? Center(child: Text(_error!, style: const TextStyle(color: Colors.red)))
+              : _lowStock.isEmpty
+                  ? Center(child: Text(_tr(context, 'inventoryLowStockEmpty')))
+                  : ListView.separated(
+                      itemCount: _lowStock.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (ctx, i) {
+                        final it = _lowStock[i];
+                        final name = (it['nameRu'] ?? it['nameEn'] ?? it['nameRo'] ?? '').toString();
+                        final unit = (it['unit'] ?? '').toString();
+                        final qty = it['qtyOnHand'];
+                        final min = it['minQty'];
+                        return ListTile(
+                          leading: const Icon(Icons.warning_amber_rounded, color: Colors.orange),
+                          title: Text(name.isEmpty ? _tr(context, 'inventoryItemFallback') : name),
+                          subtitle: Text('${_tr(context, 'inventoryQtyLabel')}: $qty $unit • ${_tr(context, 'inventoryMinLabel')}: $min'),
+                        );
+                      },
+                    ),
+    );
+  }
+}
+
+class NotificationsTab extends StatefulWidget {
+  final List<Map<String, dynamic>> events;
+  final String username;
+  final String password;
+
+  const NotificationsTab({super.key, required this.events, required this.username, required this.password});
+
+  @override
+  State<NotificationsTab> createState() => _NotificationsTabState();
+}
+
+class _NotificationsTabState extends State<NotificationsTab> {
+  bool _loadingLowStock = true;
+  String? _lowStockError;
+  List<Map<String, dynamic>> _lowStock = const [];
+
+  String get _auth => base64Encode(utf8.encode('${widget.username}:${widget.password}'));
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLowStock();
+  }
+
+  Future<void> _loadLowStock() async {
+    setState(() {
+      _loadingLowStock = true;
+      _lowStockError = null;
+    });
+    try {
+      final res = await http.get(
+        Uri.parse('$apiBase/api/staff/inventory/low-stock'),
+        headers: {'Authorization': 'Basic $_auth'},
+      );
+      if (res.statusCode != 200) {
+        throw Exception('${_tr(context, 'loadFailed')} (${res.statusCode})');
+      }
+      final body = (jsonDecode(res.body) as List<dynamic>).cast<Map<String, dynamic>>();
+      setState(() => _lowStock = body);
+    } catch (e) {
+      setState(() => _lowStockError = e.toString());
+    } finally {
+      setState(() => _loadingLowStock = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final events = widget.events;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(_tr(context, 'events')),
+        actions: [
+          IconButton(
+            tooltip: _tr(context, 'inventoryLowStockRefresh'),
+            onPressed: _loadLowStock,
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+      ),
+      body: ListView(
+        children: [
+          ListTile(
+            title: Text(_tr(context, 'inventoryLowStockTitle')),
+            subtitle: _loadingLowStock
+                ? Text(_tr(context, 'inventoryLowStockLoading'))
+                : _lowStockError != null
+                    ? Text(_lowStockError!, style: const TextStyle(color: Colors.red))
+                    : _lowStock.isEmpty
+                        ? Text(_tr(context, 'inventoryLowStockEmpty'))
+                        : Text('${_tr(context, 'inventoryLowStockCount')}: ${_lowStock.length}'),
+          ),
+          if (!_loadingLowStock && _lowStockError == null && _lowStock.isNotEmpty)
+            ..._lowStock.map((it) {
+              final name = (it['nameRu'] ?? it['nameEn'] ?? it['nameRo'] ?? '').toString();
+              final unit = (it['unit'] ?? '').toString();
+              final qty = it['qtyOnHand'];
+              final min = it['minQty'];
+              return ListTile(
+                leading: const Icon(Icons.warning_amber_rounded, color: Colors.orange),
+                title: Text(name.isEmpty ? _tr(context, 'inventoryItemFallback') : name),
+                subtitle: Text('${_tr(context, 'inventoryQtyLabel')}: $qty $unit • ${_tr(context, 'inventoryMinLabel')}: $min'),
+              );
+            }),
+          const Divider(height: 1),
+          if (events.isEmpty)
+            ListTile(title: Text(_tr(context, 'noEvents')))
+          else
+            ...events.map((e) => ListTile(
                   title: Text('${e['type']} • #${e['refId']}'),
                   subtitle: Text('${e['createdAt']}'),
-                );
-              },
-            ),
+                )),
+        ],
+      ),
     );
   }
 }
@@ -1045,6 +1236,336 @@ class ChatTab extends StatefulWidget {
 
   @override
   State<ChatTab> createState() => _ChatTabState();
+}
+
+class SlaEventsTab extends StatefulWidget {
+  final String username;
+  final String password;
+
+  const SlaEventsTab({super.key, required this.username, required this.password});
+
+  @override
+  State<SlaEventsTab> createState() => _SlaEventsTabState();
+}
+
+class _SlaEventsTabState extends State<SlaEventsTab> {
+  bool _loading = true;
+  String? _error;
+  List<Map<String, dynamic>> _events = const [];
+  String _filter = 'ALL';
+  DateTime? _fromDate;
+  DateTime? _toDate;
+  final Map<int, Duration> _orderAges = {};
+  final Map<int, Duration> _callAges = {};
+  final Map<int, Duration> _billAges = {};
+
+  String get _auth => base64Encode(utf8.encode('${widget.username}:${widget.password}'));
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<List<Map<String, dynamic>>> _fetch(String action, String entityType) async {
+    final params = <String, String>{
+      'limit': '100',
+      'action': action,
+      'entityType': entityType,
+    };
+    if (_fromDate != null) {
+      final from = DateTime(_fromDate!.year, _fromDate!.month, _fromDate!.day);
+      params['fromTs'] = from.toUtc().toIso8601String();
+    }
+    if (_toDate != null) {
+      final to = DateTime(_toDate!.year, _toDate!.month, _toDate!.day, 23, 59, 59);
+      params['toTs'] = to.toUtc().toIso8601String();
+    }
+    final uri = Uri.parse('$apiBase/api/staff/ops/audit').replace(queryParameters: params);
+    final res = await http.get(uri, headers: {'Authorization': 'Basic $_auth'});
+    if (res.statusCode != 200) {
+      throw Exception('${_tr(context, 'loadFailed')} (${res.statusCode})');
+    }
+    return (jsonDecode(res.body) as List<dynamic>).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> _loadAges() async {
+    _orderAges.clear();
+    _callAges.clear();
+    _billAges.clear();
+    try {
+      final ordersRes = await http.get(
+        Uri.parse('$apiBase/api/staff/orders/active'),
+        headers: {'Authorization': 'Basic $_auth'},
+      );
+      if (ordersRes.statusCode == 200) {
+        final items = (jsonDecode(ordersRes.body) as List<dynamic>).cast<Map<String, dynamic>>();
+        for (final o in items) {
+          final id = (o['id'] as num?)?.toInt();
+          final created = o['createdAt']?.toString();
+          if (id != null && created != null) {
+            _orderAges[id] = _ageFromIso(created);
+          }
+        }
+      }
+      final callsRes = await http.get(
+        Uri.parse('$apiBase/api/staff/waiter-calls/active'),
+        headers: {'Authorization': 'Basic $_auth'},
+      );
+      if (callsRes.statusCode == 200) {
+        final items = (jsonDecode(callsRes.body) as List<dynamic>).cast<Map<String, dynamic>>();
+        for (final c in items) {
+          final id = (c['id'] as num?)?.toInt();
+          final created = c['createdAt']?.toString();
+          if (id != null && created != null) {
+            _callAges[id] = _ageFromIso(created);
+          }
+        }
+      }
+      final billsRes = await http.get(
+        Uri.parse('$apiBase/api/staff/bill-requests/active'),
+        headers: {'Authorization': 'Basic $_auth'},
+      );
+      if (billsRes.statusCode == 200) {
+        final items = (jsonDecode(billsRes.body) as List<dynamic>).cast<Map<String, dynamic>>();
+        for (final b in items) {
+          final id = ((b['billRequestId'] ?? b['id']) as num?)?.toInt();
+          final created = b['createdAt']?.toString();
+          if (id != null && created != null) {
+            _billAges[id] = _ageFromIso(created);
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      List<Map<String, dynamic>> merged = [];
+      await _loadAges();
+      if (_filter == 'ORDERS') {
+        merged = await _fetch('UPDATE_STATUS', 'Order');
+      } else if (_filter == 'CALLS') {
+        merged = await _fetch('UPDATE_STATUS', 'WaiterCall');
+      } else if (_filter == 'BILLS') {
+        final results = await Future.wait([
+          _fetch('CONFIRM_PAID', 'BillRequest'),
+          _fetch('CANCEL', 'BillRequest'),
+        ]);
+        merged = results.expand((e) => e).toList();
+      } else if (_filter == 'PARTIES') {
+        merged = await _fetch('CLOSE', 'Party');
+      } else {
+        final results = await Future.wait([
+          _fetch('UPDATE_STATUS', 'Order'),
+          _fetch('UPDATE_STATUS', 'WaiterCall'),
+          _fetch('CONFIRM_PAID', 'BillRequest'),
+          _fetch('CANCEL', 'BillRequest'),
+          _fetch('CLOSE', 'Party'),
+        ]);
+        merged = results.expand((e) => e).toList();
+      }
+
+      merged.sort((a, b) {
+        final at = a['createdAt']?.toString() ?? '';
+        final bt = b['createdAt']?.toString() ?? '';
+        return bt.compareTo(at);
+      });
+      setState(() => _events = merged);
+    } catch (e) {
+      setState(() => _error = e.toString());
+    } finally {
+      setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(_tr(context, 'slaEventsTab')),
+        actions: [
+          IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
+        ],
+      ),
+      body: Column(
+        children: [
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+            child: Row(
+              children: [
+                _filterChip('ALL', _tr(context, 'filterAll')),
+                const SizedBox(width: 6),
+                _filterChip('ORDERS', _tr(context, 'filterOrders')),
+                const SizedBox(width: 6),
+                _filterChip('CALLS', _tr(context, 'filterCalls')),
+                const SizedBox(width: 6),
+                _filterChip('BILLS', _tr(context, 'filterBills')),
+                const SizedBox(width: 6),
+                _filterChip('PARTIES', _tr(context, 'filterParties')),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.date_range, size: 16),
+                    label: Text(_fromDate == null ? _tr(context, 'fromDate') : _fmtDate(_fromDate!)),
+                    onPressed: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        firstDate: DateTime(2020, 1, 1),
+                        lastDate: DateTime.now().add(const Duration(days: 365)),
+                        initialDate: _fromDate ?? DateTime.now().subtract(const Duration(days: 1)),
+                      );
+                      if (picked != null) {
+                        setState(() => _fromDate = picked);
+                        _load();
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.event, size: 16),
+                    label: Text(_toDate == null ? _tr(context, 'toDate') : _fmtDate(_toDate!)),
+                    onPressed: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        firstDate: DateTime(2020, 1, 1),
+                        lastDate: DateTime.now().add(const Duration(days: 365)),
+                        initialDate: _toDate ?? DateTime.now(),
+                      );
+                      if (picked != null) {
+                        setState(() => _toDate = picked);
+                        _load();
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  tooltip: _tr(context, 'clearDate'),
+                  onPressed: () {
+                    if (_fromDate == null && _toDate == null) return;
+                    setState(() {
+                      _fromDate = null;
+                      _toDate = null;
+                    });
+                    _load();
+                  },
+                  icon: const Icon(Icons.clear),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _error != null
+                    ? Center(child: Text(_error!, style: const TextStyle(color: Colors.red)))
+                    : _events.isEmpty
+                        ? Center(child: Text(_tr(context, 'slaEventsEmpty')))
+                        : ListView.separated(
+                            itemCount: _events.length,
+                            separatorBuilder: (_, __) => const Divider(height: 1),
+                            itemBuilder: (ctx, i) {
+                              final e = _events[i];
+                              final action = e['action']?.toString() ?? '';
+                              final entityType = e['entityType']?.toString() ?? '';
+                              final entityId = e['entityId']?.toString() ?? '';
+                              final actor = e['actorUsername']?.toString() ?? '';
+                              final createdAt = e['createdAt']?.toString() ?? '';
+                              final time = createdAt.length >= 19 ? createdAt.substring(11, 19) : createdAt;
+                              final severity = _severity(entityType, entityId);
+                              final color = severity == 'CRIT' ? Colors.redAccent : severity == 'WARN' ? Colors.orange : Colors.grey;
+                              return ListTile(
+                                leading: Icon(Icons.history, color: color),
+                                title: Text('$action • $entityType #$entityId'),
+                                subtitle: Text('$actor • $time'),
+                                trailing: IconButton(
+                                  tooltip: _tr(context, 'openItem'),
+                                  icon: const Icon(Icons.open_in_new),
+                                  onPressed: () => _jumpToEntity(entityType, entityId),
+                                ),
+                              );
+                            },
+                          ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _filterChip(String value, String label) {
+    final selected = _filter == value;
+    return ChoiceChip(
+      selected: selected,
+      label: Text(label),
+      onSelected: (v) {
+        if (!v) return;
+        setState(() => _filter = value);
+        _load();
+      },
+    );
+  }
+
+  String _fmtDate(DateTime d) {
+    final dd = d.day.toString().padLeft(2, '0');
+    final mm = d.month.toString().padLeft(2, '0');
+    return '$dd.$mm.${d.year}';
+  }
+
+  String _severity(String entityType, String entityIdStr) {
+    final id = int.tryParse(entityIdStr);
+    if (id == null) return '';
+    if (entityType == 'Order') {
+      final age = _orderAges[id];
+      if (age == null) return '';
+      if (age.inMinutes >= SlaConfig.orderCrit) return 'CRIT';
+      if (age.inMinutes >= SlaConfig.orderWarn) return 'WARN';
+    } else if (entityType == 'WaiterCall') {
+      final age = _callAges[id];
+      if (age == null) return '';
+      if (age.inMinutes >= SlaConfig.callCrit) return 'CRIT';
+      if (age.inMinutes >= SlaConfig.callWarn) return 'WARN';
+    } else if (entityType == 'BillRequest') {
+      final age = _billAges[id];
+      if (age == null) return '';
+      if (age.inMinutes >= SlaConfig.billCrit) return 'CRIT';
+      if (age.inMinutes >= SlaConfig.billWarn) return 'WARN';
+    }
+    return '';
+  }
+
+  void _jumpToEntity(String entityType, String entityIdStr) {
+    final id = int.tryParse(entityIdStr);
+    if (id == null) return;
+    if (entityType == 'Order') {
+      HomeNavBus.request(HomeNavRequest.orders(id));
+      return;
+    }
+    if (entityType == 'WaiterCall') {
+      HomeNavBus.request(HomeNavRequest.calls(id));
+      return;
+    }
+    if (entityType == 'BillRequest') {
+      HomeNavBus.request(HomeNavRequest.bills(id));
+      return;
+    }
+    if (entityType == 'Party') {
+      HomeNavBus.request(const HomeNavRequest(tabIndex: 7));
+    }
+  }
 }
 
 class _ChatTabState extends State<ChatTab> {
@@ -3907,10 +4428,14 @@ class _OpsDashboardTabState extends State<OpsDashboardTab> {
   bool _loading = true;
   String? _error;
   DateTime? _lastUpdated;
+  DateTime? _shiftStart;
   List<Map<String, dynamic>> _orders = const [];
   List<Map<String, dynamic>> _calls = const [];
   List<Map<String, dynamic>> _bills = const [];
   List<Map<String, dynamic>> _kitchen = const [];
+  List<Map<String, dynamic>> _slaEvents = const [];
+  bool _loadingSlaEvents = true;
+  String? _slaEventsError;
   Timer? _pollTimer;
   final Map<String, List<int>> _critSeries = {
     'orders': [],
@@ -3933,6 +4458,8 @@ class _OpsDashboardTabState extends State<OpsDashboardTab> {
   @override
   void initState() {
     super.initState();
+    _loadShiftPref();
+    _loadShiftFromServer();
     _load();
     _pollTimer = Timer.periodic(const Duration(seconds: 20), (_) => _load());
   }
@@ -3950,6 +4477,92 @@ class _OpsDashboardTabState extends State<OpsDashboardTab> {
     _pollTimer?.cancel();
     _alertPlayer.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadShiftPref() async {
+    final prefs = await SharedPreferences.getInstance();
+    final ts = prefs.getString('vw_shift_start');
+    if (ts != null) {
+      try {
+        _shiftStart = DateTime.parse(ts);
+        if (mounted) setState(() {});
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _saveShiftPref(DateTime? ts) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (ts == null) {
+      await prefs.remove('vw_shift_start');
+    } else {
+      await prefs.setString('vw_shift_start', ts.toIso8601String());
+    }
+  }
+
+  Future<void> _startShiftNow() async {
+    try {
+      final res = await http.post(
+        Uri.parse('$apiBase/api/staff/shift/start'),
+        headers: {'Authorization': 'Basic $_auth'},
+      );
+      if (res.statusCode == 200) {
+        final body = jsonDecode(res.body) as Map<String, dynamic>;
+        final ts = body['startedAt']?.toString();
+        if (ts != null) {
+          final parsed = DateTime.parse(ts);
+          setState(() => _shiftStart = parsed);
+          await _saveShiftPref(parsed);
+          return;
+        }
+      }
+    } catch (_) {}
+    final now = DateTime.now();
+    setState(() => _shiftStart = now);
+    await _saveShiftPref(now);
+  }
+
+  Future<void> _clearShift() async {
+    setState(() => _shiftStart = null);
+    try {
+      await http.post(
+        Uri.parse('$apiBase/api/staff/shift/clear'),
+        headers: {'Authorization': 'Basic $_auth'},
+      );
+    } catch (_) {}
+    await _saveShiftPref(null);
+  }
+
+  Future<void> _loadShiftFromServer() async {
+    try {
+      final res = await http.get(
+        Uri.parse('$apiBase/api/staff/shift'),
+        headers: {'Authorization': 'Basic $_auth'},
+      );
+      if (res.statusCode == 200) {
+        final body = jsonDecode(res.body) as Map<String, dynamic>;
+        final ts = body['startedAt']?.toString();
+        if (ts != null && ts.isNotEmpty) {
+          final parsed = DateTime.parse(ts);
+          setState(() => _shiftStart = parsed);
+          await _saveShiftPref(parsed);
+        }
+      }
+    } catch (_) {}
+  }
+
+  List<Map<String, dynamic>> _filterSinceShift(List<Map<String, dynamic>> items, String timeField) {
+    if (_shiftStart == null) return items;
+    final since = _shiftStart!;
+    return items.where((item) {
+      final raw = item[timeField]?.toString();
+      if (raw == null || raw.isEmpty) return true;
+      try {
+        final ts = DateTime.parse(raw);
+        return ts.isAfter(since) || ts.isAtSameMomentAs(since);
+      } catch (_) {
+        return true;
+      }
+    }).toList();
   }
 
   Future<void> _load() async {
@@ -3987,6 +4600,7 @@ class _OpsDashboardTabState extends State<OpsDashboardTab> {
       if (kitchenRes.statusCode == 200) {
         _kitchen = (jsonDecode(kitchenRes.body) as List<dynamic>).cast<Map<String, dynamic>>();
       }
+      await _loadSlaEvents();
       _lastUpdated = DateTime.now();
       _updateTrendsAndAlerts();
     } catch (e) {
@@ -3995,6 +4609,45 @@ class _OpsDashboardTabState extends State<OpsDashboardTab> {
       if (mounted) {
         setState(() => _loading = false);
       }
+    }
+  }
+
+  Future<void> _loadSlaEvents() async {
+    setState(() {
+      _loadingSlaEvents = true;
+      _slaEventsError = null;
+    });
+    try {
+      Future<List<Map<String, dynamic>>> fetch(String action, String entityType) async {
+        final uri = Uri.parse('$apiBase/api/staff/ops/audit?limit=50&action=$action&entityType=$entityType');
+        final res = await http.get(uri, headers: {'Authorization': 'Basic $_auth'});
+        if (res.statusCode != 200) {
+          throw Exception('${_tr(context, 'loadFailed')} (${res.statusCode})');
+        }
+        return (jsonDecode(res.body) as List<dynamic>).cast<Map<String, dynamic>>();
+      }
+
+      final results = await Future.wait([
+        fetch('UPDATE_STATUS', 'Order'),
+        fetch('UPDATE_STATUS', 'WaiterCall'),
+        fetch('CONFIRM_PAID', 'BillRequest'),
+        fetch('CANCEL', 'BillRequest'),
+        fetch('CLOSE', 'Party'),
+      ]);
+      final merged = <Map<String, dynamic>>[];
+      for (final part in results) {
+        merged.addAll(part);
+      }
+      merged.sort((a, b) {
+        final at = a['createdAt']?.toString() ?? '';
+        final bt = b['createdAt']?.toString() ?? '';
+        return bt.compareTo(at);
+      });
+      setState(() => _slaEvents = merged.take(100).toList());
+    } catch (e) {
+      setState(() => _slaEventsError = e.toString());
+    } finally {
+      setState(() => _loadingSlaEvents = false);
     }
   }
 
@@ -4064,8 +4717,18 @@ class _OpsDashboardTabState extends State<OpsDashboardTab> {
     };
   }
 
-  List<Map<String, dynamic>> _alerts({bool includeWarn = false}) {
+  List<Map<String, dynamic>> _alerts({
+    bool includeWarn = false,
+    List<Map<String, dynamic>>? orders,
+    List<Map<String, dynamic>>? calls,
+    List<Map<String, dynamic>>? bills,
+    List<Map<String, dynamic>>? kitchen,
+  }) {
     final alerts = <Map<String, dynamic>>[];
+    final ordersList = orders ?? _orders;
+    final callsList = calls ?? _calls;
+    final billsList = bills ?? _bills;
+    final kitchenList = kitchen ?? _kitchen;
     Map<String, dynamic>? addAlert(String typeKey, int? tableNumber, Duration age, int warnMin, int critMin) {
       final isCritical = age.inMinutes >= critMin;
       final isWarn = age.inMinutes >= warnMin && !isCritical;
@@ -4082,7 +4745,7 @@ class _OpsDashboardTabState extends State<OpsDashboardTab> {
       return null;
     }
 
-    for (final o in _orders) {
+    for (final o in ordersList) {
       final alert = addAlert(
         'alertOrder',
         (o['tableNumber'] ?? 0) as int?,
@@ -4094,7 +4757,7 @@ class _OpsDashboardTabState extends State<OpsDashboardTab> {
         alert['refId'] = (o['id'] as num?)?.toInt();
       }
     }
-    for (final c in _calls) {
+    for (final c in callsList) {
       final alert = addAlert(
         'alertCall',
         (c['tableNumber'] ?? 0) as int?,
@@ -4106,7 +4769,7 @@ class _OpsDashboardTabState extends State<OpsDashboardTab> {
         alert['refId'] = (c['id'] as num?)?.toInt();
       }
     }
-    for (final b in _bills) {
+    for (final b in billsList) {
       final alert = addAlert(
         'alertBill',
         (b['tableNumber'] ?? 0) as int?,
@@ -4118,7 +4781,7 @@ class _OpsDashboardTabState extends State<OpsDashboardTab> {
         alert['refId'] = (b['billRequestId'] ?? b['id']) as int?;
       }
     }
-    for (final k in _kitchen) {
+    for (final k in kitchenList) {
       final age = Duration(seconds: (k['ageSeconds'] ?? 0) as int);
       final alert = addAlert(
         'alertKitchen',
@@ -4136,7 +4799,12 @@ class _OpsDashboardTabState extends State<OpsDashboardTab> {
     return alerts.take(12).toList();
   }
 
-  Map<int, double> _heatByTable() {
+  Map<int, double> _heatByTable(
+    List<Map<String, dynamic>> orders,
+    List<Map<String, dynamic>> calls,
+    List<Map<String, dynamic>> bills,
+    List<Map<String, dynamic>> kitchen,
+  ) {
     final heat = <int, double>{};
     void addHeat(int? tableNumber, Duration age, int critMin) {
       if (tableNumber == null) return;
@@ -4147,16 +4815,16 @@ class _OpsDashboardTabState extends State<OpsDashboardTab> {
       }
     }
 
-    for (final o in _orders) {
+    for (final o in orders) {
       addHeat((o['tableNumber'] ?? 0) as int?, _ageFromIso(o['createdAt']?.toString()), SlaConfig.orderCrit);
     }
-    for (final c in _calls) {
+    for (final c in calls) {
       addHeat((c['tableNumber'] ?? 0) as int?, _ageFromIso(c['createdAt']?.toString()), SlaConfig.callCrit);
     }
-    for (final b in _bills) {
+    for (final b in bills) {
       addHeat((b['tableNumber'] ?? 0) as int?, _ageFromIso(b['createdAt']?.toString()), SlaConfig.billCrit);
     }
-    for (final k in _kitchen) {
+    for (final k in kitchen) {
       addHeat((k['tableNumber'] ?? 0) as int?, Duration(seconds: (k['ageSeconds'] ?? 0) as int), SlaConfig.kitchenCrit);
     }
     return heat;
@@ -4214,12 +4882,18 @@ class _OpsDashboardTabState extends State<OpsDashboardTab> {
 
   @override
   Widget build(BuildContext context) {
-    final ordersSummary = _slaSummary(_orders, SlaConfig.orderWarn, SlaConfig.orderCrit, 'createdAt');
-    final callsSummary = _slaSummary(_calls, SlaConfig.callWarn, SlaConfig.callCrit, 'createdAt');
-    final billsSummary = _slaSummary(_bills, SlaConfig.billWarn, SlaConfig.billCrit, 'createdAt');
-    final kitchenSummary = _slaSummary(_kitchen, SlaConfig.kitchenWarn, SlaConfig.kitchenCrit, 'ageSeconds');
-    final alerts = _criticalOnly ? _alerts() : _alerts(includeWarn: true);
-    final heat = _heatByTable();
+    final ordersFiltered = _filterSinceShift(_orders, 'createdAt');
+    final callsFiltered = _filterSinceShift(_calls, 'createdAt');
+    final billsFiltered = _filterSinceShift(_bills, 'createdAt');
+    final kitchenFiltered = _filterSinceShift(_kitchen, 'createdAt');
+    final ordersSummary = _slaSummary(ordersFiltered, SlaConfig.orderWarn, SlaConfig.orderCrit, 'createdAt');
+    final callsSummary = _slaSummary(callsFiltered, SlaConfig.callWarn, SlaConfig.callCrit, 'createdAt');
+    final billsSummary = _slaSummary(billsFiltered, SlaConfig.billWarn, SlaConfig.billCrit, 'createdAt');
+    final kitchenSummary = _slaSummary(kitchenFiltered, SlaConfig.kitchenWarn, SlaConfig.kitchenCrit, 'ageSeconds');
+    final alerts = _criticalOnly
+        ? _alerts(orders: ordersFiltered, calls: callsFiltered, bills: billsFiltered, kitchen: kitchenFiltered)
+        : _alerts(includeWarn: true, orders: ordersFiltered, calls: callsFiltered, bills: billsFiltered, kitchen: kitchenFiltered);
+    final heat = _heatByTable(ordersFiltered, callsFiltered, billsFiltered, kitchenFiltered);
     final hotTables = heat.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
 
     return Scaffold(
@@ -4296,7 +4970,30 @@ class _OpsDashboardTabState extends State<OpsDashboardTab> {
                     const SizedBox(height: 10),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                      child: Text(_tr(context, 'focusCards'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                      child: Text(
+                        _shiftStart == null ? _tr(context, 'focusCards') : _tr(context, 'focusCardsShift'),
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _shiftStart == null
+                                  ? _tr(context, 'shiftNotStarted')
+                                  : '${_tr(context, 'shiftActiveSince')}: ${_shiftStart!.toLocal().toIso8601String().substring(11, 16)}',
+                              style: const TextStyle(color: Colors.black54, fontSize: 12),
+                            ),
+                          ),
+                          if (_shiftStart == null)
+                            TextButton(onPressed: _startShiftNow, child: Text(_tr(context, 'shiftStartNow'))),
+                          if (_shiftStart != null)
+                            TextButton(onPressed: _clearShift, child: Text(_tr(context, 'shiftClear'))),
+                        ],
+                      ),
                     ),
                     _focusRow(context, _tr(context, 'orders'), (ordersSummary['focus'] as List<MapEntry<int, Duration>>), ordersSummary['counts'] as Map<int, int>,
                         SlaConfig.orderWarn, SlaConfig.orderCrit),
@@ -4392,6 +5089,44 @@ class _OpsDashboardTabState extends State<OpsDashboardTab> {
                         onTap: () => _jumpToTab(a),
                       );
                     }).toList(),
+                    const SizedBox(height: 12),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                      child: Text(_tr(context, 'slaEventsTitle'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+                      child: Text(_tr(context, 'slaEventsHint'), style: const TextStyle(color: Colors.black54)),
+                    ),
+                    if (_loadingSlaEvents)
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(16, 4, 16, 0),
+                        child: LinearProgressIndicator(),
+                      )
+                    else if (_slaEventsError != null)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                        child: Text(_slaEventsError!, style: const TextStyle(color: Colors.red)),
+                      )
+                    else if (_slaEvents.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                        child: Text(_tr(context, 'slaEventsEmpty'), style: const TextStyle(color: Colors.black54)),
+                      )
+                    else
+                      ..._slaEvents.map((e) {
+                        final action = e['action']?.toString() ?? '';
+                        final entityType = e['entityType']?.toString() ?? '';
+                        final entityId = e['entityId']?.toString() ?? '';
+                        final actor = e['actorUsername']?.toString() ?? '';
+                        final createdAt = e['createdAt']?.toString() ?? '';
+                        final time = createdAt.length >= 19 ? createdAt.substring(11, 19) : createdAt;
+                        return ListTile(
+                          leading: const Icon(Icons.history),
+                          title: Text('$action • $entityType #$entityId'),
+                          subtitle: Text('$actor • $time'),
+                        );
+                      }).toList(),
                   ],
                 ),
     );

@@ -10,6 +10,7 @@ import md.virtualwaiter.repo.BranchReviewRepo;
 import md.virtualwaiter.repo.StaffUserRepo;
 import md.virtualwaiter.repo.TenantRepo;
 import md.virtualwaiter.service.StatsService;
+import md.virtualwaiter.service.AuditService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -55,6 +56,7 @@ public class SuperAdminController {
   private final CafeTableRepo tableRepo;
   private final PasswordEncoder passwordEncoder;
   private final StatsService statsService;
+  private final AuditService auditService;
   private final int maxPhotoUrlLength;
   private final Set<String> allowedPhotoExts;
   private final String mediaPublicBaseUrl;
@@ -67,6 +69,7 @@ public class SuperAdminController {
     CafeTableRepo tableRepo,
     PasswordEncoder passwordEncoder,
     StatsService statsService,
+    AuditService auditService,
     @Value("${app.media.maxPhotoUrlLength:512}") int maxPhotoUrlLength,
     @Value("${app.media.allowedPhotoExts:jpg,jpeg,png,webp,gif}") String allowedPhotoExts,
     @Value("${app.media.publicBaseUrl:http://localhost:8080}") String mediaPublicBaseUrl
@@ -78,6 +81,7 @@ public class SuperAdminController {
     this.tableRepo = tableRepo;
     this.passwordEncoder = passwordEncoder;
     this.statsService = statsService;
+    this.auditService = auditService;
     this.maxPhotoUrlLength = maxPhotoUrlLength;
     this.allowedPhotoExts = parseExts(allowedPhotoExts);
     this.mediaPublicBaseUrl = trimTrailingSlash(mediaPublicBaseUrl);
@@ -150,7 +154,7 @@ public class SuperAdminController {
 
   @PostMapping("/tenants")
   public TenantDto createTenant(@Valid @RequestBody CreateTenantRequest req, Authentication auth) {
-    requireSuper(auth);
+    StaffUser u = requireSuper(auth);
     Tenant t = new Tenant();
     t.name = req.name;
     t.logoUrl = sanitizePhotoUrl(req.logoUrl);
@@ -160,6 +164,7 @@ public class SuperAdminController {
     t.contactPerson = trimOrNull(req.contactPerson);
     t.isActive = true;
     t = tenantRepo.save(t);
+    auditService.log(u, "CREATE", "Tenant", t.id, null);
     return new TenantDto(
       t.id,
       t.name,
@@ -174,7 +179,7 @@ public class SuperAdminController {
 
   @PatchMapping("/tenants/{id}")
   public TenantDto updateTenant(@PathVariable long id, @RequestBody UpdateTenantRequest req, Authentication auth) {
-    requireSuper(auth);
+    StaffUser u = requireSuper(auth);
     Tenant t = tenantRepo.findById(id)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tenant not found"));
     if (req.name != null) t.name = req.name;
@@ -185,6 +190,7 @@ public class SuperAdminController {
     if (req.contactPerson != null) t.contactPerson = trimOrNull(req.contactPerson);
     if (req.isActive != null) t.isActive = req.isActive;
     t = tenantRepo.save(t);
+    auditService.log(u, "UPDATE", "Tenant", t.id, null);
     return new TenantDto(
       t.id,
       t.name,
@@ -199,10 +205,11 @@ public class SuperAdminController {
 
   @DeleteMapping("/tenants/{id}")
   public void deleteTenant(@PathVariable long id, Authentication auth) {
-    requireSuper(auth);
+    StaffUser u = requireSuper(auth);
     Tenant t = tenantRepo.findById(id)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tenant not found"));
     tenantRepo.delete(t);
+    auditService.log(u, "DELETE", "Tenant", t.id, null);
   }
 
   // --- Branches ---
@@ -265,7 +272,7 @@ public class SuperAdminController {
 
   @PostMapping("/tenants/{tenantId}/branches")
   public BranchDto createBranch(@PathVariable long tenantId, @Valid @RequestBody CreateBranchRequest req, Authentication auth) {
-    requireSuper(auth);
+    StaffUser u = requireSuper(auth);
     Tenant t = tenantRepo.findById(tenantId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tenant not found"));
     if (!t.isActive) {
@@ -281,6 +288,7 @@ public class SuperAdminController {
     b.contactPerson = trimOrNull(req.contactPerson);
     b.isActive = true;
     b = branchRepo.save(b);
+    auditService.log(u, "CREATE", "Branch", b.id, null);
     return new BranchDto(
       b.id,
       b.tenantId,
@@ -296,7 +304,7 @@ public class SuperAdminController {
 
   @PatchMapping("/branches/{id}")
   public BranchDto updateBranch(@PathVariable long id, @RequestBody UpdateBranchRequest req, Authentication auth) {
-    requireSuper(auth);
+    StaffUser u = requireSuper(auth);
     Branch b = branchRepo.findById(id)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
     if (req.name != null) b.name = req.name;
@@ -307,6 +315,7 @@ public class SuperAdminController {
     if (req.contactPerson != null) b.contactPerson = trimOrNull(req.contactPerson);
     if (req.isActive != null) b.isActive = req.isActive;
     b = branchRepo.save(b);
+    auditService.log(u, "UPDATE", "Branch", b.id, null);
     return new BranchDto(
       b.id,
       b.tenantId,
@@ -322,10 +331,11 @@ public class SuperAdminController {
 
   @DeleteMapping("/branches/{id}")
   public void deleteBranch(@PathVariable long id, Authentication auth) {
-    requireSuper(auth);
+    StaffUser u = requireSuper(auth);
     Branch b = branchRepo.findById(id)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
     branchRepo.delete(b);
+    auditService.log(u, "DELETE", "Branch", b.id, null);
   }
 
   // --- Staff users (global create) ---
@@ -363,9 +373,9 @@ public class SuperAdminController {
 
   @PostMapping("/staff")
   public StaffUserDto createStaff(@Valid @RequestBody CreateStaffUserRequest req, Authentication auth) {
-    requireSuper(auth);
+    StaffUser u = requireSuper(auth);
     String role = req.role.trim().toUpperCase(Locale.ROOT);
-    if (!Set.of("WAITER", "HOST", "KITCHEN", "BAR", "ADMIN", "MANAGER", "SUPER_ADMIN").contains(role)) {
+    if (!Set.of("WAITER", "HOST", "KITCHEN", "BAR", "ADMIN", "MANAGER", "SUPER_ADMIN", "OWNER").contains(role)) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported role");
     }
     StaffUser su = new StaffUser();
@@ -384,6 +394,7 @@ public class SuperAdminController {
     su.experienceYears = sanitizeExperienceYears(req.experienceYears);
     su.favoriteItems = sanitizeFavoriteItems(req.favoriteItems);
     su = staffUserRepo.save(su);
+    auditService.log(u, "CREATE", "StaffUser", su.id, null);
     return new StaffUserDto(
       su.id, su.branchId, su.username, su.role, su.isActive,
       su.firstName, su.lastName, su.age, su.gender, su.photoUrl,
@@ -408,7 +419,7 @@ public class SuperAdminController {
 
   @PatchMapping("/staff/{id}")
   public StaffUserDto updateStaff(@PathVariable long id, @RequestBody UpdateStaffUserRequest req, Authentication auth) {
-    requireSuper(auth);
+    StaffUser u = requireSuper(auth);
     StaffUser su = staffUserRepo.findById(id)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Staff user not found"));
     if (req.password != null && !req.password.isBlank()) {
@@ -416,7 +427,7 @@ public class SuperAdminController {
     }
     if (req.role != null) {
       String role = req.role.trim().toUpperCase(Locale.ROOT);
-      if (!Set.of("WAITER", "HOST", "KITCHEN", "BAR", "ADMIN", "MANAGER", "SUPER_ADMIN").contains(role)) {
+      if (!Set.of("WAITER", "HOST", "KITCHEN", "BAR", "ADMIN", "MANAGER", "SUPER_ADMIN", "OWNER").contains(role)) {
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported role");
       }
       su.role = role;
@@ -432,6 +443,7 @@ public class SuperAdminController {
     if (req.experienceYears != null) su.experienceYears = sanitizeExperienceYears(req.experienceYears);
     if (req.favoriteItems != null) su.favoriteItems = sanitizeFavoriteItems(req.favoriteItems);
     su = staffUserRepo.save(su);
+    auditService.log(u, "UPDATE", "StaffUser", su.id, null);
     return new StaffUserDto(
       su.id, su.branchId, su.username, su.role, su.isActive,
       su.firstName, su.lastName, su.age, su.gender, su.photoUrl,
@@ -461,11 +473,12 @@ public class SuperAdminController {
 
   @DeleteMapping("/staff/{id}")
   public void deleteStaff(@PathVariable long id, Authentication auth) {
-    requireSuper(auth);
+    StaffUser u = requireSuper(auth);
     StaffUser su = staffUserRepo.findById(id)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Staff user not found"));
     tableRepo.clearAssignedWaiter(su.id);
     staffUserRepo.delete(su);
+    auditService.log(u, "DELETE", "StaffUser", su.id, null);
   }
 
   // --- Stats ---
