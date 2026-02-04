@@ -52,7 +52,12 @@ public class BranchSettingsService {
     boolean payCashEnabled,
     boolean payTerminalEnabled,
     String currencyCode,
-    String defaultLang
+    String defaultLang,
+    String commissionModel,
+    int commissionMonthlyFixedCents,
+    int commissionMonthlyPercent,
+    int commissionOrderPercent,
+    int commissionOrderFixedCents
   ) {}
 
   public Resolved resolveForBranch(long branchId) {
@@ -80,7 +85,12 @@ public class BranchSettingsService {
       boolOr(s == null ? null : s.payCashEnabled, true),
       boolOr(s == null ? null : s.payTerminalEnabled, true),
       strOr(s == null ? null : s.currencyCode, "MDL"),
-      strOr(s == null ? null : s.defaultLang, "ru")
+      strOr(s == null ? null : s.defaultLang, "ru"),
+      strOr(s == null ? null : s.commissionModel, "MONTHLY_FIXED"),
+      intOr(s == null ? null : s.commissionMonthlyFixedCents, 0),
+      intOr(s == null ? null : s.commissionMonthlyPercent, 0),
+      intOr(s == null ? null : s.commissionOrderPercent, 0),
+      intOr(s == null ? null : s.commissionOrderFixedCents, 0)
     );
   }
 

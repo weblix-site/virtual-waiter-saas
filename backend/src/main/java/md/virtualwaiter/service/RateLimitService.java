@@ -10,6 +10,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 import jakarta.annotation.PreDestroy;
+import org.springframework.lang.Nullable;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
@@ -25,13 +28,15 @@ public class RateLimitService {
   private final JedisPool jedisPool;
   private final int redisTimeoutMs;
   private final AtomicLong redisFailureCount = new AtomicLong(0);
+  private final Counter redisFailureCounter;
 
   public RateLimitService(
     @Value("${app.rateLimit.redis.host:}") String redisHost,
     @Value("${app.rateLimit.redis.port:6379}") int redisPort,
     @Value("${app.rateLimit.redis.password:}") String redisPassword,
     @Value("${app.rateLimit.redis.enabled:false}") boolean redisEnabled,
-    @Value("${app.rateLimit.redis.timeoutMs:2000}") int redisTimeoutMs
+    @Value("${app.rateLimit.redis.timeoutMs:2000}") int redisTimeoutMs,
+    @Nullable MeterRegistry meterRegistry
   ) {
     this.redisHost = redisHost;
     this.redisPort = redisPort;
@@ -39,6 +44,9 @@ public class RateLimitService {
     this.redisEnabled = redisEnabled;
     this.redisTimeoutMs = redisTimeoutMs;
     this.jedisPool = buildPool();
+    this.redisFailureCounter = meterRegistry == null
+      ? null
+      : meterRegistry.counter("vw.ratelimit.redis.failures");
   }
 
   public boolean allow(String key, int limit, int windowSeconds) {
@@ -56,6 +64,9 @@ public class RateLimitService {
         return true;
       } catch (Exception e) {
         redisFailureCount.incrementAndGet();
+        if (redisFailureCounter != null) {
+          redisFailureCounter.increment();
+        }
         // fallback to in-memory
       }
     }
@@ -84,6 +95,8 @@ public class RateLimitService {
     config.setMaxTotal(16);
     config.setMaxIdle(8);
     config.setMinIdle(1);
+    config.setMaxWaitMillis(redisTimeoutMs);
+    config.setBlockWhenExhausted(true);
     config.setTestOnBorrow(true);
     config.setTestWhileIdle(true);
     if (redisPassword != null && !redisPassword.isBlank()) {

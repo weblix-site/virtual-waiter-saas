@@ -37,6 +37,8 @@ services:
       APP_PUBLIC_BASE_URL: ${APP_PUBLIC_BASE_URL}
       APP_QR_HMAC_SECRET: ${APP_QR_HMAC_SECRET}
       APP_AUTH_COOKIE_SECRET: ${APP_AUTH_COOKIE_SECRET}
+      APP_MEDIA_STORAGE_ROOT: /data/uploads
+      APP_MEDIA_PUBLIC_BASE_URL: ${APP_MEDIA_PUBLIC_BASE_URL:-http://localhost:8080}
       APP_RATELIMIT_REDIS_ENABLED: ${RATE_LIMIT_REDIS_ENABLED}
       APP_RATELIMIT_REDIS_HOST: ${RATE_LIMIT_REDIS_HOST}
       APP_RATELIMIT_REDIS_PORT: ${RATE_LIMIT_REDIS_PORT}
@@ -46,6 +48,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    volumes:
+      - vw_uploads:/data/uploads
     healthcheck:
       test: ["CMD-SHELL", "curl -s http://localhost:8080/actuator/health >/dev/null || exit 1"]
       interval: 10s
@@ -90,3 +94,4 @@ services:
 
 volumes:
   vw_pgdata:
+  vw_uploads:

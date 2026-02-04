@@ -47,6 +47,7 @@ public class StaffPushService {
   private final CafeTableRepo tableRepo;
   private final PushProperties pushProperties;
   private final int maxLogPayloadChars;
+  private final int maxEventPayloadBytes;
   private final ObjectMapper objectMapper = new ObjectMapper();
   private final HttpClient httpClient = HttpClient.newHttpClient();
 
@@ -58,7 +59,8 @@ public class StaffPushService {
     BillRequestRepo billRequestRepo,
     CafeTableRepo tableRepo,
     PushProperties pushProperties,
-    @Value("${app.log.maxPayloadChars:2000}") int maxLogPayloadChars
+    @Value("${app.log.maxPayloadChars:2000}") int maxLogPayloadChars,
+    @Value("${app.payload.maxBytes:4096}") int maxEventPayloadBytes
   ) {
     this.tokenRepo = tokenRepo;
     this.staffUserRepo = staffUserRepo;
@@ -68,6 +70,7 @@ public class StaffPushService {
     this.tableRepo = tableRepo;
     this.pushProperties = pushProperties;
     this.maxLogPayloadChars = maxLogPayloadChars;
+    this.maxEventPayloadBytes = maxEventPayloadBytes;
   }
 
   public void notifyBranch(long branchId, String type, long refId) {
@@ -189,8 +192,11 @@ public class StaffPushService {
       }
 
       String body = objectMapper.writeValueAsString(payload);
-      if (pushProperties.getMaxPayloadBytes() > 0 && body.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > pushProperties.getMaxPayloadBytes()) {
-        log.warn("[FCM] payload too large ({} bytes > {}), skip send", body.getBytes(java.nio.charset.StandardCharsets.UTF_8).length, pushProperties.getMaxPayloadBytes());
+      int effectiveMax = pushProperties.getMaxPayloadBytes() > 0
+        ? Math.min(pushProperties.getMaxPayloadBytes(), maxEventPayloadBytes)
+        : maxEventPayloadBytes;
+      if (effectiveMax > 0 && body.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > effectiveMax) {
+        log.warn("[FCM] payload too large ({} bytes > {}), skip send", body.getBytes(java.nio.charset.StandardCharsets.UTF_8).length, effectiveMax);
         return;
       }
       HttpRequest req = HttpRequest.newBuilder()

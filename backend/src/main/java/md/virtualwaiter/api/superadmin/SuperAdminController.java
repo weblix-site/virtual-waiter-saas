@@ -57,6 +57,7 @@ public class SuperAdminController {
   private final StatsService statsService;
   private final int maxPhotoUrlLength;
   private final Set<String> allowedPhotoExts;
+  private final String mediaPublicBaseUrl;
 
   public SuperAdminController(
     StaffUserRepo staffUserRepo,
@@ -67,7 +68,8 @@ public class SuperAdminController {
     PasswordEncoder passwordEncoder,
     StatsService statsService,
     @Value("${app.media.maxPhotoUrlLength:512}") int maxPhotoUrlLength,
-    @Value("${app.media.allowedPhotoExts:jpg,jpeg,png,webp,gif}") String allowedPhotoExts
+    @Value("${app.media.allowedPhotoExts:jpg,jpeg,png,webp,gif}") String allowedPhotoExts,
+    @Value("${app.media.publicBaseUrl:http://localhost:8080}") String mediaPublicBaseUrl
   ) {
     this.staffUserRepo = staffUserRepo;
     this.tenantRepo = tenantRepo;
@@ -78,6 +80,7 @@ public class SuperAdminController {
     this.statsService = statsService;
     this.maxPhotoUrlLength = maxPhotoUrlLength;
     this.allowedPhotoExts = parseExts(allowedPhotoExts);
+    this.mediaPublicBaseUrl = trimTrailingSlash(mediaPublicBaseUrl);
   }
 
   private StaffUser requireSuper(Authentication auth) {
@@ -94,9 +97,33 @@ public class SuperAdminController {
   }
 
   // --- Tenants ---
-  public record TenantDto(long id, String name, boolean isActive) {}
-  public record CreateTenantRequest(@NotBlank String name) {}
-  public record UpdateTenantRequest(String name, Boolean isActive) {}
+  public record TenantDto(
+    long id,
+    String name,
+    String logoUrl,
+    String country,
+    String address,
+    String phone,
+    String contactPerson,
+    boolean isActive
+  ) {}
+  public record CreateTenantRequest(
+    @NotBlank String name,
+    String logoUrl,
+    String country,
+    String address,
+    String phone,
+    String contactPerson
+  ) {}
+  public record UpdateTenantRequest(
+    String name,
+    String logoUrl,
+    String country,
+    String address,
+    String phone,
+    String contactPerson,
+    Boolean isActive
+  ) {}
 
   @GetMapping("/tenants")
   public List<TenantDto> listTenants(@RequestParam(value = "isActive", required = false) Boolean isActive, Authentication auth) {
@@ -106,7 +133,18 @@ public class SuperAdminController {
       list = list.stream().filter(t -> t.isActive == isActive).toList();
     }
     List<TenantDto> out = new ArrayList<>();
-    for (Tenant t : list) out.add(new TenantDto(t.id, t.name, t.isActive));
+    for (Tenant t : list) {
+      out.add(new TenantDto(
+        t.id,
+        t.name,
+        t.logoUrl,
+        t.country,
+        t.address,
+        t.phone,
+        t.contactPerson,
+        t.isActive
+      ));
+    }
     return out;
   }
 
@@ -115,9 +153,23 @@ public class SuperAdminController {
     requireSuper(auth);
     Tenant t = new Tenant();
     t.name = req.name;
+    t.logoUrl = sanitizePhotoUrl(req.logoUrl);
+    t.country = trimOrNull(req.country);
+    t.address = trimOrNull(req.address);
+    t.phone = trimOrNull(req.phone);
+    t.contactPerson = trimOrNull(req.contactPerson);
     t.isActive = true;
     t = tenantRepo.save(t);
-    return new TenantDto(t.id, t.name, t.isActive);
+    return new TenantDto(
+      t.id,
+      t.name,
+      t.logoUrl,
+      t.country,
+      t.address,
+      t.phone,
+      t.contactPerson,
+      t.isActive
+    );
   }
 
   @PatchMapping("/tenants/{id}")
@@ -126,9 +178,23 @@ public class SuperAdminController {
     Tenant t = tenantRepo.findById(id)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tenant not found"));
     if (req.name != null) t.name = req.name;
+    if (req.logoUrl != null) t.logoUrl = sanitizePhotoUrl(req.logoUrl);
+    if (req.country != null) t.country = trimOrNull(req.country);
+    if (req.address != null) t.address = trimOrNull(req.address);
+    if (req.phone != null) t.phone = trimOrNull(req.phone);
+    if (req.contactPerson != null) t.contactPerson = trimOrNull(req.contactPerson);
     if (req.isActive != null) t.isActive = req.isActive;
     t = tenantRepo.save(t);
-    return new TenantDto(t.id, t.name, t.isActive);
+    return new TenantDto(
+      t.id,
+      t.name,
+      t.logoUrl,
+      t.country,
+      t.address,
+      t.phone,
+      t.contactPerson,
+      t.isActive
+    );
   }
 
   @DeleteMapping("/tenants/{id}")
@@ -140,9 +206,34 @@ public class SuperAdminController {
   }
 
   // --- Branches ---
-  public record BranchDto(long id, long tenantId, String name, boolean isActive) {}
-  public record CreateBranchRequest(@NotBlank String name) {}
-  public record UpdateBranchRequest(String name, Boolean isActive) {}
+  public record BranchDto(
+    long id,
+    long tenantId,
+    String name,
+    String logoUrl,
+    String country,
+    String address,
+    String phone,
+    String contactPerson,
+    boolean isActive
+  ) {}
+  public record CreateBranchRequest(
+    @NotBlank String name,
+    String logoUrl,
+    String country,
+    String address,
+    String phone,
+    String contactPerson
+  ) {}
+  public record UpdateBranchRequest(
+    String name,
+    String logoUrl,
+    String country,
+    String address,
+    String phone,
+    String contactPerson,
+    Boolean isActive
+  ) {}
 
   @GetMapping("/branches")
   public List<BranchDto> listBranches(
@@ -156,7 +247,19 @@ public class SuperAdminController {
       list = list.stream().filter(b -> b.isActive == isActive).toList();
     }
     List<BranchDto> out = new ArrayList<>();
-    for (Branch b : list) out.add(new BranchDto(b.id, b.tenantId, b.name, b.isActive));
+    for (Branch b : list) {
+      out.add(new BranchDto(
+        b.id,
+        b.tenantId,
+        b.name,
+        b.logoUrl,
+        b.country,
+        b.address,
+        b.phone,
+        b.contactPerson,
+        b.isActive
+      ));
+    }
     return out;
   }
 
@@ -171,9 +274,24 @@ public class SuperAdminController {
     Branch b = new Branch();
     b.tenantId = tenantId;
     b.name = req.name;
+    b.logoUrl = sanitizePhotoUrl(req.logoUrl);
+    b.country = trimOrNull(req.country);
+    b.address = trimOrNull(req.address);
+    b.phone = trimOrNull(req.phone);
+    b.contactPerson = trimOrNull(req.contactPerson);
     b.isActive = true;
     b = branchRepo.save(b);
-    return new BranchDto(b.id, b.tenantId, b.name, b.isActive);
+    return new BranchDto(
+      b.id,
+      b.tenantId,
+      b.name,
+      b.logoUrl,
+      b.country,
+      b.address,
+      b.phone,
+      b.contactPerson,
+      b.isActive
+    );
   }
 
   @PatchMapping("/branches/{id}")
@@ -182,9 +300,24 @@ public class SuperAdminController {
     Branch b = branchRepo.findById(id)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
     if (req.name != null) b.name = req.name;
+    if (req.logoUrl != null) b.logoUrl = sanitizePhotoUrl(req.logoUrl);
+    if (req.country != null) b.country = trimOrNull(req.country);
+    if (req.address != null) b.address = trimOrNull(req.address);
+    if (req.phone != null) b.phone = trimOrNull(req.phone);
+    if (req.contactPerson != null) b.contactPerson = trimOrNull(req.contactPerson);
     if (req.isActive != null) b.isActive = req.isActive;
     b = branchRepo.save(b);
-    return new BranchDto(b.id, b.tenantId, b.name, b.isActive);
+    return new BranchDto(
+      b.id,
+      b.tenantId,
+      b.name,
+      b.logoUrl,
+      b.country,
+      b.address,
+      b.phone,
+      b.contactPerson,
+      b.isActive
+    );
   }
 
   @DeleteMapping("/branches/{id}")
@@ -530,6 +663,10 @@ public class SuperAdminController {
       logReject("Photo URL too long", url);
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Photo URL too long");
     }
+    if (url.startsWith("/media/")) {
+      validatePhotoPath(url, url);
+      return url;
+    }
     URI uri;
     try {
       uri = new URI(url);
@@ -551,6 +688,15 @@ public class SuperAdminController {
       logReject("Photo URL path is required", url);
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Photo URL path is required");
     }
+    if (!mediaPublicBaseUrl.isBlank() && !url.startsWith(mediaPublicBaseUrl + "/media/")) {
+      logReject("External photo URL is not allowed", url);
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "External photo URL is not allowed");
+    }
+    validatePhotoPath(path, url);
+    return url;
+  }
+
+  private void validatePhotoPath(String path, String url) {
     int dot = path.lastIndexOf('.');
     if (dot < 0 || dot == path.length() - 1) {
       logReject("Photo URL must include file extension", url);
@@ -561,7 +707,6 @@ public class SuperAdminController {
       logReject("Unsupported photo type", url);
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported photo type");
     }
-    return url;
   }
 
   private void logReject(String reason, String url) {
@@ -580,5 +725,12 @@ public class SuperAdminController {
     if (v == null) return null;
     String t = v.trim().toLowerCase(Locale.ROOT);
     return switch (t) { case "male", "female", "other" -> t; default -> null; };
+  }
+
+  private static String trimTrailingSlash(String v) {
+    if (v == null) return "";
+    String s = v.trim();
+    if (s.endsWith("/")) return s.substring(0, s.length() - 1);
+    return s;
   }
 }

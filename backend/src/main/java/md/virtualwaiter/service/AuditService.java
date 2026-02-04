@@ -15,15 +15,18 @@ public class AuditService {
   private final AuditLogRepo repo;
   private final int maxDetailsChars;
   private final int maxLogPayloadChars;
+  private final int maxEventPayloadBytes;
 
   public AuditService(
     AuditLogRepo repo,
     @Value("${app.audit.maxDetailsChars:4000}") int maxDetailsChars,
-    @Value("${app.log.maxPayloadChars:2000}") int maxLogPayloadChars
+    @Value("${app.log.maxPayloadChars:2000}") int maxLogPayloadChars,
+    @Value("${app.payload.maxBytes:4096}") int maxEventPayloadBytes
   ) {
     this.repo = repo;
     this.maxDetailsChars = maxDetailsChars;
     this.maxLogPayloadChars = maxLogPayloadChars;
+    this.maxEventPayloadBytes = maxEventPayloadBytes;
   }
 
   public void log(StaffUser actor, String action, String entityType, Long entityId, String detailsJson) {
@@ -44,12 +47,13 @@ public class AuditService {
   private String truncate(String detailsJson) {
     if (detailsJson == null) return null;
     if (maxDetailsChars <= 0) return null;
-    if (detailsJson.length() <= maxDetailsChars) return detailsJson;
-    log.warn("Audit detailsJson truncated (maxDetailsChars={}, preview={})", maxDetailsChars, PayloadGuard.truncate(detailsJson, maxLogPayloadChars));
+    String byBytes = PayloadGuard.truncateBytes(detailsJson, maxEventPayloadBytes);
+    if (byBytes.length() <= maxDetailsChars) return byBytes;
+    log.warn("Audit detailsJson truncated (maxDetailsChars={}, maxBytes={}, preview={})", maxDetailsChars, maxEventPayloadBytes, PayloadGuard.truncate(byBytes, maxLogPayloadChars));
     String suffix = "...(truncated)";
     if (maxDetailsChars <= suffix.length()) {
-      return detailsJson.substring(0, maxDetailsChars);
+      return byBytes.substring(0, maxDetailsChars);
     }
-    return detailsJson.substring(0, maxDetailsChars - suffix.length()) + suffix;
+    return byBytes.substring(0, maxDetailsChars - suffix.length()) + suffix;
   }
 }

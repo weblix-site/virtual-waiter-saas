@@ -47,7 +47,9 @@ const dict: Record<string, Record<Lang, string>> = {
   genderMale: { ru: "Мужской", ro: "Masculin", en: "Male" },
   genderFemale: { ru: "Женский", ro: "Feminin", en: "Female" },
   genderOther: { ru: "Другое", ro: "Altul", en: "Other" },
-  photoUrl: { ru: "Фото (URL)", ro: "Foto (URL)", en: "Photo URL" },
+  photoUrl: { ru: "Фото", ro: "Foto", en: "Photo" },
+  photoUpload: { ru: "Загрузить фото", ro: "Încarcă foto", en: "Upload photo" },
+  uploading: { ru: "Загрузка...", ro: "Se încarcă...", en: "Uploading..." },
   rating: { ru: "Рейтинг (0–5)", ro: "Rating (0–5)", en: "Rating (0–5)" },
   recommended: { ru: "Рекомендуемый", ro: "Recomandat", en: "Recommended" },
   experienceYears: { ru: "Стаж (лет)", ro: "Experiență (ani)", en: "Experience (years)" },
@@ -59,8 +61,8 @@ const dict: Record<string, Record<Lang, string>> = {
   role: { ru: "Роль", ro: "Rol", en: "Role" },
   roleWaiter: { ru: "Официант", ro: "Chelner", en: "Waiter" },
   roleHost: { ru: "Хост", ro: "Host", en: "Host" },
-  roleKitchen: { ru: "Кухня", ro: "Bucătărie", en: "Kitchen" },
-  roleBar: { ru: "Бар", ro: "Bar", en: "Bar" },
+  roleKitchen: { ru: "Повар", ro: "Bucătar", en: "Kitchen" },
+  roleBar: { ru: "Бармен", ro: "Barman", en: "Bar" },
   roleAdmin: { ru: "Администратор", ro: "Administrator", en: "Admin" },
   roleManager: { ru: "Менеджер", ro: "Manager", en: "Manager" },
   roleSuperAdmin: { ru: "Супер‑админ", ro: "Super‑admin", en: "Super admin" },
@@ -156,12 +158,39 @@ const dict: Record<string, Record<Lang, string>> = {
   templateDefaultName: { ru: "Шаблон", ro: "Șablon", en: "Template" },
   loadError: { ru: "Ошибка загрузки", ro: "Eroare la încărcare", en: "Load error" },
   requestFailed: { ru: "Ошибка запроса", ro: "Eroare solicitare", en: "Request failed" },
+  logo: { ru: "Логотип", ro: "Logo", en: "Logo" },
+  country: { ru: "Страна", ro: "Țară", en: "Country" },
+  address: { ru: "Адрес", ro: "Adresă", en: "Address" },
+  phone: { ru: "Телефон", ro: "Telefon", en: "Phone" },
+  contactPerson: { ru: "Ответственное лицо", ro: "Persoană responsabilă", en: "Contact person" },
+  editEntity: { ru: "Редактировать", ro: "Editează", en: "Edit" },
+  cancelEdit: { ru: "Отменить", ro: "Anulează", en: "Cancel" },
+  saveEntity: { ru: "Сохранить", ro: "Salvează", en: "Save" },
 };
 
 const t = (lang: Lang, key: string) => dict[key]?.[lang] ?? key;
 
-type Tenant = { id: number; name: string; isActive: boolean };
-type Branch = { id: number; tenantId: number; name: string; isActive: boolean };
+type Tenant = {
+  id: number;
+  name: string;
+  logoUrl?: string | null;
+  country?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  contactPerson?: string | null;
+  isActive: boolean;
+};
+type Branch = {
+  id: number;
+  tenantId: number;
+  name: string;
+  logoUrl?: string | null;
+  country?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  contactPerson?: string | null;
+  isActive: boolean;
+};
 type BranchSettings = { branchId: number; defaultLang?: string };
 type StaffUser = {
   id: number;
@@ -339,7 +368,37 @@ export default function SuperAdminPage() {
   } | null>(null);
 
   const [newTenantName, setNewTenantName] = useState("");
+  const [newTenantLogoUrl, setNewTenantLogoUrl] = useState("");
+  const [newTenantCountry, setNewTenantCountry] = useState("");
+  const [newTenantAddress, setNewTenantAddress] = useState("");
+  const [newTenantPhone, setNewTenantPhone] = useState("");
+  const [newTenantContactPerson, setNewTenantContactPerson] = useState("");
+  const [newTenantLogoUploading, setNewTenantLogoUploading] = useState(false);
   const [newBranchName, setNewBranchName] = useState("");
+  const [newBranchLogoUrl, setNewBranchLogoUrl] = useState("");
+  const [newBranchCountry, setNewBranchCountry] = useState("");
+  const [newBranchAddress, setNewBranchAddress] = useState("");
+  const [newBranchPhone, setNewBranchPhone] = useState("");
+  const [newBranchContactPerson, setNewBranchContactPerson] = useState("");
+  const [newBranchLogoUploading, setNewBranchLogoUploading] = useState(false);
+
+  const [editingTenantId, setEditingTenantId] = useState<number | null>(null);
+  const [editTenantName, setEditTenantName] = useState("");
+  const [editTenantLogoUrl, setEditTenantLogoUrl] = useState("");
+  const [editTenantCountry, setEditTenantCountry] = useState("");
+  const [editTenantAddress, setEditTenantAddress] = useState("");
+  const [editTenantPhone, setEditTenantPhone] = useState("");
+  const [editTenantContactPerson, setEditTenantContactPerson] = useState("");
+  const [editTenantLogoUploading, setEditTenantLogoUploading] = useState(false);
+
+  const [editingBranchId, setEditingBranchId] = useState<number | null>(null);
+  const [editBranchName, setEditBranchName] = useState("");
+  const [editBranchLogoUrl, setEditBranchLogoUrl] = useState("");
+  const [editBranchCountry, setEditBranchCountry] = useState("");
+  const [editBranchAddress, setEditBranchAddress] = useState("");
+  const [editBranchPhone, setEditBranchPhone] = useState("");
+  const [editBranchContactPerson, setEditBranchContactPerson] = useState("");
+  const [editBranchLogoUploading, setEditBranchLogoUploading] = useState(false);
   const [newStaffUser, setNewStaffUser] = useState("");
   const [newStaffPass, setNewStaffPass] = useState("");
   const [newStaffRole, setNewStaffRole] = useState("ADMIN");
@@ -352,6 +411,7 @@ export default function SuperAdminPage() {
   const [editStaffAge, setEditStaffAge] = useState("");
   const [editStaffGender, setEditStaffGender] = useState("");
   const [editStaffPhotoUrl, setEditStaffPhotoUrl] = useState("");
+  const [editStaffPhotoUploading, setEditStaffPhotoUploading] = useState(false);
   const [editStaffRating, setEditStaffRating] = useState("");
   const [editStaffRecommended, setEditStaffRecommended] = useState(false);
   const [editStaffExperienceYears, setEditStaffExperienceYears] = useState("");
@@ -412,6 +472,31 @@ export default function SuperAdminPage() {
       throw new Error(body?.message ?? `${t(lang, "requestFailed")} (${res.status})`);
     }
     return res;
+  }
+
+  async function uploadMediaFile(file: File, type: string) {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${API_BASE}/api/admin/media/upload?type=${encodeURIComponent(type)}`, {
+      method: "POST",
+      credentials: "include",
+      body: form,
+    });
+    if (!res.ok) {
+      if (res.status === 401 || res.status === 403) {
+        localStorage.removeItem("superUser");
+        setAuthReady(false);
+        setSessionExpired(true);
+        if (!redirectingRef.current && typeof window !== "undefined") {
+          redirectingRef.current = true;
+          window.location.href = "/superadmin";
+        }
+      }
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body?.message ?? `${t(lang, "requestFailed")} (${res.status})`);
+    }
+    const data = await res.json();
+    return data.url as string;
   }
 
   const waiterPalette = ["#FF6B6B", "#4ECDC4", "#FFD166", "#6C5CE7", "#00B894", "#FD79A8", "#0984E3"];
@@ -997,9 +1082,21 @@ export default function SuperAdminPage() {
   async function createTenant() {
     await api("/api/super/tenants", {
       method: "POST",
-      body: JSON.stringify({ name: newTenantName }),
+      body: JSON.stringify({
+        name: newTenantName,
+        logoUrl: newTenantLogoUrl || null,
+        country: newTenantCountry || null,
+        address: newTenantAddress || null,
+        phone: newTenantPhone || null,
+        contactPerson: newTenantContactPerson || null,
+      }),
     });
     setNewTenantName("");
+    setNewTenantLogoUrl("");
+    setNewTenantCountry("");
+    setNewTenantAddress("");
+    setNewTenantPhone("");
+    setNewTenantContactPerson("");
     loadTenants();
   }
 
@@ -1011,13 +1108,41 @@ export default function SuperAdminPage() {
     loadTenants();
   }
 
+  async function updateTenant(id: number) {
+    await api(`/api/super/tenants/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        name: editTenantName,
+        logoUrl: editTenantLogoUrl || null,
+        country: editTenantCountry || null,
+        address: editTenantAddress || null,
+        phone: editTenantPhone || null,
+        contactPerson: editTenantContactPerson || null,
+      }),
+    });
+    setEditingTenantId(null);
+    loadTenants();
+  }
+
   async function createBranch() {
     if (!tenantId) return;
     await api(`/api/super/tenants/${tenantId}/branches`, {
       method: "POST",
-      body: JSON.stringify({ name: newBranchName }),
+      body: JSON.stringify({
+        name: newBranchName,
+        logoUrl: newBranchLogoUrl || null,
+        country: newBranchCountry || null,
+        address: newBranchAddress || null,
+        phone: newBranchPhone || null,
+        contactPerson: newBranchContactPerson || null,
+      }),
     });
     setNewBranchName("");
+    setNewBranchLogoUrl("");
+    setNewBranchCountry("");
+    setNewBranchAddress("");
+    setNewBranchPhone("");
+    setNewBranchContactPerson("");
     loadTenants();
   }
 
@@ -1026,6 +1151,22 @@ export default function SuperAdminPage() {
       method: "PATCH",
       body: JSON.stringify({ isActive: !b.isActive }),
     });
+    loadTenants();
+  }
+
+  async function updateBranch(id: number) {
+    await api(`/api/super/branches/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        name: editBranchName,
+        logoUrl: editBranchLogoUrl || null,
+        country: editBranchCountry || null,
+        address: editBranchAddress || null,
+        phone: editBranchPhone || null,
+        contactPerson: editBranchContactPerson || null,
+      }),
+    });
+    setEditingBranchId(null);
     loadTenants();
   }
 
@@ -1156,18 +1297,92 @@ export default function SuperAdminPage() {
             ))}
           </select>
           <input placeholder={t(lang, "newTenantName")} value={newTenantName} onChange={(e) => setNewTenantName(e.target.value)} />
+          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            {t(lang, "photoUpload")}
+            <input
+              type="file"
+              accept="image/*"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                setNewTenantLogoUploading(true);
+                try {
+                  const url = await uploadMediaFile(file, "logo");
+                  setNewTenantLogoUrl(url);
+                } catch (err: any) {
+                  setError(err?.message ?? "Upload error");
+                } finally {
+                  setNewTenantLogoUploading(false);
+                  e.currentTarget.value = "";
+                }
+              }}
+            />
+          </label>
+          <input placeholder={t(lang, "logo")} value={newTenantLogoUrl} readOnly />
+          <input placeholder={t(lang, "country")} value={newTenantCountry} onChange={(e) => setNewTenantCountry(e.target.value)} />
+          <input placeholder={t(lang, "address")} value={newTenantAddress} onChange={(e) => setNewTenantAddress(e.target.value)} />
+          <input placeholder={t(lang, "phone")} value={newTenantPhone} onChange={(e) => setNewTenantPhone(e.target.value)} />
+          <input placeholder={t(lang, "contactPerson")} value={newTenantContactPerson} onChange={(e) => setNewTenantContactPerson(e.target.value)} />
           <button onClick={createTenant}>{t(lang, "createTenant")}</button>
+          {newTenantLogoUploading && <span style={{ fontSize: 12 }}>{t(lang, "uploading")}</span>}
         </div>
         <div style={{ marginTop: 10 }}>
-          {tenants.map((t) => (
-            <div key={t.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "4px 0" }}>
-              <strong>{t.name}</strong>
-              <span>{t.isActive ? translate(lang, "active") : translate(lang, "inactive")}</span>
-              <button onClick={() => toggleTenant(t)}>{t.isActive ? translate(lang, "disable") : translate(lang, "enable")}</button>
-              <button onClick={() => deleteTenant(t.id)}>{translate(lang, "delete")}</button>
+          {tenants.map((tenant) => (
+            <div key={tenant.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "4px 0", flexWrap: "wrap" }}>
+              <strong>{tenant.name}</strong>
+              <span>{tenant.isActive ? translate(lang, "active") : translate(lang, "inactive")}</span>
+              {tenant.country && <span>{translate(lang, "country")}: {tenant.country}</span>}
+              {tenant.phone && <span>{translate(lang, "phone")}: {tenant.phone}</span>}
+              <button onClick={() => toggleTenant(tenant)}>{tenant.isActive ? translate(lang, "disable") : translate(lang, "enable")}</button>
+              <button onClick={() => {
+                setEditingTenantId(tenant.id);
+                setEditTenantName(tenant.name ?? "");
+                setEditTenantLogoUrl(tenant.logoUrl ?? "");
+                setEditTenantCountry(tenant.country ?? "");
+                setEditTenantAddress(tenant.address ?? "");
+                setEditTenantPhone(tenant.phone ?? "");
+                setEditTenantContactPerson(tenant.contactPerson ?? "");
+              }}>{translate(lang, "editEntity")}</button>
+              <button onClick={() => deleteTenant(tenant.id)}>{translate(lang, "delete")}</button>
             </div>
           ))}
         </div>
+        {editingTenantId && (
+          <div style={{ marginTop: 8, border: "1px dashed #ddd", padding: 10 }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <input placeholder={t(lang, "newTenantName")} value={editTenantName} onChange={(e) => setEditTenantName(e.target.value)} />
+              <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                {t(lang, "photoUpload")}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setEditTenantLogoUploading(true);
+                    try {
+                      const url = await uploadMediaFile(file, "logo");
+                      setEditTenantLogoUrl(url);
+                    } catch (err: any) {
+                      setError(err?.message ?? "Upload error");
+                    } finally {
+                      setEditTenantLogoUploading(false);
+                      e.currentTarget.value = "";
+                    }
+                  }}
+                />
+              </label>
+              <input placeholder={t(lang, "logo")} value={editTenantLogoUrl} readOnly />
+              <input placeholder={t(lang, "country")} value={editTenantCountry} onChange={(e) => setEditTenantCountry(e.target.value)} />
+              <input placeholder={t(lang, "address")} value={editTenantAddress} onChange={(e) => setEditTenantAddress(e.target.value)} />
+              <input placeholder={t(lang, "phone")} value={editTenantPhone} onChange={(e) => setEditTenantPhone(e.target.value)} />
+              <input placeholder={t(lang, "contactPerson")} value={editTenantContactPerson} onChange={(e) => setEditTenantContactPerson(e.target.value)} />
+              <button onClick={() => updateTenant(editingTenantId)}>{t(lang, "saveEntity")}</button>
+              <button onClick={() => setEditingTenantId(null)}>{t(lang, "cancelEdit")}</button>
+              {editTenantLogoUploading && <span style={{ fontSize: 12 }}>{t(lang, "uploading")}</span>}
+            </div>
+          </div>
+        )}
       </section>
 
       <section style={{ marginTop: 24 }}>
@@ -1185,19 +1400,93 @@ export default function SuperAdminPage() {
             ))}
           </select>
           <input placeholder={t(lang, "newBranchName")} value={newBranchName} onChange={(e) => setNewBranchName(e.target.value)} />
+          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            {t(lang, "photoUpload")}
+            <input
+              type="file"
+              accept="image/*"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                setNewBranchLogoUploading(true);
+                try {
+                  const url = await uploadMediaFile(file, "logo");
+                  setNewBranchLogoUrl(url);
+                } catch (err: any) {
+                  setError(err?.message ?? "Upload error");
+                } finally {
+                  setNewBranchLogoUploading(false);
+                  e.currentTarget.value = "";
+                }
+              }}
+            />
+          </label>
+          <input placeholder={t(lang, "logo")} value={newBranchLogoUrl} readOnly />
+          <input placeholder={t(lang, "country")} value={newBranchCountry} onChange={(e) => setNewBranchCountry(e.target.value)} />
+          <input placeholder={t(lang, "address")} value={newBranchAddress} onChange={(e) => setNewBranchAddress(e.target.value)} />
+          <input placeholder={t(lang, "phone")} value={newBranchPhone} onChange={(e) => setNewBranchPhone(e.target.value)} />
+          <input placeholder={t(lang, "contactPerson")} value={newBranchContactPerson} onChange={(e) => setNewBranchContactPerson(e.target.value)} />
           <button onClick={createBranch} disabled={!tenantId}>{t(lang, "createBranch")}</button>
+          {newBranchLogoUploading && <span style={{ fontSize: 12 }}>{t(lang, "uploading")}</span>}
         </div>
         <div style={{ marginTop: 10 }}>
           {branches.filter((b) => !tenantId || b.tenantId === tenantId).map((b) => (
-            <div key={b.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "4px 0" }}>
+            <div key={b.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "4px 0", flexWrap: "wrap" }}>
               <strong>{b.name}</strong>
               <span>{t(lang, "tenant")} #{b.tenantId}</span>
               <span>{b.isActive ? t(lang, "active") : t(lang, "inactive")}</span>
+              {b.country && <span>{translate(lang, "country")}: {b.country}</span>}
+              {b.phone && <span>{translate(lang, "phone")}: {b.phone}</span>}
               <button onClick={() => toggleBranch(b)}>{b.isActive ? t(lang, "disable") : t(lang, "enable")}</button>
+              <button onClick={() => {
+                setEditingBranchId(b.id);
+                setEditBranchName(b.name ?? "");
+                setEditBranchLogoUrl(b.logoUrl ?? "");
+                setEditBranchCountry(b.country ?? "");
+                setEditBranchAddress(b.address ?? "");
+                setEditBranchPhone(b.phone ?? "");
+                setEditBranchContactPerson(b.contactPerson ?? "");
+              }}>{t(lang, "editEntity")}</button>
               <button onClick={() => deleteBranch(b.id)}>{t(lang, "delete")}</button>
             </div>
           ))}
         </div>
+        {editingBranchId && (
+          <div style={{ marginTop: 8, border: "1px dashed #ddd", padding: 10 }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <input placeholder={t(lang, "newBranchName")} value={editBranchName} onChange={(e) => setEditBranchName(e.target.value)} />
+              <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                {t(lang, "photoUpload")}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setEditBranchLogoUploading(true);
+                    try {
+                      const url = await uploadMediaFile(file, "logo");
+                      setEditBranchLogoUrl(url);
+                    } catch (err: any) {
+                      setError(err?.message ?? "Upload error");
+                    } finally {
+                      setEditBranchLogoUploading(false);
+                      e.currentTarget.value = "";
+                    }
+                  }}
+                />
+              </label>
+              <input placeholder={t(lang, "logo")} value={editBranchLogoUrl} readOnly />
+              <input placeholder={t(lang, "country")} value={editBranchCountry} onChange={(e) => setEditBranchCountry(e.target.value)} />
+              <input placeholder={t(lang, "address")} value={editBranchAddress} onChange={(e) => setEditBranchAddress(e.target.value)} />
+              <input placeholder={t(lang, "phone")} value={editBranchPhone} onChange={(e) => setEditBranchPhone(e.target.value)} />
+              <input placeholder={t(lang, "contactPerson")} value={editBranchContactPerson} onChange={(e) => setEditBranchContactPerson(e.target.value)} />
+              <button onClick={() => updateBranch(editingBranchId)}>{t(lang, "saveEntity")}</button>
+              <button onClick={() => setEditingBranchId(null)}>{t(lang, "cancelEdit")}</button>
+              {editBranchLogoUploading && <span style={{ fontSize: 12 }}>{t(lang, "uploading")}</span>}
+            </div>
+          </div>
+        )}
       </section>
 
       <section style={{ marginTop: 24 }}>
@@ -1337,7 +1626,29 @@ export default function SuperAdminPage() {
               <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <input type="checkbox" checked={editStaffRecommended} onChange={(e) => setEditStaffRecommended(e.target.checked)} /> {t(lang, "recommended")}
               </label>
-              <input placeholder={t(lang, "photoUrl")} value={editStaffPhotoUrl} onChange={(e) => setEditStaffPhotoUrl(e.target.value)} style={{ minWidth: 220 }} />
+              <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                {t(lang, "photoUpload")}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setEditStaffPhotoUploading(true);
+                    try {
+                      const url = await uploadMediaFile(file, "staff");
+                      setEditStaffPhotoUrl(url);
+                    } catch (err: any) {
+                      setError(err?.message ?? "Upload error");
+                    } finally {
+                      setEditStaffPhotoUploading(false);
+                      e.currentTarget.value = "";
+                    }
+                  }}
+                />
+              </label>
+              <input placeholder={t(lang, "photoUrl")} value={editStaffPhotoUrl} readOnly style={{ minWidth: 220 }} />
+              {editStaffPhotoUploading && <span style={{ fontSize: 12 }}>{t(lang, "uploading")}</span>}
               <input placeholder={t(lang, "favoriteItems")} value={editStaffFavoriteItems} onChange={(e) => setEditStaffFavoriteItems(e.target.value)} style={{ minWidth: 220 }} />
               <button onClick={() => updateStaff(editingStaffId)}>{t(lang, "save")}</button>
               <button onClick={() => setEditingStaffId(null)}>{t(lang, "cancel")}</button>

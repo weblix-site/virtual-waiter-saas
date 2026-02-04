@@ -81,6 +81,7 @@ nano .env
 APP_QR_HMAC_SECRET=СЕКРЕТ_32_СИМВОЛА_ИЛИ_БОЛЕЕ
 APP_AUTH_COOKIE_SECRET=ДРУГОЙ_СЕКРЕТ_32_СИМВОЛА_ИЛИ_БОЛЕЕ
 ```
+**Важно:** без этих переменных backend завершится с ошибкой (`app.qr.hmacSecret must be set` / `app.auth.cookieSecret must be set`).
 
 ### Минимальный набор для запуска
 ```env
@@ -107,6 +108,9 @@ NEXT_PUBLIC_API_BASE=https://YOUR_DOMAIN/api
 APP_QR_HMAC_SECRET=СЕКРЕТ_32_СИМВОЛА_ИЛИ_БОЛЕЕ
 APP_AUTH_COOKIE_SECRET=ДРУГОЙ_СЕКРЕТ_32_СИМВОЛА_ИЛИ_БОЛЕЕ
 APP_AUTH_COOKIE_SECURE=true
+
+# Медиа (загрузка изображений)
+APP_MEDIA_PUBLIC_BASE_URL=https://YOUR_DOMAIN
 ```
 
 ---
@@ -121,6 +125,9 @@ docker compose -f infra/docker-compose.full.yml --env-file .env up -d --build
 ```bash
 docker compose -f infra/docker-compose.full.yml ps
 ```
+
+### Хранение изображений
+Файлы загружаются в `/data/uploads` внутри контейнера `backend`. В `docker-compose.full.yml` это volume `vw_uploads`, поэтому файлы сохраняются между перезапусками.
 
 ---
 

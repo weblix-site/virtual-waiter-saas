@@ -140,6 +140,7 @@ public class AdminController {
   private final int maxPhotoUrlLength;
   private final int maxPhotoUrlsCount;
   private final Set<String> allowedPhotoExts;
+  private final String mediaPublicBaseUrl;
 
   public AdminController(
     StaffUserRepo staffUserRepo,
@@ -177,7 +178,8 @@ public class AdminController {
     LoyaltyService loyaltyService,
     @Value("${app.media.maxPhotoUrlLength:512}") int maxPhotoUrlLength,
     @Value("${app.media.maxPhotoUrlsCount:6}") int maxPhotoUrlsCount,
-    @Value("${app.media.allowedPhotoExts:jpg,jpeg,png,webp,gif}") String allowedPhotoExts
+    @Value("${app.media.allowedPhotoExts:jpg,jpeg,png,webp,gif}") String allowedPhotoExts,
+    @Value("${app.media.publicBaseUrl:http://localhost:8080}") String mediaPublicBaseUrl
   ) {
     this.staffUserRepo = staffUserRepo;
     this.staffReviewRepo = staffReviewRepo;
@@ -215,6 +217,7 @@ public class AdminController {
     this.maxPhotoUrlLength = maxPhotoUrlLength;
     this.maxPhotoUrlsCount = maxPhotoUrlsCount;
     this.allowedPhotoExts = parseExts(allowedPhotoExts);
+    this.mediaPublicBaseUrl = trimTrailingSlash(mediaPublicBaseUrl);
   }
 
   private StaffUser current(Authentication auth) {
@@ -920,7 +923,12 @@ public class AdminController {
     boolean payCashEnabled,
     boolean payTerminalEnabled,
     String currencyCode,
-    String defaultLang
+    String defaultLang,
+    String commissionModel,
+    int commissionMonthlyFixedCents,
+    int commissionMonthlyPercent,
+    int commissionOrderPercent,
+    int commissionOrderFixedCents
   ) {}
 
   @GetMapping("/branch-settings")
@@ -952,7 +960,12 @@ public class AdminController {
       s.payCashEnabled(),
       s.payTerminalEnabled(),
       s.currencyCode(),
-      s.defaultLang()
+      s.defaultLang(),
+      s.commissionModel(),
+      s.commissionMonthlyFixedCents(),
+      s.commissionMonthlyPercent(),
+      s.commissionOrderPercent(),
+      s.commissionOrderFixedCents()
     );
   }
 
@@ -979,7 +992,12 @@ public class AdminController {
     Boolean payCashEnabled,
     Boolean payTerminalEnabled,
     String currencyCode,
-    String defaultLang
+    String defaultLang,
+    String commissionModel,
+    Integer commissionMonthlyFixedCents,
+    Integer commissionMonthlyPercent,
+    Integer commissionOrderPercent,
+    Integer commissionOrderFixedCents
   ) {}
 
   @PutMapping("/branch-settings")
@@ -1050,6 +1068,25 @@ public class AdminController {
       String lang = normalizeLocale(req.defaultLang);
       s.defaultLang = lang;
     }
+    if (req.commissionModel != null) {
+      String model = req.commissionModel.trim().toUpperCase(Locale.ROOT);
+      if (!model.isEmpty() && !Set.of("MONTHLY_FIXED", "MONTHLY_PERCENT", "ORDER_PERCENT", "ORDER_FIXED").contains(model)) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported commission model");
+      }
+      s.commissionModel = model.isEmpty() ? null : model;
+    }
+    if (req.commissionMonthlyFixedCents != null && req.commissionMonthlyFixedCents >= 0) {
+      s.commissionMonthlyFixedCents = req.commissionMonthlyFixedCents;
+    }
+    if (req.commissionMonthlyPercent != null && req.commissionMonthlyPercent >= 0 && req.commissionMonthlyPercent <= 100) {
+      s.commissionMonthlyPercent = req.commissionMonthlyPercent;
+    }
+    if (req.commissionOrderPercent != null && req.commissionOrderPercent >= 0 && req.commissionOrderPercent <= 100) {
+      s.commissionOrderPercent = req.commissionOrderPercent;
+    }
+    if (req.commissionOrderFixedCents != null && req.commissionOrderFixedCents >= 0) {
+      s.commissionOrderFixedCents = req.commissionOrderFixedCents;
+    }
 
     if (Boolean.TRUE.equals(s.onlinePayEnabled) && (s.onlinePayProvider == null || s.onlinePayProvider.isBlank())) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Online payment provider required");
@@ -1091,7 +1128,12 @@ public class AdminController {
       r.payCashEnabled(),
       r.payTerminalEnabled(),
       r.currencyCode(),
-      r.defaultLang()
+      r.defaultLang(),
+      r.commissionModel(),
+      r.commissionMonthlyFixedCents(),
+      r.commissionMonthlyPercent(),
+      r.commissionOrderPercent(),
+      r.commissionOrderFixedCents()
     );
   }
 
@@ -3179,6 +3221,10 @@ public class AdminController {
       logReject("Photo URL too long", url);
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Photo URL too long");
     }
+    if (url.startsWith("/media/")) {
+      validatePhotoPath(url, url);
+      return url;
+    }
     URI uri;
     try {
       uri = new URI(url);
@@ -3200,6 +3246,15 @@ public class AdminController {
       logReject("Photo URL path is required", url);
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Photo URL path is required");
     }
+    if (!mediaPublicBaseUrl.isBlank() && !url.startsWith(mediaPublicBaseUrl + "/media/")) {
+      logReject("External photo URL is not allowed", url);
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "External photo URL is not allowed");
+    }
+    validatePhotoPath(path, url);
+    return url;
+  }
+
+  private void validatePhotoPath(String path, String url) {
     int dot = path.lastIndexOf('.');
     if (dot < 0 || dot == path.length() - 1) {
       logReject("Photo URL must include file extension", url);
@@ -3210,7 +3265,6 @@ public class AdminController {
       logReject("Unsupported photo type", url);
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported photo type");
     }
-    return url;
   }
 
   private String sanitizePhotoUrls(String raw) {
@@ -3233,6 +3287,13 @@ public class AdminController {
     int max = 200;
     String safe = url == null ? "" : (url.length() > max ? url.substring(0, max) + "..." : url);
     LOG.warn("Photo URL rejected: {} (url={})", reason, safe);
+  }
+
+  private static String trimTrailingSlash(String v) {
+    if (v == null) return "";
+    String s = v.trim();
+    if (s.endsWith("/")) return s.substring(0, s.length() - 1);
+    return s;
   }
 
   private static Integer sanitizeAge(Integer v) {

@@ -81,4 +81,19 @@ public class BranchSettings {
 
   @Column(name = "default_lang")
   public String defaultLang;
+
+  @Column(name = "commission_model")
+  public String commissionModel;
+
+  @Column(name = "commission_monthly_fixed_cents")
+  public Integer commissionMonthlyFixedCents;
+
+  @Column(name = "commission_monthly_percent")
+  public Integer commissionMonthlyPercent;
+
+  @Column(name = "commission_order_percent")
+  public Integer commissionOrderPercent;
+
+  @Column(name = "commission_order_fixed_cents")
+  public Integer commissionOrderFixedCents;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
 type BeforeInstallPromptEvent = Event & {
@@ -13,14 +13,7 @@ export function PwaClient() {
   const [installed, setInstalled] = useState(false);
   const pathname = usePathname();
   const [langParam, setLangParam] = useState("");
-
-  const label = useMemo(() => {
-    if (typeof navigator === "undefined") return "Install app";
-    const lang = (langParam || (navigator.language || "en")).toLowerCase();
-    if (lang.startsWith("ru")) return "Установить приложение";
-    if (lang.startsWith("ro")) return "Instalează aplicația";
-    return "Install app";
-  }, [langParam]);
+  const [label, setLabel] = useState("Install app");
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -45,6 +38,19 @@ export function PwaClient() {
       window.removeEventListener("appinstalled", onInstalled);
     };
   }, []);
+
+  useEffect(() => {
+    const lang = (langParam || (typeof navigator !== "undefined" ? navigator.language : "en") || "en").toLowerCase();
+    if (lang.startsWith("ru")) {
+      setLabel("Установить приложение");
+      return;
+    }
+    if (lang.startsWith("ro")) {
+      setLabel("Instalează aplicația");
+      return;
+    }
+    setLabel("Install app");
+  }, [langParam]);
 
   if (installed || !promptEvent) return null;
   if (!pathname || (!pathname.startsWith("/t/") && pathname !== "/")) return null;

@@ -85,7 +85,12 @@ app:
       windowSeconds: 60
   audit:
     maxDetailsChars: ${APP_AUDIT_MAX_DETAILS_CHARS:4000}
+  payload:
+    maxBytes: ${APP_PAYLOAD_MAX_BYTES:4096}
   media:
+    storageRoot: ${APP_MEDIA_STORAGE_ROOT:./data/uploads}
+    publicBaseUrl: ${APP_MEDIA_PUBLIC_BASE_URL:http://localhost:8080}
+    maxUploadBytes: ${APP_MEDIA_MAX_UPLOAD_BYTES:5242880}
     maxPhotoUrlLength: ${APP_MEDIA_MAX_PHOTO_URL_LENGTH:512}
     maxPhotoUrlsCount: ${APP_MEDIA_MAX_PHOTO_URLS_COUNT:6}
     allowedPhotoExts: ${APP_MEDIA_ALLOWED_PHOTO_EXTS:jpg,jpeg,png,webp,gif}

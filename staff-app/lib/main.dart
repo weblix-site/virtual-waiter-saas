@@ -823,31 +823,35 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _listenToFcm() {
-    FirebaseMessaging.onMessage.listen((message) {
-      // Surface push in UI and play sound if needed.
-      final type = message.data['type']?.toString();
-      if (type == 'ORDER_NEW') {
-        _player.play(AssetSource('beep.wav'));
-      }
-      if (type == 'SLA_ALERT') {
-        _player.play(AssetSource('beep.wav'));
-      }
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${_tr(context, 'push')}: ${message.data['type'] ?? message.notification?.title ?? _tr(context, 'notification')}')),
-        );
-      }
-    });
-    FirebaseMessaging.instance.onTokenRefresh.listen((token) async {
-      _deviceToken = token;
-      try {
-        await http.post(
-          Uri.parse('$apiBase/api/staff/devices/register'),
-          headers: {'Authorization': 'Basic $_auth', 'Content-Type': 'application/json'},
-          body: jsonEncode({'token': token, 'platform': 'FCM'}),
-        );
-      } catch (_) {}
-    });
+    try {
+      FirebaseMessaging.onMessage.listen((message) {
+        // Surface push in UI and play sound if needed.
+        final type = message.data['type']?.toString();
+        if (type == 'ORDER_NEW') {
+          _player.play(AssetSource('beep.wav'));
+        }
+        if (type == 'SLA_ALERT') {
+          _player.play(AssetSource('beep.wav'));
+        }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('${_tr(context, 'push')}: ${message.data['type'] ?? message.notification?.title ?? _tr(context, 'notification')}')),
+          );
+        }
+      });
+      FirebaseMessaging.instance.onTokenRefresh.listen((token) async {
+        _deviceToken = token;
+        try {
+          await http.post(
+            Uri.parse('$apiBase/api/staff/devices/register'),
+            headers: {'Authorization': 'Basic $_auth', 'Content-Type': 'application/json'},
+            body: jsonEncode({'token': token, 'platform': 'FCM'}),
+          );
+        } catch (_) {}
+      });
+    } catch (_) {
+      // Ignore in test/unsupported environments.
+    }
   }
 
   @override

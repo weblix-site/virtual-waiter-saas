@@ -244,7 +244,7 @@ const dict: Record<string, Record<Lang, string>> = {
   allergens: { ru: "Аллергены", ro: "Alergeni", en: "Allergens" },
   weight: { ru: "Вес", ro: "Greutate", en: "Weight" },
   tagsCsv: { ru: "Теги (csv)", ro: "Etichete (csv)", en: "Tags (csv)" },
-  photosCsv: { ru: "Фото (csv)", ro: "Poze (csv)", en: "Photo URLs (csv)" },
+  photosCsv: { ru: "Фото", ro: "Poze", en: "Photos" },
   kcal: { ru: "Ккал", ro: "Kcal", en: "Kcal" },
   proteinG: { ru: "Белки (г)", ro: "Proteine (g)", en: "Protein (g)" },
   fatG: { ru: "Жиры (г)", ro: "Grăsimi (g)", en: "Fat (g)" },
@@ -358,8 +358,8 @@ const dict: Record<string, Record<Lang, string>> = {
   editProfile: { ru: "Профиль", ro: "Profil", en: "Profile" },
   roleWaiter: { ru: "Официант", ro: "Chelner", en: "Waiter" },
   roleHost: { ru: "Хост", ro: "Host", en: "Host" },
-  roleKitchen: { ru: "Кухня", ro: "Bucătărie", en: "Kitchen" },
-  roleBar: { ru: "Бар", ro: "Bar", en: "Bar" },
+  roleKitchen: { ru: "Повар", ro: "Bucătar", en: "Kitchen" },
+  roleBar: { ru: "Бармен", ro: "Barman", en: "Bar" },
   roleAdmin: { ru: "Администратор", ro: "Administrator", en: "Admin" },
   roleManager: { ru: "Менеджер", ro: "Manager", en: "Manager" },
   firstName: { ru: "Имя", ro: "Prenume", en: "First name" },
@@ -369,7 +369,20 @@ const dict: Record<string, Record<Lang, string>> = {
   genderMale: { ru: "Мужской", ro: "Masculin", en: "Male" },
   genderFemale: { ru: "Женский", ro: "Feminin", en: "Female" },
   genderOther: { ru: "Другое", ro: "Altul", en: "Other" },
-  photoUrl: { ru: "Фото (URL)", ro: "Foto (URL)", en: "Photo URL" },
+  photoUrl: { ru: "Фото", ro: "Foto", en: "Photo" },
+  photoUpload: { ru: "Загрузить фото", ro: "Încarcă foto", en: "Upload photo" },
+  photosUpload: { ru: "Загрузить фото (несколько)", ro: "Încarcă poze (multiple)", en: "Upload photos (multiple)" },
+  uploading: { ru: "Загрузка...", ro: "Se încarcă...", en: "Uploading..." },
+  removePhoto: { ru: "Убрать", ro: "Elimină", en: "Remove" },
+  commissionModel: { ru: "Комиссия: модель", ro: "Comision: model", en: "Commission model" },
+  commissionMonthlyFixed: { ru: "Фикс в месяц (центы)", ro: "Fix lunar (cenți)", en: "Monthly fixed (cents)" },
+  commissionMonthlyPercent: { ru: "% от оборота в месяц", ro: "% din rulaj lunar", en: "% of monthly turnover" },
+  commissionOrderPercent: { ru: "% с заказа", ro: "% per comandă", en: "% per order" },
+  commissionOrderFixed: { ru: "Фикс с заказа (центы)", ro: "Fix per comandă (cenți)", en: "Fixed per order (cents)" },
+  commissionModelMonthlyFixed: { ru: "Фикс в месяц", ro: "Fix lunar", en: "Monthly fixed" },
+  commissionModelMonthlyPercent: { ru: "% от оборота", ro: "% din rulaj", en: "% of turnover" },
+  commissionModelOrderPercent: { ru: "% с заказа", ro: "% per comandă", en: "% per order" },
+  commissionModelOrderFixed: { ru: "Фикс с заказа", ro: "Fix per comandă", en: "Fixed per order" },
   rating: { ru: "Рейтинг (0–5)", ro: "Rating (0–5)", en: "Rating (0–5)" },
   recommended: { ru: "Рекомендуемый", ro: "Recomandat", en: "Recommended" },
   experienceYears: { ru: "Стаж (лет)", ro: "Experiență (ani)", en: "Experience (years)" },
@@ -641,6 +654,11 @@ type BranchSettings = {
   payTerminalEnabled: boolean;
   currencyCode?: string;
   defaultLang?: string;
+  commissionModel?: string;
+  commissionMonthlyFixedCents?: number;
+  commissionMonthlyPercent?: number;
+  commissionOrderPercent?: number;
+  commissionOrderFixedCents?: number;
 };
 
 type CurrencyDto = {
@@ -1050,6 +1068,7 @@ export default function AdminPage() {
   const [bulkAge, setBulkAge] = useState("");
   const [bulkGender, setBulkGender] = useState("");
   const [bulkPhotoUrl, setBulkPhotoUrl] = useState("");
+  const [bulkPhotoUploading, setBulkPhotoUploading] = useState(false);
   const [bulkApplying, setBulkApplying] = useState(false);
   const [bulkProgress, setBulkProgress] = useState(0);
   const [newModGroupNameRu, setNewModGroupNameRu] = useState("");
@@ -1135,6 +1154,39 @@ export default function AdminPage() {
     }
     return res;
   }
+
+  async function uploadMediaFile(file: File, type: string) {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${API_BASE}/api/admin/media/upload?type=${encodeURIComponent(type)}`, {
+      method: "POST",
+      credentials: "include",
+      body: form,
+    });
+    if (!res.ok) {
+      if (res.status === 401 || res.status === 403) {
+        localStorage.removeItem("adminUser");
+        setAuthReady(false);
+        setSessionExpired(true);
+        if (!redirectingRef.current && typeof window !== "undefined") {
+          redirectingRef.current = true;
+          window.location.href = "/admin";
+        }
+      }
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body?.message ?? `Upload failed (${res.status})`);
+    }
+    const data = await res.json();
+    return data.url as string;
+  }
+
+  const parsePhotoCsv = (csv?: string | null) =>
+    (csv ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+
+  const joinPhotoCsv = (list: string[]) => list.join(",");
 
   const waiterPalette = ["#FF6B6B", "#4ECDC4", "#FFD166", "#6C5CE7", "#00B894", "#FD79A8", "#0984E3"];
   const waiterColor = (id?: number | null) => {
@@ -2290,6 +2342,11 @@ export default function AdminPage() {
         payTerminalEnabled: settings.payTerminalEnabled,
         currencyCode: settings.currencyCode,
         defaultLang: settings.defaultLang,
+        commissionModel: settings.commissionModel ?? "MONTHLY_FIXED",
+        commissionMonthlyFixedCents: settings.commissionMonthlyFixedCents ?? 0,
+        commissionMonthlyPercent: settings.commissionMonthlyPercent ?? 0,
+        commissionOrderPercent: settings.commissionOrderPercent ?? 0,
+        commissionOrderFixedCents: settings.commissionOrderFixedCents ?? 0,
       }),
     });
     loadAll();
@@ -2889,6 +2946,30 @@ export default function AdminPage() {
             <label><input type="checkbox" checked={settings.tipsEnabled} onChange={(e) => setSettings({ ...settings, tipsEnabled: e.target.checked })} /> {t(lang, "tipsEnabled")}</label>
             <label>{t(lang, "serviceFeePercent")} <input value={settings.serviceFeePercent ?? 0} onChange={(e) => setSettings({ ...settings, serviceFeePercent: Number(e.target.value) })} /></label>
             <label>{t(lang, "taxPercent")} <input value={settings.taxPercent ?? 0} onChange={(e) => setSettings({ ...settings, taxPercent: Number(e.target.value) })} /></label>
+            <label>
+              {t(lang, "commissionModel")}
+              <select
+                value={settings.commissionModel ?? "MONTHLY_FIXED"}
+                onChange={(e) => setSettings({ ...settings, commissionModel: e.target.value })}
+              >
+                <option value="MONTHLY_FIXED">{t(lang, "commissionModelMonthlyFixed")}</option>
+                <option value="MONTHLY_PERCENT">{t(lang, "commissionModelMonthlyPercent")}</option>
+                <option value="ORDER_PERCENT">{t(lang, "commissionModelOrderPercent")}</option>
+                <option value="ORDER_FIXED">{t(lang, "commissionModelOrderFixed")}</option>
+              </select>
+            </label>
+            {settings.commissionModel === "MONTHLY_FIXED" && (
+              <label>{t(lang, "commissionMonthlyFixed")} <input value={settings.commissionMonthlyFixedCents ?? 0} onChange={(e) => setSettings({ ...settings, commissionMonthlyFixedCents: Number(e.target.value) })} /></label>
+            )}
+            {settings.commissionModel === "MONTHLY_PERCENT" && (
+              <label>{t(lang, "commissionMonthlyPercent")} <input value={settings.commissionMonthlyPercent ?? 0} onChange={(e) => setSettings({ ...settings, commissionMonthlyPercent: Number(e.target.value) })} /></label>
+            )}
+            {settings.commissionModel === "ORDER_PERCENT" && (
+              <label>{t(lang, "commissionOrderPercent")} <input value={settings.commissionOrderPercent ?? 0} onChange={(e) => setSettings({ ...settings, commissionOrderPercent: Number(e.target.value) })} /></label>
+            )}
+            {settings.commissionModel === "ORDER_FIXED" && (
+              <label>{t(lang, "commissionOrderFixed")} <input value={settings.commissionOrderFixedCents ?? 0} onChange={(e) => setSettings({ ...settings, commissionOrderFixedCents: Number(e.target.value) })} /></label>
+            )}
             <label><input type="checkbox" checked={!!settings.inventoryEnabled} onChange={(e) => setSettings({ ...settings, inventoryEnabled: e.target.checked })} /> {t(lang, "inventoryEnabled")}</label>
             <label><input type="checkbox" checked={!!settings.loyaltyEnabled} onChange={(e) => setSettings({ ...settings, loyaltyEnabled: e.target.checked })} /> {t(lang, "loyaltyEnabled")}</label>
             <label>{t(lang, "loyaltyPointsPer100")} <input value={settings.loyaltyPointsPer100Cents ?? 1} onChange={(e) => setSettings({ ...settings, loyaltyPointsPer100Cents: Number(e.target.value) })} /></label>
@@ -3863,7 +3944,48 @@ export default function AdminPage() {
           <input placeholder={t(lang, "allergens")} value={newItemAllergens} onChange={(e) => setNewItemAllergens(e.target.value)} />
           <input placeholder={t(lang, "weight")} value={newItemWeight} onChange={(e) => setNewItemWeight(e.target.value)} />
           <input placeholder={t(lang, "tagsCsv")} value={newItemTags} onChange={(e) => setNewItemTags(e.target.value)} />
-          <input placeholder={t(lang, "photosCsv")} value={newItemPhotos} onChange={(e) => setNewItemPhotos(e.target.value)} />
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              {t(lang, "photosUpload")}
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={async (e) => {
+                  const files = Array.from(e.target.files ?? []);
+                  if (files.length === 0) return;
+                  try {
+                    const urls = [];
+                    for (const f of files) {
+                      urls.push(await uploadMediaFile(f, "food"));
+                    }
+                    const merged = [...parsePhotoCsv(newItemPhotos), ...urls];
+                    setNewItemPhotos(joinPhotoCsv(merged));
+                  } catch (err: any) {
+                    setError(err?.message ?? "Upload error");
+                  } finally {
+                    e.currentTarget.value = "";
+                  }
+                }}
+              />
+            </label>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {parsePhotoCsv(newItemPhotos).map((u, idx) => (
+                <div key={`${u}-${idx}`} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <span style={{ fontSize: 12 }}>{u}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = parsePhotoCsv(newItemPhotos).filter((_, i) => i !== idx);
+                      setNewItemPhotos(joinPhotoCsv(next));
+                    }}
+                  >
+                    {t(lang, "removePhoto")}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
           <input type="number" placeholder={t(lang, "kcal")} value={newItemKcal} onChange={(e) => setNewItemKcal(Number(e.target.value))} />
           <input type="number" placeholder={t(lang, "proteinG")} value={newItemProtein} onChange={(e) => setNewItemProtein(Number(e.target.value))} />
           <input type="number" placeholder={t(lang, "fatG")} value={newItemFat} onChange={(e) => setNewItemFat(Number(e.target.value))} />
@@ -3902,7 +4024,48 @@ export default function AdminPage() {
               <input placeholder={t(lang, "allergens")} value={editItem.allergens ?? ""} onChange={(e) => setEditItem({ ...editItem, allergens: e.target.value })} />
               <input placeholder={t(lang, "weight")} value={editItem.weight ?? ""} onChange={(e) => setEditItem({ ...editItem, weight: e.target.value })} />
               <input placeholder={t(lang, "tagsCsv")} value={editItem.tags ?? ""} onChange={(e) => setEditItem({ ...editItem, tags: e.target.value })} />
-              <input placeholder={t(lang, "photosCsv")} value={editItem.photoUrls ?? ""} onChange={(e) => setEditItem({ ...editItem, photoUrls: e.target.value })} />
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  {t(lang, "photosUpload")}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={async (e) => {
+                      const files = Array.from(e.target.files ?? []);
+                      if (files.length === 0) return;
+                      try {
+                        const urls = [];
+                        for (const f of files) {
+                          urls.push(await uploadMediaFile(f, "food"));
+                        }
+                        const merged = [...parsePhotoCsv(editItem.photoUrls ?? ""), ...urls];
+                        setEditItem({ ...editItem, photoUrls: joinPhotoCsv(merged) });
+                      } catch (err: any) {
+                        setError(err?.message ?? "Upload error");
+                      } finally {
+                        e.currentTarget.value = "";
+                      }
+                    }}
+                  />
+                </label>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {parsePhotoCsv(editItem.photoUrls ?? "").map((u, idx) => (
+                    <div key={`${u}-${idx}`} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <span style={{ fontSize: 12 }}>{u}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = parsePhotoCsv(editItem.photoUrls ?? "").filter((_, i) => i !== idx);
+                          setEditItem({ ...editItem, photoUrls: joinPhotoCsv(next) });
+                        }}
+                      >
+                        {t(lang, "removePhoto")}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
               <input type="number" placeholder={t(lang, "kcal")} value={editItem.kcal ?? 0} onChange={(e) => setEditItem({ ...editItem, kcal: Number(e.target.value) })} />
               <input type="number" placeholder={t(lang, "proteinG")} value={editItem.proteinG ?? 0} onChange={(e) => setEditItem({ ...editItem, proteinG: Number(e.target.value) })} />
               <input type="number" placeholder={t(lang, "fatG")} value={editItem.fatG ?? 0} onChange={(e) => setEditItem({ ...editItem, fatG: Number(e.target.value) })} />
@@ -5177,7 +5340,29 @@ export default function AdminPage() {
               <option value="female">{t(lang, "genderFemale")}</option>
               <option value="other">{t(lang, "genderOther")}</option>
             </select>
-            <input placeholder={t(lang, "photoUrl")} value={bulkPhotoUrl} onChange={(e) => setBulkPhotoUrl(e.target.value)} style={{ minWidth: 240 }} />
+            <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              {t(lang, "photoUpload")}
+              <input
+                type="file"
+                accept="image/*"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  setBulkPhotoUploading(true);
+                  try {
+                    const url = await uploadMediaFile(file, "staff");
+                    setBulkPhotoUrl(url);
+                  } catch (err: any) {
+                    setError(err?.message ?? "Upload error");
+                  } finally {
+                    setBulkPhotoUploading(false);
+                    e.currentTarget.value = "";
+                  }
+                }}
+              />
+            </label>
+            <input placeholder={t(lang, "photoUrl")} value={bulkPhotoUrl} readOnly style={{ minWidth: 240 }} />
+            {bulkPhotoUploading && <span style={{ fontSize: 12 }}>{t(lang, "uploading")}</span>}
             <button onClick={applyStaffBulk} disabled={bulkApplying}>
               {bulkApplying ? `${t(lang, "staffApplyBulk")} (${bulkProgress}/${staffSelectedIds.length})` : t(lang, "staffApplyBulk")}
             </button>
@@ -5300,10 +5485,29 @@ export default function AdminPage() {
                 />
                 {t(lang, "recommended")}
               </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                {t(lang, "photoUpload")}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    try {
+                      const url = await uploadMediaFile(file, "staff");
+                      setProfileDraft({ ...profileDraft, photoUrl: url });
+                    } catch (err: any) {
+                      setError(err?.message ?? "Upload error");
+                    } finally {
+                      e.currentTarget.value = "";
+                    }
+                  }}
+                />
+              </label>
               <input
                 placeholder={t(lang, "photoUrl")}
                 value={profileDraft.photoUrl}
-                onChange={(e) => setProfileDraft({ ...profileDraft, photoUrl: e.target.value })}
+                readOnly
                 style={{ minWidth: 240 }}
               />
               <input

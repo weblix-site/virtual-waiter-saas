@@ -145,7 +145,7 @@ public class StaffController {
     this.auditService = auditService;
   }
 
-  private static final Set<String> ROLE_ADMIN_LIKE = Set.of("ADMIN", "MANAGER");
+  private static final Set<String> ROLE_ADMIN_LIKE = Set.of("ADMIN", "MANAGER", "SUPER_ADMIN");
   private static final Set<String> ROLE_WAITER_LIKE = Set.of("WAITER", "HOST");
   private static final Set<String> ROLE_KITCHEN_LIKE = Set.of("KITCHEN", "BAR");
 
@@ -199,6 +199,7 @@ public class StaffController {
     if (required == null || actual == null) return false;
     String req = required.toUpperCase(Locale.ROOT);
     String act = actual.toUpperCase(Locale.ROOT);
+    if ("SUPER_ADMIN".equals(act)) return true;
     if (req.equals(act)) return true;
     if ("ADMIN".equals(req) && ROLE_ADMIN_LIKE.contains(act)) return true;
     if ("WAITER".equals(req) && ROLE_WAITER_LIKE.contains(act)) return true;

@@ -159,6 +159,7 @@ app:
 $env:APP_QR_HMAC_SECRET="CHANGE_ME_DEV_SECRET"
 $env:APP_AUTH_COOKIE_SECRET="CHANGE_ME_AUTH_SECRET"
 ```
+**Важно:** без этих переменных backend падает при старте (ошибка `app.qr.hmacSecret must be set` / `app.auth.cookieSecret must be set`).
 
 После этого запускайте backend:
 ```

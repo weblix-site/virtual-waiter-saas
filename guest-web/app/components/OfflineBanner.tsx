@@ -1,25 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
 type Lang = "ru" | "ro" | "en";
-
-function resolveLang(langParam: string | null) : Lang {
-  const raw = (langParam || "").toLowerCase();
-  if (raw === "ru" || raw === "ro" || raw === "en") return raw;
-  if (typeof navigator === "undefined") return "en";
-  const nav = (navigator.language || "en").toLowerCase();
-  if (nav.startsWith("ru")) return "ru";
-  if (nav.startsWith("ro")) return "ro";
-  return "en";
-}
 
 export function OfflineBanner() {
   const [online, setOnline] = useState(true);
   const pathname = usePathname();
   const [langParam, setLangParam] = useState<string | null>(null);
-  const lang = useMemo(() => resolveLang(langParam), [langParam]);
+  const [lang, setLang] = useState<Lang>("en");
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -36,6 +26,24 @@ export function OfflineBanner() {
       window.removeEventListener("offline", onOffline);
     };
   }, []);
+
+  useEffect(() => {
+    const raw = (langParam || "").toLowerCase();
+    if (raw === "ru" || raw === "ro" || raw === "en") {
+      setLang(raw as Lang);
+      return;
+    }
+    const nav = (typeof navigator !== "undefined" ? navigator.language : "en").toLowerCase();
+    if (nav.startsWith("ru")) {
+      setLang("ru");
+      return;
+    }
+    if (nav.startsWith("ro")) {
+      setLang("ro");
+      return;
+    }
+    setLang("en");
+  }, [langParam]);
 
   if (!pathname || (!pathname.startsWith("/t/") && pathname !== "/")) return null;
   if (online) return null;
