@@ -12,6 +12,7 @@ public final class Messages {
     put("Unknown user", "error.unknown_user");
     put("Super admin required", "error.super_admin_required");
     put("Insufficient role", "error.insufficient_role");
+    put("Insufficient permission", "error.insufficient_permission");
     put("User has no branch", "error.user_no_branch");
     put("Admin key required", "error.admin_key_required");
     put("Admin role required", "error.admin_role_required");

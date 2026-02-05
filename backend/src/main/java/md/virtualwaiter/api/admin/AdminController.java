@@ -57,6 +57,8 @@ import md.virtualwaiter.repo.WaiterCallRepo;
 import md.virtualwaiter.repo.OrderRepo;
 import md.virtualwaiter.security.QrSignatureService;
 import md.virtualwaiter.service.BranchSettingsService;
+import md.virtualwaiter.security.AuthzService;
+import md.virtualwaiter.security.Permission;
 import md.virtualwaiter.service.StatsService;
 import md.virtualwaiter.service.AuditService;
 import md.virtualwaiter.service.LoyaltyService;
@@ -127,6 +129,7 @@ public class AdminController {
   private final HallPlanVersionRepo hallPlanVersionRepo;
   private final BranchSettingsRepo settingsRepo;
   private final BranchSettingsService settingsService;
+  private final AuthzService authzService;
   private final QrSignatureService qrSig;
   private final PasswordEncoder passwordEncoder;
   private final String publicBaseUrl;
@@ -169,6 +172,7 @@ public class AdminController {
     HallPlanVersionRepo hallPlanVersionRepo,
     BranchSettingsRepo settingsRepo,
     BranchSettingsService settingsService,
+    AuthzService authzService,
     QrSignatureService qrSig,
     PasswordEncoder passwordEncoder,
     @Value("${app.publicBaseUrl:http://localhost:3000}") String publicBaseUrl,
@@ -210,6 +214,7 @@ public class AdminController {
     this.hallPlanVersionRepo = hallPlanVersionRepo;
     this.settingsRepo = settingsRepo;
     this.settingsService = settingsService;
+    this.authzService = authzService;
     this.qrSig = qrSig;
     this.passwordEncoder = passwordEncoder;
     this.publicBaseUrl = publicBaseUrl;
@@ -245,10 +250,7 @@ public class AdminController {
 
   private StaffUser requireAdmin(Authentication auth) {
     StaffUser u = current(auth);
-    String role = u.role == null ? "" : u.role.toUpperCase(Locale.ROOT);
-    if (!Set.of("ADMIN", "MANAGER", "SUPER_ADMIN", "OWNER").contains(role)) {
-      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Admin role required");
-    }
+    authzService.require(u, Permission.ADMIN_ACCESS);
     return u;
   }
 
@@ -430,6 +432,7 @@ public class AdminController {
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_VIEW);
     long bid = resolveBranchId(u, branchId);
     Branch b = branchRepo.findById(bid)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
@@ -461,6 +464,7 @@ public class AdminController {
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.INVENTORY_MANAGE);
     long bid = resolveBranchId(u, branchId);
     List<CafeTable> tables = tableRepo.findByBranchId(bid);
     if (hallId != null) {
@@ -533,6 +537,7 @@ public class AdminController {
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.INVENTORY_MANAGE);
     long bid = resolveBranchId(u, branchId);
     BranchHall h = new BranchHall();
     h.branchId = bid;
@@ -903,6 +908,7 @@ public class AdminController {
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_VIEW);
     long bid = resolveBranchId(u, branchId);
     List<CafeTable> tables = tableRepo.findByBranchId(bid);
     if (tables.isEmpty()) return List.of();
@@ -984,6 +990,7 @@ public class AdminController {
   @GetMapping("/branch-settings")
   public BranchSettingsResponse getBranchSettings(@RequestParam(value = "branchId", required = false) Long branchId, Authentication auth) {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.SETTINGS_MANAGE);
     long bid = resolveBranchId(u, branchId);
     BranchSettingsService.Resolved s = settingsService.resolveForBranch(bid);
     return new BranchSettingsResponse(
@@ -1072,6 +1079,7 @@ public class AdminController {
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.SETTINGS_MANAGE);
     long bid = resolveBranchId(u, branchId);
     String prevCurrency = settingsService.resolveForBranch(bid).currencyCode();
     BranchSettings s = settingsRepo.findById(bid).orElseGet(() -> {
@@ -1273,6 +1281,7 @@ public class AdminController {
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.INVENTORY_MANAGE);
     long bid = resolveBranchId(u, branchId);
     return buildOnboardingStatus(bid);
   }
@@ -1284,6 +1293,7 @@ public class AdminController {
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.REPORTS_VIEW);
     long bid = resolveBranchId(u, branchId);
     Branch b = branchRepo.findById(bid)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
@@ -1385,6 +1395,7 @@ public class AdminController {
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.REPORTS_VIEW);
     long bid = resolveBranchId(u, branchId);
     Branch b = branchRepo.findById(bid)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
@@ -1465,6 +1476,7 @@ public class AdminController {
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.REPORTS_VIEW);
     long bid = resolveBranchId(u, branchId);
     Branch b = branchRepo.findById(bid)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
@@ -1603,6 +1615,7 @@ public class AdminController {
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.REPORTS_VIEW);
     long bid = resolveBranchId(u, branchId);
     Branch b = branchRepo.findById(bid)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
@@ -1830,6 +1843,7 @@ public class AdminController {
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.REPORTS_VIEW);
     long bid = resolveBranchId(u, branchId);
     List<InventoryItem> items = inventoryItemRepo.findByBranchIdOrderByIdDesc(bid);
     List<InventoryItemDto> out = new ArrayList<>();
@@ -1854,6 +1868,7 @@ public class AdminController {
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.INVENTORY_MANAGE);
     long bid = resolveBranchId(u, branchId);
     List<InventoryItem> items = inventoryItemRepo.findByBranchIdAndIsActiveTrueOrderByIdDesc(bid);
     List<InventoryItemDto> out = new ArrayList<>();
@@ -1874,6 +1889,7 @@ public class AdminController {
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.INVENTORY_MANAGE);
     long bid = resolveBranchId(u, branchId);
     InventoryItem it = new InventoryItem();
     it.branchId = bid;
@@ -2232,6 +2248,7 @@ public class AdminController {
     Authentication auth
   ) throws IOException {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_MANAGE);
     long bid = resolveBranchId(u, branchId);
     Branch b = branchRepo.findById(bid)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
@@ -2308,6 +2325,7 @@ public class AdminController {
     Authentication auth
   ) throws IOException {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_MANAGE);
     long bid = resolveBranchId(u, branchId);
     Branch b = branchRepo.findById(bid)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
@@ -2415,6 +2433,7 @@ public class AdminController {
   @GetMapping("/menu/categories")
   public List<MenuCategoryDto> listCategories(@RequestParam(value = "branchId", required = false) Long branchId, Authentication auth) {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_VIEW);
     long bid = resolveBranchId(u, branchId);
     Branch b = branchRepo.findById(bid)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
@@ -2434,6 +2453,7 @@ public class AdminController {
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_MANAGE);
     long bid = resolveBranchId(u, branchId);
     Branch b = branchRepo.findById(bid)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
@@ -2455,6 +2475,7 @@ public class AdminController {
   @PatchMapping("/menu/categories/{id}")
   public MenuCategoryDto updateCategory(@PathVariable long id, @RequestBody UpdateCategoryRequest req, Authentication auth) {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_MANAGE);
     long bid = resolveBranchId(u, null);
     Branch b = branchRepo.findById(bid)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
@@ -2477,6 +2498,7 @@ public class AdminController {
   @DeleteMapping("/menu/categories/{id}")
   public void deleteCategory(@PathVariable long id, Authentication auth) {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_MANAGE);
     long bid = resolveBranchId(u, null);
     Branch b = branchRepo.findById(bid)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
@@ -2549,6 +2571,7 @@ public class AdminController {
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_VIEW);
     long bid = resolveBranchId(u, branchId);
     Branch b = branchRepo.findById(bid)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
@@ -2583,6 +2606,7 @@ public class AdminController {
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_MANAGE);
     long bid = resolveBranchId(u, branchId);
     Branch b = branchRepo.findById(bid)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
@@ -2667,6 +2691,7 @@ public class AdminController {
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_MANAGE);
     long bid = resolveBranchId(u, branchId);
     Branch b = branchRepo.findById(bid)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
@@ -2730,6 +2755,7 @@ public class AdminController {
   @DeleteMapping("/menu/items/{id}")
   public void deleteMenuItem(@PathVariable long id, Authentication auth) {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_MANAGE);
     long bid = resolveBranchId(u, null);
     Branch b = branchRepo.findById(bid)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
@@ -3129,6 +3155,7 @@ public class AdminController {
   @GetMapping("/staff")
   public List<StaffUserDto> listStaff(@RequestParam(value = "branchId", required = false) Long branchId, Authentication auth) {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.STAFF_VIEW);
     long bid = resolveBranchId(u, branchId);
     List<StaffUser> users = staffUserRepo.findByBranchId(bid);
     List<StaffUserDto> out = new ArrayList<>();
@@ -3149,6 +3176,7 @@ public class AdminController {
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.STAFF_MANAGE);
     long bid = resolveBranchId(u, branchId);
     String role = req.role.trim().toUpperCase(Locale.ROOT);
     if (!Set.of(
@@ -3185,6 +3213,7 @@ public class AdminController {
   @PatchMapping("/staff/{id}")
   public StaffUserDto updateStaff(@PathVariable long id, @RequestBody UpdateStaffUserRequest req, Authentication auth) {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.STAFF_MANAGE);
     StaffUser su = staffUserRepo.findById(id)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Staff user not found"));
     requireBranchAccess(u, su.branchId);
@@ -3202,6 +3231,7 @@ public class AdminController {
   @Transactional
   public BulkStaffUpdateResponse bulkUpdateStaff(@RequestBody BulkStaffUpdateRequest req, Authentication auth) {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.STAFF_MANAGE);
     if (req == null || req.ids == null || req.ids.isEmpty() || req.patch == null) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "ids and patch are required");
     }
@@ -3224,6 +3254,7 @@ public class AdminController {
   @DeleteMapping("/staff/{id}")
   public void deleteStaff(@PathVariable long id, Authentication auth) {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.STAFF_MANAGE);
     StaffUser su = staffUserRepo.findById(id)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Staff user not found"));
     requireBranchAccess(u, su.branchId);
@@ -3243,6 +3274,7 @@ public class AdminController {
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.REPORTS_VIEW);
     long bid = resolveBranchId(u, branchId);
     int lim = limit == null ? 50 : Math.min(Math.max(limit, 1), 200);
     List<StaffReview> reviews = (staffUserId != null)
@@ -3519,6 +3551,7 @@ public class AdminController {
   @GetMapping("/modifier-groups")
   public List<ModifierGroupDto> listModifierGroups(@RequestParam(value = "branchId", required = false) Long branchId, Authentication auth) {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_VIEW);
     long bid = resolveBranchId(u, branchId);
     Branch b = branchRepo.findById(bid)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
@@ -3538,6 +3571,7 @@ public class AdminController {
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_MANAGE);
     long bid = resolveBranchId(u, branchId);
     Branch b = branchRepo.findById(bid)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
@@ -3555,6 +3589,7 @@ public class AdminController {
   @PatchMapping("/modifier-groups/{id}")
   public ModifierGroupDto updateModifierGroup(@PathVariable long id, @RequestBody UpdateModifierGroupRequest req, Authentication auth) {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_MANAGE);
     long bid = resolveBranchId(u, null);
     Branch b = branchRepo.findById(bid)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
@@ -3575,6 +3610,7 @@ public class AdminController {
   @DeleteMapping("/modifier-groups/{id}")
   public void deleteModifierGroup(@PathVariable long id, Authentication auth) {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_MANAGE);
     long bid = resolveBranchId(u, null);
     Branch b = branchRepo.findById(bid)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
@@ -3594,6 +3630,7 @@ public class AdminController {
   @GetMapping("/modifier-options")
   public List<ModifierOptionDto> listModifierOptions(@RequestParam("groupId") long groupId, Authentication auth) {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_VIEW);
     ModifierGroup g = modifierGroupRepo.findById(groupId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Modifier group not found"));
     long bid = resolveBranchId(u, null);
@@ -3614,6 +3651,7 @@ public class AdminController {
   @PostMapping("/modifier-options")
   public ModifierOptionDto createModifierOption(@RequestParam("groupId") long groupId, @Valid @RequestBody CreateModifierOptionRequest req, Authentication auth) {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_MANAGE);
     ModifierGroup g = modifierGroupRepo.findById(groupId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Modifier group not found"));
     long bid = resolveBranchId(u, null);
@@ -3637,6 +3675,7 @@ public class AdminController {
   @PatchMapping("/modifier-options/{id}")
   public ModifierOptionDto updateModifierOption(@PathVariable long id, @RequestBody UpdateModifierOptionRequest req, Authentication auth) {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_MANAGE);
     ModifierOption o = modifierOptionRepo.findById(id)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Modifier option not found"));
     ModifierGroup g = modifierGroupRepo.findById(o.groupId)
@@ -3660,6 +3699,7 @@ public class AdminController {
   @DeleteMapping("/modifier-options/{id}")
   public void deleteModifierOption(@PathVariable long id, Authentication auth) {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_MANAGE);
     ModifierOption o = modifierOptionRepo.findById(id)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Modifier option not found"));
     ModifierGroup g = modifierGroupRepo.findById(o.groupId)
@@ -3680,6 +3720,7 @@ public class AdminController {
   @GetMapping("/menu/items/{id}/modifier-groups")
   public List<ItemModifierGroupDto> getItemModifierGroups(@PathVariable long id, Authentication auth) {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_VIEW);
     long bid = resolveBranchId(u, null);
     Branch b = branchRepo.findById(bid)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
@@ -3706,6 +3747,7 @@ public class AdminController {
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_MANAGE);
     long bid = resolveBranchId(u, null);
     Branch b = branchRepo.findById(bid)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));

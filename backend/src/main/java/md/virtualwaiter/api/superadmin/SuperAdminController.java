@@ -13,6 +13,8 @@ import md.virtualwaiter.repo.StaffUserRepo;
 import md.virtualwaiter.repo.TenantRepo;
 import md.virtualwaiter.service.StatsService;
 import md.virtualwaiter.service.AuditService;
+import md.virtualwaiter.security.AuthzService;
+import md.virtualwaiter.security.Permission;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -63,6 +65,7 @@ public class SuperAdminController {
   private final PasswordEncoder passwordEncoder;
   private final StatsService statsService;
   private final AuditService auditService;
+  private final AuthzService authzService;
   private final int maxPhotoUrlLength;
   private final Set<String> allowedPhotoExts;
   private final String mediaPublicBaseUrl;
@@ -77,6 +80,7 @@ public class SuperAdminController {
     PasswordEncoder passwordEncoder,
     StatsService statsService,
     AuditService auditService,
+    AuthzService authzService,
     @Value("${app.media.maxPhotoUrlLength:512}") int maxPhotoUrlLength,
     @Value("${app.media.allowedPhotoExts:jpg,jpeg,png,webp,gif}") String allowedPhotoExts,
     @Value("${app.media.publicBaseUrl:http://localhost:8080}") String mediaPublicBaseUrl
@@ -90,6 +94,7 @@ public class SuperAdminController {
     this.passwordEncoder = passwordEncoder;
     this.statsService = statsService;
     this.auditService = auditService;
+    this.authzService = authzService;
     this.maxPhotoUrlLength = maxPhotoUrlLength;
     this.allowedPhotoExts = parseExts(allowedPhotoExts);
     this.mediaPublicBaseUrl = trimTrailingSlash(mediaPublicBaseUrl);
@@ -101,10 +106,7 @@ public class SuperAdminController {
     }
     StaffUser u = staffUserRepo.findByUsername(auth.getName())
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unknown user"));
-    String role = u.role == null ? "" : u.role.toUpperCase(Locale.ROOT);
-    if (!"SUPER_ADMIN".equals(role)) {
-      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Super admin required");
-    }
+    authzService.require(u, Permission.SUPERADMIN_ACCESS);
     return u;
   }
 

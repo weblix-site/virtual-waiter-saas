@@ -2,6 +2,8 @@ package md.virtualwaiter.api.admin;
 
 import md.virtualwaiter.domain.StaffUser;
 import md.virtualwaiter.repo.StaffUserRepo;
+import md.virtualwaiter.security.AuthzService;
+import md.virtualwaiter.security.Permission;
 import md.virtualwaiter.service.MediaService;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -12,18 +14,18 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.util.Locale;
-import java.util.Set;
 
 @RestController
 @RequestMapping("/api/admin/media")
 public class MediaController {
   private final MediaService mediaService;
   private final StaffUserRepo staffUserRepo;
+  private final AuthzService authzService;
 
-  public MediaController(MediaService mediaService, StaffUserRepo staffUserRepo) {
+  public MediaController(MediaService mediaService, StaffUserRepo staffUserRepo, AuthzService authzService) {
     this.mediaService = mediaService;
     this.staffUserRepo = staffUserRepo;
+    this.authzService = authzService;
   }
 
   public record UploadResponse(String url, String relativePath, long size, String contentType) {}
@@ -45,10 +47,7 @@ public class MediaController {
     }
     StaffUser u = staffUserRepo.findByUsername(auth.getName())
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unknown user"));
-    String role = u.role == null ? "" : u.role.toUpperCase(Locale.ROOT);
-    if (!Set.of("ADMIN", "MANAGER", "SUPER_ADMIN", "OWNER").contains(role)) {
-      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Admin role required");
-    }
+    authzService.require(u, Permission.MEDIA_MANAGE);
     return u;
   }
 }
