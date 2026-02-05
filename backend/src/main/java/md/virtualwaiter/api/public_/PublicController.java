@@ -272,6 +272,8 @@ public class PublicController {
     boolean otpRequired,
     boolean isVerified,
     String sessionSecret,
+    int otpResendCooldownSeconds,
+    int otpMaxResends,
     String currencyCode,
     String waiterName,
     String waiterPhotoUrl,
@@ -341,6 +343,8 @@ public class PublicController {
       settings.requireOtpForFirstOrder(),
       s.isVerified,
       s.sessionSecret,
+      settings.otpResendCooldownSeconds(),
+      settings.otpMaxResends(),
       settings.currencyCode(),
       waiterName,
       waiterPhoto,
@@ -1014,8 +1018,8 @@ public class PublicController {
 
 
   // --- OTP (SMS verification) ---
-  public record SendOtpRequest(@NotNull Long guestSessionId, @NotBlank String phoneE164, String locale) {}
-  public record SendOtpResponse(long challengeId, int ttlSeconds, String devCode) {}
+  public record SendOtpRequest(@NotNull Long guestSessionId, @NotBlank String phoneE164, String locale, String channel) {}
+  public record SendOtpResponse(long challengeId, int ttlSeconds, String devCode, String deliveryStatus, String deliveryError) {}
 
   @PostMapping("/otp/send")
   public SendOtpResponse sendOtp(@Valid @RequestBody SendOtpRequest req, jakarta.servlet.http.HttpServletRequest httpReq) {
@@ -1026,8 +1030,8 @@ public class PublicController {
     if (!rateLimitService.allow("otp:" + clientIp, otpLimitMax, otpLimitWindowSeconds)) {
       throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Too many OTP requests from IP");
     }
-    var r = otpService.sendOtp(req.guestSessionId, req.phoneE164, normalizeLocale(req.locale));
-    return new SendOtpResponse(r.challengeId(), r.ttlSeconds(), r.devCode());
+    var r = otpService.sendOtp(req.guestSessionId, req.phoneE164, normalizeLocale(req.locale), req.channel);
+    return new SendOtpResponse(r.challengeId(), r.ttlSeconds(), r.devCode(), r.deliveryStatus(), r.deliveryError());
   }
 
   public record VerifyOtpRequest(@NotNull Long guestSessionId, @NotNull Long challengeId, @NotBlank String code) {}

@@ -290,6 +290,7 @@ const dict: Record<string, Record<Lang, string>> = {
   langEn: { ru: "Английский", ro: "Engleză", en: "English" },
   otpTtlSeconds: { ru: "TTL OTP (сек)", ro: "TTL OTP (sec)", en: "OTP TTL (sec)" },
   otpMaxAttempts: { ru: "Лимит попыток OTP", ro: "Limită încercări OTP", en: "OTP max attempts" },
+  otpMaxResends: { ru: "Лимит повторов OTP", ro: "Limită retrimiteri OTP", en: "OTP max resends" },
   otpResendCooldownSeconds: { ru: "Пауза OTP (сек)", ro: "Pauză OTP (sec)", en: "OTP resend cooldown (sec)" },
   otpLength: { ru: "Длина OTP", ro: "Lungime OTP", en: "OTP length" },
   otpDevEchoCode: { ru: "Показывать OTP в dev", ro: "Arată OTP în dev", en: "Show OTP in dev" },
@@ -808,6 +809,7 @@ type BranchSettings = {
   requireOtpForFirstOrder: boolean;
   otpTtlSeconds: number;
   otpMaxAttempts: number;
+  otpMaxResends: number;
   otpResendCooldownSeconds: number;
   otpLength: number;
   otpDevEchoCode: boolean;
@@ -3246,6 +3248,7 @@ export default function AdminPage() {
         requireOtpForFirstOrder: settings.requireOtpForFirstOrder,
         otpTtlSeconds: settings.otpTtlSeconds,
         otpMaxAttempts: settings.otpMaxAttempts,
+        otpMaxResends: settings.otpMaxResends,
         otpResendCooldownSeconds: settings.otpResendCooldownSeconds,
         otpLength: settings.otpLength,
         otpDevEchoCode: settings.otpDevEchoCode,
@@ -4279,6 +4282,7 @@ export default function AdminPage() {
             </label>
             <label>{t(lang, "otpTtlSeconds")} <input value={settings.otpTtlSeconds} onChange={(e) => setSettings({ ...settings, otpTtlSeconds: Number(e.target.value) })} /></label>
             <label>{t(lang, "otpMaxAttempts")} <input value={settings.otpMaxAttempts} onChange={(e) => setSettings({ ...settings, otpMaxAttempts: Number(e.target.value) })} /></label>
+            <label>{t(lang, "otpMaxResends")} <input value={settings.otpMaxResends} onChange={(e) => setSettings({ ...settings, otpMaxResends: Number(e.target.value) })} /></label>
             <label>{t(lang, "otpResendCooldownSeconds")} <input value={settings.otpResendCooldownSeconds} onChange={(e) => setSettings({ ...settings, otpResendCooldownSeconds: Number(e.target.value) })} /></label>
             <label>{t(lang, "otpLength")} <input value={settings.otpLength} onChange={(e) => setSettings({ ...settings, otpLength: Number(e.target.value) })} /></label>
             <label><input type="checkbox" checked={settings.otpDevEchoCode} onChange={(e) => setSettings({ ...settings, otpDevEchoCode: e.target.checked })} /> {t(lang, "otpDevEchoCode")}</label>

@@ -98,6 +98,18 @@ curl -i http://localhost:8080/api/admin/branch \
   -H "Cookie: vw_auth=PASTE_TOKEN"
 ```
 
+## OTP для гостя (SMS / WhatsApp / Telegram)
+Гость при входе выбирает канал OTP: **SMS / WhatsApp / Telegram**.
+
+В dev используется **mock‑провайдер**, реальные сообщения не отправляются.
+
+Пример запроса:
+```bash
+curl -X POST http://localhost:8080/api/public/otp/send \
+  -H "Content-Type: application/json" \
+  -d '{"phone":"+37360000000","channel":"SMS","tablePublicId":"TBL_DEMO_0001"}'
+```
+
 ## Онлайн‑оплата (MAIB / Paynet / MIA)
 - Включается в админке: **Settings → Online payments enabled**.
 - Гость может оплатить **весь счёт** или **частично** (свои позиции).

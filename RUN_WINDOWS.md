@@ -173,8 +173,12 @@ $env:APP_AUTH_COOKIE_SECRET="CHANGE_ME_AUTH_SECRET"
 ./gradlew bootRun
 ```
 
-### 7.2 OTP (SMS)
-В текущей версии используется mock‑провайдер, SMS не отправляются реально.
+### 7.2 OTP (SMS / WhatsApp / Telegram)
+Вход гостя поддерживает выбор канала OTP: **SMS / WhatsApp / Telegram**.
+
+В текущей версии используется **mock‑провайдер**, реальные сообщения не отправляются.
+Канал указывается в запросе `/api/public/otp/send` (параметр `channel`), а в UI гостя
+это выбор перед вводом телефона.
 
 ---
 

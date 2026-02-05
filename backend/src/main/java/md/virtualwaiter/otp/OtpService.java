@@ -44,9 +44,9 @@ public class OtpService {
     this.settingsService = settingsService;
   }
 
-  public record SendResult(long challengeId, int ttlSeconds, String devCode) {}
+  public record SendResult(long challengeId, int ttlSeconds, String devCode, String deliveryStatus, String deliveryError) {}
 
-  public SendResult sendOtp(long guestSessionId, String phoneE164, String lang) {
+  public SendResult sendOtp(long guestSessionId, String phoneE164, String lang, String channel) {
     GuestSession s = sessionRepo.findById(guestSessionId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
     if (s.expiresAt.isBefore(Instant.now())) {
@@ -67,23 +67,46 @@ public class OtpService {
         }
       }
     }
+    int maxResends = Math.max(0, settings.otpMaxResends());
+    Instant windowStart = Instant.now().minus(settings.otpTtlSeconds(), ChronoUnit.SECONDS);
+    long sendCount = otpRepo.countByGuestSessionIdAndCreatedAtAfter(guestSessionId, windowStart);
+    if (sendCount >= (1L + maxResends)) {
+      throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "OTP resend limit reached");
+    }
 
     String code = generateCode(settings.otpLength());
     String message = buildMessage(code, lang);
+    String channelNorm = normalizeChannel(channel);
 
     OtpChallenge c = new OtpChallenge();
     c.guestSessionId = guestSessionId;
     c.phoneE164 = phoneE164;
+    c.channel = channelNorm;
     c.otpHash = enc.encode(code);
     c.expiresAt = Instant.now().plus(settings.otpTtlSeconds(), ChronoUnit.SECONDS);
     c.attemptsLeft = settings.otpMaxAttempts();
     c.status = "SENT";
+    c.deliveryStatus = "SENT";
     c.createdAt = Instant.now();
     c = otpRepo.save(c);
 
-    provider.sendOtp(phoneE164, message);
+    OtpDeliveryResult delivery = sendWithStatus(phoneE164, message, channelNorm);
+    c.deliveryStatus = delivery.status().name();
+    c.deliveryProviderRef = delivery.providerRef();
+    c.deliveryError = delivery.error();
+    c.deliveredAt = delivery.status() == OtpDeliveryStatus.SENT ? Instant.now() : null;
+    if (delivery.status() == OtpDeliveryStatus.FAILED) {
+      c.status = "FAILED";
+    }
+    c = otpRepo.save(c);
 
-    return new SendResult(c.id, settings.otpTtlSeconds(), settings.otpDevEchoCode() ? code : null);
+    return new SendResult(
+      c.id,
+      settings.otpTtlSeconds(),
+      settings.otpDevEchoCode() ? code : null,
+      c.deliveryStatus,
+      c.deliveryError
+    );
   }
 
   public void verifyOtp(long guestSessionId, long challengeId, String code) {
@@ -142,5 +165,26 @@ public class OtpService {
       case "en" -> "Your verification code: " + code;
       default -> "Ваш код подтверждения: " + code;
     };
+  }
+
+  private String normalizeChannel(String channel) {
+    if (channel == null || channel.isBlank()) return "SMS";
+    String c = channel.trim().toUpperCase(Locale.ROOT);
+    return switch (c) {
+      case "SMS", "WHATSAPP", "TELEGRAM" -> c;
+      default -> "SMS";
+    };
+  }
+
+  private OtpDeliveryResult sendWithStatus(String phoneE164, String message, String channel) {
+    try {
+      OtpDeliveryResult r = provider.sendOtp(phoneE164, message, channel);
+      if (r == null || r.status() == null) {
+        return OtpDeliveryResult.failed("Delivery status is null");
+      }
+      return r;
+    } catch (Exception e) {
+      return OtpDeliveryResult.failed(e.getMessage());
+    }
   }
 }

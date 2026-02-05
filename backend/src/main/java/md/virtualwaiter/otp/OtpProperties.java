@@ -8,6 +8,7 @@ public class OtpProperties {
   public boolean requireForFirstOrder = false;
   public int ttlSeconds = 180;
   public int maxAttempts = 5;
+  public int maxResends = 3;
   public int resendCooldownSeconds = 60;
   public int length = 4;
 

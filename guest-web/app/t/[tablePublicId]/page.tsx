@@ -55,6 +55,8 @@ type StartSessionResponse = {
   otpRequired: boolean;
   isVerified: boolean;
   sessionSecret: string;
+  otpResendCooldownSeconds?: number;
+  otpMaxResends?: number;
   currencyCode?: string;
   waiterName?: string | null;
   waiterPhotoUrl?: string | null;
@@ -188,6 +190,13 @@ export default function TablePage({ params, searchParams }: any) {
   const [otpCode, setOtpCode] = useState("");
   const [otpSending, setOtpSending] = useState(false);
   const [otpVerifying, setOtpVerifying] = useState(false);
+  const [otpChannel, setOtpChannel] = useState("SMS");
+  const [otpDeliveryStatus, setOtpDeliveryStatus] = useState<string | null>(null);
+  const [otpDeliveryError, setOtpDeliveryError] = useState<string | null>(null);
+  const [otpRetryCount, setOtpRetryCount] = useState(0);
+  const [otpSendCount, setOtpSendCount] = useState(0);
+  const [otpCooldownUntil, setOtpCooldownUntil] = useState<number | null>(null);
+  const [otpNowTick, setOtpNowTick] = useState(Date.now());
   const [billRefreshLoading, setBillRefreshLoading] = useState(false);
   const [ordersHistory, setOrdersHistory] = useState<any[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
@@ -244,6 +253,11 @@ export default function TablePage({ params, searchParams }: any) {
   const myChargesCount = useMemo(() => (billOptions?.myItems ?? []).reduce((sum, it) => sum + it.qty, 0), [billOptions]);
   const tableChargesCount = useMemo(() => (billOptions?.tableItems ?? []).reduce((sum, it) => sum + it.qty, 0), [billOptions]);
   const currencyCode = session?.currencyCode ?? "MDL";
+  const otpCooldownSeconds = session?.otpResendCooldownSeconds ?? 60;
+  const otpMaxResends = session?.otpMaxResends ?? 3;
+  const otpMaxSends = 1 + Math.max(0, otpMaxResends);
+  const otpCooldownRemaining = otpCooldownUntil ? Math.max(0, otpCooldownUntil - otpNowTick) : 0;
+  const otpResendDisabled = otpSending || otpSendCount >= otpMaxSends || otpCooldownRemaining > 0;
 
   const billItemsForMode = useMemo(() => {
     if (!billOptions) return [] as BillOptionsItem[];
@@ -316,6 +330,15 @@ export default function TablePage({ params, searchParams }: any) {
     if (!session) return;
     loadLoyaltyProfile();
   }, [session, loadLoyaltyProfile]);
+
+  useEffect(() => {
+    if (!session) return;
+    setOtpSendCount(0);
+    setOtpCooldownUntil(null);
+    setOtpRetryCount(0);
+    setOtpDeliveryStatus(null);
+    setOtpDeliveryError(null);
+  }, [session?.guestSessionId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -678,29 +701,53 @@ export default function TablePage({ params, searchParams }: any) {
     }
   }
 
-  async function sendOtp() {
+  async function sendOtp(autoRetry = false) {
     if (!session) return;
     if (!phone.trim()) {
       alert(t(lang, "phoneRequired"));
       return;
     }
     setOtpSending(true);
+    setOtpDeliveryStatus(null);
+    setOtpDeliveryError(null);
     try {
       const res = await fetch(`${API_BASE}/api/public/otp/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...sessionHeaders() },
-        body: JSON.stringify({ guestSessionId: session.guestSessionId, phoneE164: phone.trim(), locale: lang }),
+        body: JSON.stringify({
+          guestSessionId: session.guestSessionId,
+          phoneE164: phone.trim(),
+          locale: lang,
+          channel: otpChannel,
+        }),
       });
       if (!res.ok) throw new Error(await readApiError(res, `${t(lang, "otpSendFailed")} (${res.status})`));
       const body = await res.json();
       setOtpChallengeId(body.challengeId);
+      setOtpDeliveryStatus(body.deliveryStatus ?? "SENT");
+      setOtpDeliveryError(body.deliveryError ?? null);
+      setOtpSendCount((v) => Math.min(v + 1, otpMaxSends));
+      setOtpCooldownUntil(Date.now() + otpCooldownSeconds * 1000);
+      if ((body.deliveryStatus ?? "SENT") === "QUEUED" && otpRetryCount < 1) {
+        setOtpRetryCount((v) => v + 1);
+        setTimeout(() => {
+          sendOtp(true);
+        }, 8000);
+      }
       if (body.devCode) alert(t(lang, "devCodePrefix") + body.devCode);
     } catch (e: any) {
       alert(e?.message ?? t(lang, "otpSendFailed"));
     } finally {
-      setOtpSending(false);
+      if (!autoRetry) setOtpSending(false);
     }
   }
+
+  useEffect(() => {
+    if (!otpCooldownUntil) return;
+    if (otpCooldownRemaining <= 0) return;
+    const id = setInterval(() => setOtpNowTick(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [otpCooldownUntil, otpCooldownRemaining]);
 
   async function verifyOtp() {
     if (!session) return;
@@ -1568,6 +1615,18 @@ export default function TablePage({ params, searchParams }: any) {
               placeholder={t(lang, "phonePlaceholder")}
               style={{ padding: "10px 12px", minWidth: 220, border: "1px solid #ddd", borderRadius: 8 }}
             />
+            <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              {t(lang, "otpChannel")}
+              <select
+                value={otpChannel}
+                onChange={(e) => setOtpChannel(e.target.value)}
+                style={{ padding: "10px 12px", border: "1px solid #ddd", borderRadius: 8 }}
+              >
+                <option value="SMS">{t(lang, "otpChannelSms")}</option>
+                <option value="WHATSAPP">{t(lang, "otpChannelWhatsapp")}</option>
+                <option value="TELEGRAM">{t(lang, "otpChannelTelegram")}</option>
+              </select>
+            </label>
             <button disabled={otpSending} onClick={sendOtp} style={{ padding: "10px 14px" }}>
               {otpSending ? t(lang, "sendCodeProgress") : t(lang, "sendCode")}
             </button>
@@ -1585,6 +1644,54 @@ export default function TablePage({ params, searchParams }: any) {
           </div>
           <div style={{ marginTop: 8, color: "#666", fontSize: 12 }}>
             {t(lang, "otpDevHint")}
+          </div>
+          <div style={{ marginTop: 6, color: "#666", fontSize: 12 }}>
+            {otpChannel === "WHATSAPP"
+              ? t(lang, "otpChannelHintWhatsapp")
+              : otpChannel === "TELEGRAM"
+                ? t(lang, "otpChannelHintTelegram")
+                : t(lang, "otpChannelHintSms")}
+          </div>
+          {otpDeliveryStatus && (
+            <div
+              style={{
+                marginTop: 8,
+                fontSize: 12,
+                color:
+                  otpDeliveryStatus === "FAILED"
+                    ? "#c00"
+                    : otpDeliveryStatus === "QUEUED"
+                      ? "#a60"
+                      : "#0a0",
+              }}
+            >
+              {otpDeliveryStatus === "FAILED"
+                ? t(lang, "otpDeliveryFailed")
+                : otpDeliveryStatus === "QUEUED"
+                  ? t(lang, "otpDeliveryQueued")
+                  : t(lang, "otpDeliverySent")}
+              {otpDeliveryError ? `: ${otpDeliveryError}` : ""}
+            </div>
+          )}
+          <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <button
+              disabled={otpResendDisabled}
+              onClick={() => {
+                setOtpRetryCount(0);
+                sendOtp();
+              }}
+              style={{ padding: "8px 12px" }}
+            >
+              {t(lang, "resendCode")}
+            </button>
+            {otpSendCount >= otpMaxSends ? (
+              <span style={{ fontSize: 12, color: "#c00" }}>{t(lang, "otpResendLimitReached")}</span>
+            ) : (
+              <span style={{ fontSize: 12, color: "#666" }}>
+                {t(lang, "otpResendRemaining")}: {Math.max(0, otpMaxSends - otpSendCount)}
+                {otpCooldownRemaining > 0 ? ` • ${t(lang, "otpResendAvailableIn")} ${Math.ceil(otpCooldownRemaining / 1000)}s` : ""}
+              </span>
+            )}
           </div>
         </div>
       )}

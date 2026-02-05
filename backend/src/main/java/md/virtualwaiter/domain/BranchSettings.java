@@ -21,6 +21,9 @@ public class BranchSettings {
   @Column(name = "otp_max_attempts")
   public Integer otpMaxAttempts;
 
+  @Column(name = "otp_max_resends")
+  public Integer otpMaxResends;
+
   @Column(name = "otp_resend_cooldown_seconds")
   public Integer otpResendCooldownSeconds;
 

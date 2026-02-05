@@ -20,6 +20,9 @@ public class OtpChallenge {
   @Column(name = "phone_e164", nullable = false)
   public String phoneE164;
 
+  @Column(name = "channel", nullable = false)
+  public String channel; // SMS / WHATSAPP / TELEGRAM
+
   @Column(name = "otp_hash", nullable = false)
   public String otpHash;
 
@@ -31,6 +34,18 @@ public class OtpChallenge {
 
   @Column(name = "status", nullable = false)
   public String status; // SENT / VERIFIED / EXPIRED / LOCKED
+
+  @Column(name = "delivery_status", nullable = false)
+  public String deliveryStatus; // SENT / QUEUED / FAILED
+
+  @Column(name = "delivery_provider_ref")
+  public String deliveryProviderRef;
+
+  @Column(name = "delivery_error")
+  public String deliveryError;
+
+  @Column(name = "delivered_at")
+  public Instant deliveredAt;
 
   @Column(name = "created_at", nullable = false)
   public Instant createdAt;

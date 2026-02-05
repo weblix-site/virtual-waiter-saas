@@ -50,6 +50,7 @@ app:
     requireForFirstOrder: false
     ttlSeconds: 180
     maxAttempts: 5
+    maxResends: 3
     resendCooldownSeconds: 60
     length: 4
     devEchoCode: true

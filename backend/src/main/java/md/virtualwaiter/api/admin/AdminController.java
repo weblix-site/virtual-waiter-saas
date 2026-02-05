@@ -1043,6 +1043,7 @@ public class AdminController {
     boolean requireOtpForFirstOrder,
     int otpTtlSeconds,
     int otpMaxAttempts,
+    int otpMaxResends,
     int otpResendCooldownSeconds,
     int otpLength,
     boolean otpDevEchoCode,
@@ -1090,6 +1091,7 @@ public class AdminController {
       s.requireOtpForFirstOrder(),
       s.otpTtlSeconds(),
       s.otpMaxAttempts(),
+      s.otpMaxResends(),
       s.otpResendCooldownSeconds(),
       s.otpLength(),
       s.otpDevEchoCode(),
@@ -1131,6 +1133,7 @@ public class AdminController {
     Boolean requireOtpForFirstOrder,
     Integer otpTtlSeconds,
     Integer otpMaxAttempts,
+    Integer otpMaxResends,
     Integer otpResendCooldownSeconds,
     Integer otpLength,
     Boolean otpDevEchoCode,
@@ -1187,6 +1190,7 @@ public class AdminController {
     if (req.requireOtpForFirstOrder != null) s.requireOtpForFirstOrder = req.requireOtpForFirstOrder;
     if (req.otpTtlSeconds != null) s.otpTtlSeconds = req.otpTtlSeconds;
     if (req.otpMaxAttempts != null) s.otpMaxAttempts = req.otpMaxAttempts;
+    if (req.otpMaxResends != null) s.otpMaxResends = req.otpMaxResends;
     if (req.otpResendCooldownSeconds != null) s.otpResendCooldownSeconds = req.otpResendCooldownSeconds;
     if (req.otpLength != null) s.otpLength = req.otpLength;
     if (req.otpDevEchoCode != null) s.otpDevEchoCode = req.otpDevEchoCode;
@@ -1286,6 +1290,7 @@ public class AdminController {
     if (req.requireOtpForFirstOrder != null) changed.add("requireOtpForFirstOrder");
     if (req.otpTtlSeconds != null) changed.add("otpTtlSeconds");
     if (req.otpMaxAttempts != null) changed.add("otpMaxAttempts");
+    if (req.otpMaxResends != null) changed.add("otpMaxResends");
     if (req.otpResendCooldownSeconds != null) changed.add("otpResendCooldownSeconds");
     if (req.otpLength != null) changed.add("otpLength");
     if (req.otpDevEchoCode != null) changed.add("otpDevEchoCode");
@@ -1341,6 +1346,7 @@ public class AdminController {
       r.requireOtpForFirstOrder(),
       r.otpTtlSeconds(),
       r.otpMaxAttempts(),
+      r.otpMaxResends(),
       r.otpResendCooldownSeconds(),
       r.otpLength(),
       r.otpDevEchoCode(),

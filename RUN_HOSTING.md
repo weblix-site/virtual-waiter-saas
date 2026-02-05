@@ -214,6 +214,33 @@ curl -i https://YOUR_DOMAIN/api/admin/branch \
 
 ---
 
+## 9.1) OTP для гостей (SMS / WhatsApp / Telegram)
+
+Сервис OTP поддерживает каналы:
+- `SMS` (по умолчанию)
+- `WHATSAPP`
+- `TELEGRAM`
+
+Канал выбирается на стороне гостевого UI при вводе телефона.
+В dev используется mock‑провайдер, в проде подключите реальный канал.
+
+Пример запроса OTP:
+```bash
+curl -i -X POST https://YOUR_DOMAIN/api/public/otp/send \
+  -H "Content-Type: application/json" \
+  -H "X-Session-Secret: <SESSION_SECRET>" \
+  -d '{
+    "guestSessionId": 123,
+    "phoneE164": "+37369000000",
+    "locale": "ru",
+    "channel": "WHATSAPP"
+  }'
+```
+
+Если канал не указан или невалиден — используется `SMS`.
+
+---
+
 ## 10) Бэкапы базы (очень желательно)
 
 ### Скрипт

@@ -9,8 +9,9 @@ public class MockOtpProvider implements OtpProvider {
   private static final Logger log = LoggerFactory.getLogger(MockOtpProvider.class);
 
   @Override
-  public void sendOtp(String phoneE164, String message) {
-    // DEV: log to console. In prod, replace with SMS.MD provider.
-    log.info("[MOCK OTP] to={} msg={}", phoneE164, message);
+  public OtpDeliveryResult sendOtp(String phoneE164, String message, String channel) {
+    // DEV: log to console. In prod, replace with SMS/WhatsApp/Telegram provider.
+    log.info("[MOCK OTP] channel={} to={} msg={}", channel, phoneE164, message);
+    return OtpDeliveryResult.sent("mock");
   }
 }
