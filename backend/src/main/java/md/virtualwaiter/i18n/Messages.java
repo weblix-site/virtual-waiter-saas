@@ -20,7 +20,13 @@ public final class Messages {
     // Tenants / branches / staff
     put("Tenant not found", "error.tenant_not_found");
     put("Tenant is inactive", "error.tenant_inactive");
+    put("Restaurant not found", "error.restaurant_not_found");
+    put("Restaurant has branches", "error.restaurant_has_branches");
+    put("Restaurant is required", "error.restaurant_required");
+    put("Restaurant does not belong to tenant", "error.restaurant_not_in_tenant");
     put("Branch not found", "error.branch_not_found");
+    put("Branch has no restaurant", "error.branch_no_restaurant");
+    put("Wrong tenant", "error.wrong_tenant");
     put("Unsupported role", "error.unsupported_role");
     put("Staff user not found", "error.staff_user_not_found");
     put("Currency not found", "error.currency_not_found");
@@ -30,12 +36,15 @@ public final class Messages {
     put("Promo code already exists", "error.promo_code_exists");
     put("Unsupported discount scope", "error.unsupported_discount_scope");
     put("Unsupported discount type", "error.unsupported_discount_type");
+    put("Unsupported commission model", "error.unsupported_commission_model");
 
     // QR / sessions / table / menu
     put("Invalid QR signature", "error.invalid_qr_signature");
     put("Table not found", "error.table_not_found");
     put("Menu item not found", "error.menu_item_not_found");
     put("Menu item not in branch", "error.menu_item_not_in_branch");
+    put("Menu item not available", "error.menu_item_not_available");
+    put("Menu item not in tenant", "error.menu_item_not_in_tenant");
     put("Category not found", "error.category_not_found");
     put("Wrong branch", "error.wrong_branch");
     put("Session not found", "error.session_not_found");
@@ -94,6 +103,7 @@ public final class Messages {
     put("Online payment disabled", "error.online_pay_disabled");
     put("Unsupported payment provider", "error.unsupported_payment_provider");
     put("Online payment provider required", "error.online_pay_provider_required");
+    put("Online payment PSP settings required", "error.online_pay_psp_required");
     put("Amount invalid", "error.amount_invalid");
     put("Unsupported mode", "error.unsupported_mode");
     put("No orders for this session", "error.no_orders_for_session");
@@ -138,6 +148,9 @@ public final class Messages {
     put("Hall has tables assigned", "error.hall_has_tables");
     put("Body required", "error.body_required");
     put("Template not found", "error.template_not_found");
+    put("Template categories missing", "error.template_categories_missing");
+    put("Template does not belong to restaurant", "error.template_not_in_restaurant");
+    put("Template does not belong to tenant", "error.template_not_in_tenant");
     put("Version not found", "error.version_not_found");
     put("Version does not belong to plan", "error.version_not_belong_plan");
     put("Modifier group not found", "error.modifier_group_not_found");
@@ -180,8 +193,16 @@ public final class Messages {
     put("Photo URL must include file extension", "error.photo_url_extension_required");
     put("Photo URL host is required", "error.photo_url_host_required");
     put("Photo URL path is required", "error.photo_url_path_required");
+    put("External photo URL is not allowed", "error.photo_url_external_not_allowed");
     put("Too many photo URLs", "error.too_many_photo_urls");
     put("Unsupported photo type", "error.unsupported_photo_type");
+    put("File is required", "error.file_required");
+    put("File is too large", "error.file_too_large");
+    put("Unsupported file type", "error.unsupported_file_type");
+    put("Unable to detect file type", "error.file_type_unknown");
+    put("Unknown media type", "error.media_type_unknown");
+    put("Failed to create directory", "error.file_create_dir_failed");
+    put("Failed to save file", "error.file_save_failed");
 
     // Happy hour
     put("Happy hour days mask invalid", "error.hh_days_mask_invalid");

@@ -8,6 +8,8 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8080";
 type Lang = "ru" | "ro" | "en";
 const dict: Record<string, Record<Lang, string>> = {
   admin: { ru: "Админ", ro: "Admin", en: "Admin" },
+  branchLabel: { ru: "Филиал", ro: "Filială", en: "Branch" },
+  restaurantLabel: { ru: "Ресторан", ro: "Restaurant", en: "Restaurant" },
   loginTitle: { ru: "Вход", ro: "Autentificare", en: "Login" },
   username: { ru: "Логин", ro: "Utilizator", en: "Username" },
   password: { ru: "Пароль", ro: "Parolă", en: "Password" },
@@ -37,6 +39,19 @@ const dict: Record<string, Record<Lang, string>> = {
   staffBulkError: { ru: "Ошибка массового изменения", ro: "Eroare la modificarea în masă", en: "Bulk update failed" },
   staffReviews: { ru: "Отзывы официантов", ro: "Recenzii chelneri", en: "Waiter reviews" },
   discounts: { ru: "Скидки и промокоды", ro: "Reduceri și coduri promo", en: "Discounts & promo codes" },
+  menuTemplates: { ru: "Шаблоны меню", ro: "Șabloane meniu", en: "Menu templates" },
+  menuTemplateName: { ru: "Название шаблона", ro: "Nume șablon", en: "Template name" },
+  menuTemplateScope: { ru: "Уровень", ro: "Nivel", en: "Scope" },
+  menuTemplateScopeTenant: { ru: "Тенант", ro: "Tenant", en: "Tenant" },
+  menuTemplateScopeRestaurant: { ru: "Ресторан", ro: "Restaurant", en: "Restaurant" },
+  menuTemplateSave: { ru: "Сохранить как шаблон", ro: "Salvează ca șablon", en: "Save as template" },
+  menuTemplateApply: { ru: "Применить шаблон", ro: "Aplică șablon", en: "Apply template" },
+  menuTemplateSelect: { ru: "Выберите шаблон", ro: "Selectează șablon", en: "Select template" },
+  menuTemplateReplace: { ru: "Заменить меню филиала", ro: "Înlocuiește meniul filialei", en: "Replace branch menu" },
+  menuTemplateSaved: { ru: "Шаблон сохранен", ro: "Șablon salvat", en: "Template saved" },
+  menuTemplateApplied: { ru: "Шаблон применен", ro: "Șablon aplicat", en: "Template applied" },
+  menuTemplateError: { ru: "Ошибка шаблона меню", ro: "Eroare șablon meniu", en: "Menu template error" },
+  menuTemplateAppliedLabel: { ru: "Шаблон меню", ro: "Șablon meniu", en: "Menu template" },
   discountScope: { ru: "Тип", ro: "Tip", en: "Scope" },
   discountScopeCoupon: { ru: "Промокод", ro: "Cod promo", en: "Coupon" },
   discountScopeHappyHour: { ru: "Happy‑hour", ro: "Happy‑hour", en: "Happy hour" },
@@ -100,6 +115,11 @@ const dict: Record<string, Record<Lang, string>> = {
   signalOrder: { ru: "Заказ", ro: "Comandă", en: "Order" },
   signalAge: { ru: "Время", ro: "Timp", en: "Age" },
   stats: { ru: "Статистика", ro: "Statistici", en: "Stats" },
+  orderStatus: { ru: "Статус заказа", ro: "Status comandă", en: "Order status" },
+  shiftFrom: { ru: "Смена с", ro: "Schimb de la", en: "Shift from" },
+  shiftTo: { ru: "Смена по", ro: "Schimb până la", en: "Shift to" },
+  avgCheck: { ru: "Средний чек", ro: "Bon mediu", en: "Average check" },
+  avgSla: { ru: "Средний SLA (мин.)", ro: "SLA mediu (min.)", en: "Average SLA (min.)" },
   audit: { ru: "Аудит", ro: "Audit", en: "Audit" },
   add: { ru: "Добавить", ro: "Adaugă", en: "Add" },
   edit: { ru: "Редактировать", ro: "Editează", en: "Edit" },
@@ -245,7 +265,6 @@ const dict: Record<string, Record<Lang, string>> = {
   gross: { ru: "Выручка", ro: "Brut", en: "Gross" },
   tips: { ru: "Чаевые", ro: "Bacșiș", en: "Tips" },
   motivation: { ru: "Мотивация официантов", ro: "Motivație chelneri", en: "Waiter motivation" },
-  avgSla: { ru: "Средний SLA (мин)", ro: "SLA mediu (min)", en: "Avg SLA (min)" },
   badges: { ru: "Награды", ro: "Insigne", en: "Badges" },
   badgeTopOrders: { ru: "Топ по заказам", ro: "Top comenzi", en: "Top orders" },
   badgeTopTips: { ru: "Топ по чаевым", ro: "Top bacșiș", en: "Top tips" },
@@ -407,7 +426,7 @@ const dict: Record<string, Record<Lang, string>> = {
   roleBar: { ru: "Бармен", ro: "Barman", en: "Bar" },
   roleAdmin: { ru: "Администратор", ro: "Administrator", en: "Admin" },
   roleManager: { ru: "Менеджер", ro: "Manager", en: "Manager" },
-  roleOwner: { ru: "Владелец", ro: "Proprietar", en: "Owner" },
+  roleOwner: { ru: "Владелец ресторана", ro: "Proprietar restaurant", en: "Restaurant owner" },
   firstName: { ru: "Имя", ro: "Prenume", en: "First name" },
   lastName: { ru: "Фамилия", ro: "Nume", en: "Last name" },
   age: { ru: "Возраст", ro: "Vârstă", en: "Age" },
@@ -506,6 +525,8 @@ const dict: Record<string, Record<Lang, string>> = {
 };
 
 const t = (lang: Lang, key: string) => dict[key]?.[lang] ?? key;
+
+const ORDER_STATUS_OPTIONS = ["NEW", "ACCEPTED", "IN_PROGRESS", "READY", "SERVED", "CLOSED", "CANCELLED"];
 
 const toLocalInput = (iso?: string | null) => {
   if (!iso) return "";
@@ -617,6 +638,16 @@ type StaffUser = {
   favoriteItems?: string | null;
 };
 
+type BranchInfo = {
+  id: number;
+  tenantId: number;
+  restaurantId?: number | null;
+  restaurantName?: string | null;
+  name: string;
+  menuTemplateId?: number | null;
+  menuTemplateName?: string | null;
+};
+
 type StaffReview = {
   id: number;
   staffUserId: number;
@@ -653,6 +684,15 @@ type DiscountDto = {
   startMinute?: number | null;
   endMinute?: number | null;
   tzOffsetMinutes?: number | null;
+};
+
+type MenuTemplateDto = {
+  id: number;
+  tenantId: number;
+  restaurantId?: number | null;
+  name: string;
+  isActive: boolean;
+  scope: "TENANT" | "RESTAURANT";
 };
 
 type InventoryItemDto = {
@@ -744,6 +784,8 @@ type StatsSummary = {
   grossCents: number;
   tipsCents: number;
   activeTablesCount: number;
+  avgCheckCents?: number;
+  avgSlaMinutes?: number | null;
   avgBranchRating?: number;
   branchReviewsCount?: number;
 };
@@ -856,6 +898,7 @@ export default function AdminPage() {
   const [authReady, setAuthReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sessionExpired, setSessionExpired] = useState(false);
+  const [branchInfo, setBranchInfo] = useState<BranchInfo | null>(null);
   const redirectingRef = useRef(false);
   const [lang, setLang] = useState<Lang>("ru");
   const translate = t;
@@ -879,6 +922,12 @@ export default function AdminPage() {
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<MenuItem[]>([]);
+  const [menuTemplates, setMenuTemplates] = useState<MenuTemplateDto[]>([]);
+  const [menuTemplateName, setMenuTemplateName] = useState("");
+  const [menuTemplateScope, setMenuTemplateScope] = useState<"TENANT" | "RESTAURANT">("TENANT");
+  const [menuTemplateApplyId, setMenuTemplateApplyId] = useState<number | "">("");
+  const [menuTemplateReplace, setMenuTemplateReplace] = useState(true);
+  const [menuTemplateMessage, setMenuTemplateMessage] = useState<string | null>(null);
   const [tables, setTables] = useState<TableDto[]>([]);
   const [halls, setHalls] = useState<HallDto[]>([]);
   const [hallPlans, setHallPlans] = useState<HallPlanDto[]>([]);
@@ -994,6 +1043,9 @@ export default function AdminPage() {
   const [statsHallPlanId, setStatsHallPlanId] = useState<number | "">("");
   const [statsHallPlans, setStatsHallPlans] = useState<HallPlanDto[]>([]);
   const [statsWaiterId, setStatsWaiterId] = useState<number | "">("");
+  const [statsOrderStatus, setStatsOrderStatus] = useState("");
+  const [statsShiftFrom, setStatsShiftFrom] = useState("");
+  const [statsShiftTo, setStatsShiftTo] = useState("");
   const [statsLimit, setStatsLimit] = useState(10);
   const [stats, setStats] = useState<StatsSummary | null>(null);
   const [daily, setDaily] = useState<StatsDailyRow[]>([]);
@@ -1585,9 +1637,11 @@ export default function AdminPage() {
     if (!authReady) return;
     setError(null);
     try {
-      const [catsRes, itemsRes, tablesRes, staffRes, settingsRes, modGroupsRes, partiesRes, hallsRes, currenciesRes, discountsRes, inventoryRes, inventoryLowRes, onboardingRes, onboardingAuditRes] = await Promise.all([
+      const [branchRes, catsRes, itemsRes, templatesRes, tablesRes, staffRes, settingsRes, modGroupsRes, partiesRes, hallsRes, currenciesRes, discountsRes, inventoryRes, inventoryLowRes, onboardingRes, onboardingAuditRes] = await Promise.all([
+        api("/api/admin/branch"),
         api("/api/admin/menu/categories"),
         api("/api/admin/menu/items"),
+        api("/api/admin/menu-templates?includeInactive=true"),
         api("/api/admin/tables"),
         api("/api/admin/staff"),
         api("/api/admin/branch-settings"),
@@ -1601,8 +1655,10 @@ export default function AdminPage() {
         api("/api/admin/onboarding/status"),
         api("/api/admin/audit-logs?action=ONBOARDING_IMPORT&limit=20"),
       ]);
+      setBranchInfo(await branchRes.json());
       setCategories(await catsRes.json());
       setItems(await itemsRes.json());
+      setMenuTemplates(await templatesRes.json());
       setTables(await tablesRes.json());
       setStaff(await staffRes.json());
       const settingsBody = await settingsRes.json();
@@ -1789,14 +1845,14 @@ export default function AdminPage() {
     }
   }
 
-  const onboardingSteps = [
+  const onboardingSteps = useMemo(() => ([
     { id: "settings-section", title: t(lang, "onboardingStepSettings") },
     { id: "floorplan-section", title: t(lang, "onboardingStepHalls") },
     { id: "tables-section", title: t(lang, "onboardingStepTables") },
     { id: "categories-section", title: t(lang, "onboardingStepMenuCats") },
     { id: "items-section", title: t(lang, "onboardingStepMenuItems") },
     { id: "staff-section", title: t(lang, "onboardingStepStaff") },
-  ];
+  ]), [lang]);
 
   const onboardingProgress = useMemo(() => {
     if (!onboardingStatus) return null;
@@ -2099,6 +2155,43 @@ export default function AdminPage() {
     setNewItemActive(true);
     setNewItemStopList(false);
     loadAll();
+  }
+
+  async function saveMenuTemplate() {
+    if (!menuTemplateName.trim()) return;
+    setMenuTemplateMessage(null);
+    try {
+      await api("/api/admin/menu-templates/save", {
+        method: "POST",
+        body: JSON.stringify({
+          name: menuTemplateName.trim(),
+          scope: menuTemplateScope,
+        }),
+      });
+      setMenuTemplateName("");
+      setMenuTemplateMessage(t(lang, "menuTemplateSaved"));
+      loadAll();
+    } catch (e: any) {
+      setMenuTemplateMessage(`${t(lang, "menuTemplateError")}: ${e?.message ?? ""}`.trim());
+    }
+  }
+
+  async function applyMenuTemplate() {
+    if (!menuTemplateApplyId) return;
+    setMenuTemplateMessage(null);
+    try {
+      await api("/api/admin/menu-templates/apply", {
+        method: "POST",
+        body: JSON.stringify({
+          templateId: menuTemplateApplyId,
+          replaceExisting: menuTemplateReplace,
+        }),
+      });
+      setMenuTemplateMessage(t(lang, "menuTemplateApplied"));
+      loadAll();
+    } catch (e: any) {
+      setMenuTemplateMessage(`${t(lang, "menuTemplateError")}: ${e?.message ?? ""}`.trim());
+    }
   }
 
   async function toggleItem(it: MenuItem) {
@@ -2829,6 +2922,9 @@ export default function AdminPage() {
     if (statsHallId !== "") qs.set("hallId", String(statsHallId));
     if (statsHallPlanId !== "") qs.set("planId", String(statsHallPlanId));
     if (statsWaiterId !== "") qs.set("waiterId", String(statsWaiterId));
+    if (statsOrderStatus) qs.set("status", statsOrderStatus);
+    if (statsShiftFrom) qs.set("shiftFrom", statsShiftFrom);
+    if (statsShiftTo) qs.set("shiftTo", statsShiftTo);
     const res = await api(`/api/admin/stats/summary?${qs.toString()}`);
     const body = await res.json();
     setStats(body);
@@ -2853,6 +2949,9 @@ export default function AdminPage() {
         if (statsTo) params.set("to", statsTo);
         if (statsHallId !== "") params.set("hallId", String(statsHallId));
         if (statsHallPlanId !== "") params.set("planId", String(statsHallPlanId));
+        if (statsOrderStatus) params.set("status", statsOrderStatus);
+        if (statsShiftFrom) params.set("shiftFrom", statsShiftFrom);
+        if (statsShiftTo) params.set("shiftTo", statsShiftTo);
       }
       const res = await api(`/api/admin/stats/waiters-motivation?${params.toString()}`);
       setWaiterMotivation(await res.json());
@@ -2915,6 +3014,9 @@ export default function AdminPage() {
     if (statsHallId !== "") qs.set("hallId", String(statsHallId));
     if (statsHallPlanId !== "") qs.set("planId", String(statsHallPlanId));
     if (statsWaiterId !== "") qs.set("waiterId", String(statsWaiterId));
+    if (statsOrderStatus) qs.set("status", statsOrderStatus);
+    if (statsShiftFrom) qs.set("shiftFrom", statsShiftFrom);
+    if (statsShiftTo) qs.set("shiftTo", statsShiftTo);
     const res = await api(`/api/admin/stats/daily.csv?${qs.toString()}`);
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
@@ -3253,6 +3355,17 @@ export default function AdminPage() {
           <button onClick={logout}>{t(lang, "logout")}</button>
         </div>
       </div>
+      {branchInfo && (
+        <div style={{ marginTop: 6, color: "#475569", fontSize: 13, display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <span>{t(lang, "branchLabel")}: {branchInfo.name}</span>
+          {branchInfo.restaurantName && <span>{t(lang, "restaurantLabel")}: {branchInfo.restaurantName}</span>}
+          {branchInfo.menuTemplateName && (
+            <span>
+              {t(lang, "menuTemplateAppliedLabel")}: {branchInfo.menuTemplateName}
+            </span>
+          )}
+        </div>
+      )}
       <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 10 }}>
         <button onClick={resetAllFilters}>{t(lang, "resetFilters")}</button>
         {adminFiltersDirty && (
@@ -4175,13 +4288,24 @@ export default function AdminPage() {
           )}
           <label>
             {t(lang, "waiter")}
-            <select value={chatExportWaiterId} onChange={(e) => setChatExportWaiterId(e.target.value ? Number(e.target.value) : "")}>
+            <select value={statsWaiterId} onChange={(e) => setStatsWaiterId(e.target.value ? Number(e.target.value) : "")}>
               <option value="">{t(lang, "all")}</option>
               {staff.filter((s) => isWaiterRole(s.role)).map((w) => (
                 <option key={w.id} value={w.id}>{w.username} #{w.id}</option>
               ))}
             </select>
           </label>
+          <label>
+            {t(lang, "orderStatus")}
+            <select value={statsOrderStatus} onChange={(e) => setStatsOrderStatus(e.target.value)}>
+              <option value="">{t(lang, "all")}</option>
+              {ORDER_STATUS_OPTIONS.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </label>
+          <label>{t(lang, "shiftFrom")} <input type="date" value={statsShiftFrom} onChange={(e) => setStatsShiftFrom(e.target.value)} /></label>
+          <label>{t(lang, "shiftTo")} <input type="date" value={statsShiftTo} onChange={(e) => setStatsShiftTo(e.target.value)} /></label>
           <label>{t(lang, "topLimit")} <input type="number" min={1} max={100} value={statsLimit} onChange={(e) => setStatsLimit(Number(e.target.value))} style={{ width: 80 }} /></label>
           <button onClick={loadStats}>{t(lang, "load")}</button>
           <button onClick={downloadCsv}>{t(lang, "downloadCsv")}</button>
@@ -4194,6 +4318,12 @@ export default function AdminPage() {
             <div>{t(lang, "paidBills")}: {stats.paidBillsCount}</div>
             <div>{t(lang, "gross")}: {money(stats.grossCents)}</div>
             <div>{t(lang, "tips")}: {money(stats.tipsCents)}</div>
+            {stats.avgCheckCents != null && (
+              <div>{t(lang, "avgCheck")}: {money(stats.avgCheckCents)}</div>
+            )}
+            {stats.avgSlaMinutes != null && (
+              <div>{t(lang, "avgSla")}: {stats.avgSlaMinutes.toFixed(1)}</div>
+            )}
             <div>{t(lang, "activeTables")}: {stats.activeTablesCount}</div>
             {stats.avgBranchRating != null && (
               <div>
@@ -4413,6 +4543,56 @@ export default function AdminPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+      </section>
+
+      <section id="menu-templates-section" style={{ marginTop: 24 }}>
+        <h2>{t(lang, "menuTemplates")}</h2>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <input
+            placeholder={t(lang, "menuTemplateName")}
+            value={menuTemplateName}
+            onChange={(e) => setMenuTemplateName(e.target.value)}
+          />
+          <select value={menuTemplateScope} onChange={(e) => setMenuTemplateScope(e.target.value as "TENANT" | "RESTAURANT")}>
+            <option value="TENANT">{t(lang, "menuTemplateScopeTenant")}</option>
+            <option value="RESTAURANT">{t(lang, "menuTemplateScopeRestaurant")}</option>
+          </select>
+          <button onClick={saveMenuTemplate}>{t(lang, "menuTemplateSave")}</button>
+        </div>
+        <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <select value={menuTemplateApplyId} onChange={(e) => setMenuTemplateApplyId(e.target.value ? Number(e.target.value) : "")}>
+            <option value="">{t(lang, "menuTemplateSelect")}</option>
+            {menuTemplates.map((tplt) => (
+              <option key={tplt.id} value={tplt.id}>
+                {tplt.name} • {tplt.scope === "TENANT" ? t(lang, "menuTemplateScopeTenant") : t(lang, "menuTemplateScopeRestaurant")}
+                {tplt.isActive ? "" : " (inactive)"}
+              </option>
+            ))}
+          </select>
+          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <input type="checkbox" checked={menuTemplateReplace} onChange={(e) => setMenuTemplateReplace(e.target.checked)} />
+            {t(lang, "menuTemplateReplace")}
+          </label>
+          <button onClick={applyMenuTemplate} disabled={!menuTemplateApplyId}>{t(lang, "menuTemplateApply")}</button>
+        </div>
+        {menuTemplateMessage && (
+          <div style={{ marginTop: 10, color: menuTemplateMessage.startsWith(t(lang, "menuTemplateError")) ? "#b91c1c" : "#0f766e" }}>
+            {menuTemplateMessage}
+          </div>
+        )}
+        {menuTemplates.length > 0 && (
+          <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {menuTemplates.map((tplt) => (
+              <div key={`template-${tplt.id}`} style={{ padding: "6px 10px", border: "1px solid #e5e7eb", borderRadius: 8 }}>
+                <strong>{tplt.name}</strong>
+                <div style={{ fontSize: 12, color: "#6b7280" }}>
+                  {tplt.scope === "TENANT" ? t(lang, "menuTemplateScopeTenant") : t(lang, "menuTemplateScopeRestaurant")}
+                  {tplt.isActive ? "" : ` • ${t(lang, "inactive")}`}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </section>

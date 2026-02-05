@@ -2,11 +2,13 @@ package md.virtualwaiter.api.superadmin;
 
 import md.virtualwaiter.domain.Branch;
 import md.virtualwaiter.domain.BranchReview;
+import md.virtualwaiter.domain.Restaurant;
 import md.virtualwaiter.domain.StaffUser;
 import md.virtualwaiter.domain.Tenant;
 import md.virtualwaiter.repo.CafeTableRepo;
 import md.virtualwaiter.repo.BranchRepo;
 import md.virtualwaiter.repo.BranchReviewRepo;
+import md.virtualwaiter.repo.RestaurantRepo;
 import md.virtualwaiter.repo.StaffUserRepo;
 import md.virtualwaiter.repo.TenantRepo;
 import md.virtualwaiter.service.StatsService;
@@ -42,6 +44,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -51,6 +56,7 @@ public class SuperAdminController {
   private static final Logger LOG = LoggerFactory.getLogger(SuperAdminController.class);
   private final StaffUserRepo staffUserRepo;
   private final TenantRepo tenantRepo;
+  private final RestaurantRepo restaurantRepo;
   private final BranchRepo branchRepo;
   private final BranchReviewRepo branchReviewRepo;
   private final CafeTableRepo tableRepo;
@@ -64,6 +70,7 @@ public class SuperAdminController {
   public SuperAdminController(
     StaffUserRepo staffUserRepo,
     TenantRepo tenantRepo,
+    RestaurantRepo restaurantRepo,
     BranchRepo branchRepo,
     BranchReviewRepo branchReviewRepo,
     CafeTableRepo tableRepo,
@@ -76,6 +83,7 @@ public class SuperAdminController {
   ) {
     this.staffUserRepo = staffUserRepo;
     this.tenantRepo = tenantRepo;
+    this.restaurantRepo = restaurantRepo;
     this.branchRepo = branchRepo;
     this.branchReviewRepo = branchReviewRepo;
     this.tableRepo = tableRepo;
@@ -212,8 +220,8 @@ public class SuperAdminController {
     auditService.log(u, "DELETE", "Tenant", t.id, null);
   }
 
-  // --- Branches ---
-  public record BranchDto(
+  // --- Restaurants ---
+  public record RestaurantDto(
     long id,
     long tenantId,
     String name,
@@ -224,8 +232,139 @@ public class SuperAdminController {
     String contactPerson,
     boolean isActive
   ) {}
+  public record CreateRestaurantRequest(
+    @NotBlank String name,
+    String logoUrl,
+    String country,
+    String address,
+    String phone,
+    String contactPerson
+  ) {}
+  public record UpdateRestaurantRequest(
+    String name,
+    String logoUrl,
+    String country,
+    String address,
+    String phone,
+    String contactPerson,
+    Boolean isActive
+  ) {}
+
+  @GetMapping("/restaurants")
+  public List<RestaurantDto> listRestaurants(
+    @RequestParam(value = "tenantId", required = false) Long tenantId,
+    @RequestParam(value = "isActive", required = false) Boolean isActive,
+    Authentication auth
+  ) {
+    requireSuper(auth);
+    List<Restaurant> list = tenantId == null ? restaurantRepo.findAll() : restaurantRepo.findByTenantId(tenantId);
+    if (isActive != null) {
+      list = list.stream().filter(r -> r.isActive == isActive).toList();
+    }
+    List<RestaurantDto> out = new ArrayList<>();
+    for (Restaurant r : list) {
+      out.add(new RestaurantDto(
+        r.id,
+        r.tenantId,
+        r.name,
+        r.logoUrl,
+        r.country,
+        r.address,
+        r.phone,
+        r.contactPerson,
+        r.isActive
+      ));
+    }
+    return out;
+  }
+
+  @PostMapping("/tenants/{tenantId}/restaurants")
+  public RestaurantDto createRestaurant(@PathVariable long tenantId, @Valid @RequestBody CreateRestaurantRequest req, Authentication auth) {
+    StaffUser u = requireSuper(auth);
+    Tenant t = tenantRepo.findById(tenantId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tenant not found"));
+    if (!t.isActive) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tenant is inactive");
+    }
+    Restaurant r = new Restaurant();
+    r.tenantId = tenantId;
+    r.name = req.name;
+    r.logoUrl = sanitizePhotoUrl(req.logoUrl);
+    r.country = trimOrNull(req.country);
+    r.address = trimOrNull(req.address);
+    r.phone = trimOrNull(req.phone);
+    r.contactPerson = trimOrNull(req.contactPerson);
+    r.isActive = true;
+    r = restaurantRepo.save(r);
+    auditService.log(u, "CREATE", "Restaurant", r.id, null);
+    return new RestaurantDto(
+      r.id,
+      r.tenantId,
+      r.name,
+      r.logoUrl,
+      r.country,
+      r.address,
+      r.phone,
+      r.contactPerson,
+      r.isActive
+    );
+  }
+
+  @PatchMapping("/restaurants/{id}")
+  public RestaurantDto updateRestaurant(@PathVariable long id, @RequestBody UpdateRestaurantRequest req, Authentication auth) {
+    StaffUser u = requireSuper(auth);
+    Restaurant r = restaurantRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Restaurant not found"));
+    if (req.name != null) r.name = req.name;
+    if (req.logoUrl != null) r.logoUrl = sanitizePhotoUrl(req.logoUrl);
+    if (req.country != null) r.country = trimOrNull(req.country);
+    if (req.address != null) r.address = trimOrNull(req.address);
+    if (req.phone != null) r.phone = trimOrNull(req.phone);
+    if (req.contactPerson != null) r.contactPerson = trimOrNull(req.contactPerson);
+    if (req.isActive != null) r.isActive = req.isActive;
+    r = restaurantRepo.save(r);
+    auditService.log(u, "UPDATE", "Restaurant", r.id, null);
+    return new RestaurantDto(
+      r.id,
+      r.tenantId,
+      r.name,
+      r.logoUrl,
+      r.country,
+      r.address,
+      r.phone,
+      r.contactPerson,
+      r.isActive
+    );
+  }
+
+  @DeleteMapping("/restaurants/{id}")
+  public void deleteRestaurant(@PathVariable long id, Authentication auth) {
+    StaffUser u = requireSuper(auth);
+    Restaurant r = restaurantRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Restaurant not found"));
+    if (!branchRepo.findByRestaurantId(r.id).isEmpty()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Restaurant has branches");
+    }
+    restaurantRepo.delete(r);
+    auditService.log(u, "DELETE", "Restaurant", r.id, null);
+  }
+
+  // --- Branches ---
+  public record BranchDto(
+    long id,
+    long tenantId,
+    Long restaurantId,
+    String name,
+    String logoUrl,
+    String country,
+    String address,
+    String phone,
+    String contactPerson,
+    boolean isActive
+  ) {}
   public record CreateBranchRequest(
     @NotBlank String name,
+    Long restaurantId,
     String logoUrl,
     String country,
     String address,
@@ -234,6 +373,7 @@ public class SuperAdminController {
   ) {}
   public record UpdateBranchRequest(
     String name,
+    Long restaurantId,
     String logoUrl,
     String country,
     String address,
@@ -245,11 +385,21 @@ public class SuperAdminController {
   @GetMapping("/branches")
   public List<BranchDto> listBranches(
     @RequestParam(value = "tenantId", required = false) Long tenantId,
+    @RequestParam(value = "restaurantId", required = false) Long restaurantId,
     @RequestParam(value = "isActive", required = false) Boolean isActive,
     Authentication auth
   ) {
     requireSuper(auth);
-    List<Branch> list = (tenantId == null) ? branchRepo.findAll() : branchRepo.findByTenantId(tenantId);
+    List<Branch> list;
+    if (tenantId != null && restaurantId != null) {
+      list = branchRepo.findByTenantIdAndRestaurantId(tenantId, restaurantId);
+    } else if (restaurantId != null) {
+      list = branchRepo.findByRestaurantId(restaurantId);
+    } else if (tenantId != null) {
+      list = branchRepo.findByTenantId(tenantId);
+    } else {
+      list = branchRepo.findAll();
+    }
     if (isActive != null) {
       list = list.stream().filter(b -> b.isActive == isActive).toList();
     }
@@ -258,6 +408,7 @@ public class SuperAdminController {
       out.add(new BranchDto(
         b.id,
         b.tenantId,
+        b.restaurantId,
         b.name,
         b.logoUrl,
         b.country,
@@ -278,8 +429,21 @@ public class SuperAdminController {
     if (!t.isActive) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tenant is inactive");
     }
+    Long restaurantId = req.restaurantId;
+    if (restaurantId == null) {
+      restaurantId = restaurantRepo.findTop1ByTenantIdOrderByIdAsc(tenantId)
+        .map(r -> r.id)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Restaurant is required"));
+    } else {
+      Restaurant r = restaurantRepo.findById(restaurantId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Restaurant not found"));
+      if (!r.tenantId.equals(tenantId)) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Restaurant does not belong to tenant");
+      }
+    }
     Branch b = new Branch();
     b.tenantId = tenantId;
+    b.restaurantId = restaurantId;
     b.name = req.name;
     b.logoUrl = sanitizePhotoUrl(req.logoUrl);
     b.country = trimOrNull(req.country);
@@ -292,6 +456,7 @@ public class SuperAdminController {
     return new BranchDto(
       b.id,
       b.tenantId,
+      b.restaurantId,
       b.name,
       b.logoUrl,
       b.country,
@@ -308,6 +473,14 @@ public class SuperAdminController {
     Branch b = branchRepo.findById(id)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
     if (req.name != null) b.name = req.name;
+    if (req.restaurantId != null) {
+      Restaurant r = restaurantRepo.findById(req.restaurantId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Restaurant not found"));
+      if (!r.tenantId.equals(b.tenantId)) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Restaurant does not belong to tenant");
+      }
+      b.restaurantId = r.id;
+    }
     if (req.logoUrl != null) b.logoUrl = sanitizePhotoUrl(req.logoUrl);
     if (req.country != null) b.country = trimOrNull(req.country);
     if (req.address != null) b.address = trimOrNull(req.address);
@@ -319,6 +492,7 @@ public class SuperAdminController {
     return new BranchDto(
       b.id,
       b.tenantId,
+      b.restaurantId,
       b.name,
       b.logoUrl,
       b.country,
@@ -491,6 +665,8 @@ public class SuperAdminController {
     long grossCents,
     long tipsCents,
     long activeTablesCount,
+    long avgCheckCents,
+    Double avgSlaMinutes,
     double avgBranchRating,
     long branchReviewsCount
   ) {}
@@ -498,11 +674,23 @@ public class SuperAdminController {
   public record BranchSummaryRow(
     long branchId,
     String branchName,
+    Long restaurantId,
+    String restaurantName,
     long ordersCount,
     long callsCount,
     long paidBillsCount,
     long grossCents,
     long tipsCents
+  ) {}
+
+  public record TopItemRow(long menuItemId, String name, long qty, long grossCents) {}
+
+  public record WaiterMotivationRow(
+    long staffUserId,
+    String username,
+    long ordersCount,
+    long tipsCents,
+    Double avgSlaMinutes
   ) {}
 
   private static class BranchReviewAgg {
@@ -520,13 +708,30 @@ public class SuperAdminController {
     @RequestParam(value = "tenantId") Long tenantId,
     @RequestParam(value = "from", required = false) String from,
     @RequestParam(value = "to", required = false) String to,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @RequestParam(value = "hallId", required = false) Long hallId,
+    @RequestParam(value = "status", required = false) String orderStatus,
+    @RequestParam(value = "shiftFrom", required = false) String shiftFrom,
+    @RequestParam(value = "shiftTo", required = false) String shiftTo,
     Authentication auth
   ) {
     requireSuper(auth);
     Instant fromTs = parseInstantOrDate(from, true);
     Instant toTs = parseInstantOrDate(to, false);
-    StatsService.Summary s = statsService.summaryForTenant(tenantId, fromTs, toTs);
-    BranchReviewAgg reviewsAgg = branchReviewAggForTenant(tenantId, fromTs, toTs);
+    Instant shiftFromTs = parseInstantOrDateOrNull(shiftFrom, true);
+    Instant shiftToTs = parseInstantOrDateOrNull(shiftTo, false);
+    StatsService.Summary s = statsService.summaryForTenantFiltered(
+      tenantId,
+      fromTs,
+      toTs,
+      branchId,
+      hallId,
+      orderStatus,
+      shiftFromTs,
+      shiftToTs
+    );
+    BranchReviewAgg reviewsAgg = branchReviewAggForTenant(tenantId, fromTs, toTs, branchId);
+    long avgCheckCents = s.paidBillsCount() == 0 ? 0L : (s.grossCents() / s.paidBillsCount());
     return new StatsSummaryResponse(
       s.from().toString(),
       s.to().toString(),
@@ -536,16 +741,19 @@ public class SuperAdminController {
       s.grossCents(),
       s.tipsCents(),
       s.activeTablesCount(),
+      avgCheckCents,
+      s.avgSlaMinutes(),
       reviewsAgg.avgRating,
       reviewsAgg.count
     );
   }
 
-  private BranchReviewAgg branchReviewAggForTenant(Long tenantId, Instant fromTs, Instant toTs) {
+  private BranchReviewAgg branchReviewAggForTenant(Long tenantId, Instant fromTs, Instant toTs, Long branchId) {
     double sum = 0.0;
     long count = 0;
     List<Branch> branches = branchRepo.findByTenantId(tenantId);
     for (Branch b : branches) {
+      if (branchId != null && !branchId.equals(b.id)) continue;
       List<BranchReview> reviews = branchReviewRepo.findByBranchIdOrderByIdDesc(b.id);
       for (BranchReview r : reviews) {
         if (r.createdAt == null) continue;
@@ -565,17 +773,219 @@ public class SuperAdminController {
     @RequestParam(value = "tenantId") Long tenantId,
     @RequestParam(value = "from", required = false) String from,
     @RequestParam(value = "to", required = false) String to,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @RequestParam(value = "status", required = false) String orderStatus,
+    @RequestParam(value = "shiftFrom", required = false) String shiftFrom,
+    @RequestParam(value = "shiftTo", required = false) String shiftTo,
     Authentication auth
   ) {
     requireSuper(auth);
     Instant fromTs = parseInstantOrDate(from, true);
     Instant toTs = parseInstantOrDate(to, false);
-    List<StatsService.BranchSummaryRow> rows = statsService.summaryByBranchForTenant(tenantId, fromTs, toTs);
+    Instant shiftFromTs = parseInstantOrDateOrNull(shiftFrom, true);
+    Instant shiftToTs = parseInstantOrDateOrNull(shiftTo, false);
+    List<StatsService.BranchSummaryRow> rows = statsService.summaryByBranchForTenant(
+      tenantId,
+      fromTs,
+      toTs,
+      branchId,
+      orderStatus,
+      shiftFromTs,
+      shiftToTs
+    );
+    List<Long> branchIds = rows.stream().map(StatsService.BranchSummaryRow::branchId).toList();
+    Map<Long, Branch> branchMap = branchRepo.findAllById(branchIds).stream()
+      .collect(Collectors.toMap(b -> b.id, b -> b));
+    Set<Long> restaurantIds = branchMap.values().stream()
+      .map(b -> b.restaurantId)
+      .filter(Objects::nonNull)
+      .collect(Collectors.toSet());
+    Map<Long, String> restaurantNames = restaurantIds.isEmpty()
+      ? Map.of()
+      : restaurantRepo.findAllById(restaurantIds).stream().collect(Collectors.toMap(r -> r.id, r -> r.name));
     List<BranchSummaryRow> out = new ArrayList<>();
     for (StatsService.BranchSummaryRow r : rows) {
-      out.add(new BranchSummaryRow(r.branchId(), r.branchName(), r.ordersCount(), r.callsCount(), r.paidBillsCount(), r.grossCents(), r.tipsCents()));
+      Branch b = branchMap.get(r.branchId());
+      Long restaurantId = b == null ? null : b.restaurantId;
+      String restaurantName = restaurantId == null ? null : restaurantNames.get(restaurantId);
+      out.add(new BranchSummaryRow(
+        r.branchId(),
+        r.branchName(),
+        restaurantId,
+        restaurantName,
+        r.ordersCount(),
+        r.callsCount(),
+        r.paidBillsCount(),
+        r.grossCents(),
+        r.tipsCents()
+      ));
     }
     return out;
+  }
+
+  @GetMapping("/stats/top-items")
+  public List<TopItemRow> getTopItems(
+    @RequestParam(value = "tenantId") Long tenantId,
+    @RequestParam(value = "from", required = false) String from,
+    @RequestParam(value = "to", required = false) String to,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @RequestParam(value = "hallId", required = false) Long hallId,
+    @RequestParam(value = "status", required = false) String orderStatus,
+    @RequestParam(value = "shiftFrom", required = false) String shiftFrom,
+    @RequestParam(value = "shiftTo", required = false) String shiftTo,
+    @RequestParam(value = "limit", required = false) Integer limit,
+    Authentication auth
+  ) {
+    requireSuper(auth);
+    Instant fromTs = parseInstantOrDate(from, true);
+    Instant toTs = parseInstantOrDate(to, false);
+    Instant shiftFromTs = parseInstantOrDateOrNull(shiftFrom, true);
+    Instant shiftToTs = parseInstantOrDateOrNull(shiftTo, false);
+    int lim = limit == null ? 10 : limit;
+    List<StatsService.TopItemRow> rows = statsService.topItemsForTenant(
+      tenantId,
+      fromTs,
+      toTs,
+      branchId,
+      hallId,
+      orderStatus,
+      shiftFromTs,
+      shiftToTs,
+      lim
+    );
+    List<TopItemRow> out = new ArrayList<>();
+    for (StatsService.TopItemRow r : rows) {
+      out.add(new TopItemRow(r.menuItemId(), r.name(), r.qty(), r.grossCents()));
+    }
+    return out;
+  }
+
+  @GetMapping("/stats/top-items.csv")
+  public ResponseEntity<String> getTopItemsCsv(
+    @RequestParam(value = "tenantId") Long tenantId,
+    @RequestParam(value = "from", required = false) String from,
+    @RequestParam(value = "to", required = false) String to,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @RequestParam(value = "hallId", required = false) Long hallId,
+    @RequestParam(value = "status", required = false) String orderStatus,
+    @RequestParam(value = "shiftFrom", required = false) String shiftFrom,
+    @RequestParam(value = "shiftTo", required = false) String shiftTo,
+    @RequestParam(value = "limit", required = false) Integer limit,
+    Authentication auth
+  ) {
+    requireSuper(auth);
+    Instant fromTs = parseInstantOrDate(from, true);
+    Instant toTs = parseInstantOrDate(to, false);
+    Instant shiftFromTs = parseInstantOrDateOrNull(shiftFrom, true);
+    Instant shiftToTs = parseInstantOrDateOrNull(shiftTo, false);
+    int lim = limit == null ? 50 : limit;
+    List<StatsService.TopItemRow> rows = statsService.topItemsForTenant(
+      tenantId,
+      fromTs,
+      toTs,
+      branchId,
+      hallId,
+      orderStatus,
+      shiftFromTs,
+      shiftToTs,
+      lim
+    );
+    StringBuilder sb = new StringBuilder();
+    sb.append("menu_item_id,name,qty,gross_cents\n");
+    for (StatsService.TopItemRow r : rows) {
+      sb.append(r.menuItemId()).append(',')
+        .append(r.name() == null ? "" : r.name().replace(",", " ")).append(',')
+        .append(r.qty()).append(',')
+        .append(r.grossCents()).append('\n');
+    }
+    String filename = "tenant-top-items-" + tenantId + ".csv";
+    return ResponseEntity.ok()
+      .contentType(MediaType.parseMediaType("text/csv"))
+      .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+      .body(sb.toString());
+  }
+
+  @GetMapping("/stats/top-waiters")
+  public List<WaiterMotivationRow> getTopWaiters(
+    @RequestParam(value = "tenantId") Long tenantId,
+    @RequestParam(value = "from", required = false) String from,
+    @RequestParam(value = "to", required = false) String to,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @RequestParam(value = "hallId", required = false) Long hallId,
+    @RequestParam(value = "status", required = false) String orderStatus,
+    @RequestParam(value = "shiftFrom", required = false) String shiftFrom,
+    @RequestParam(value = "shiftTo", required = false) String shiftTo,
+    Authentication auth
+  ) {
+    requireSuper(auth);
+    Instant fromTs = parseInstantOrDate(from, true);
+    Instant toTs = parseInstantOrDate(to, false);
+    Instant shiftFromTs = parseInstantOrDateOrNull(shiftFrom, true);
+    Instant shiftToTs = parseInstantOrDateOrNull(shiftTo, false);
+    List<StatsService.WaiterMotivationRow> rows = statsService.waiterMotivationForTenant(
+      tenantId,
+      fromTs,
+      toTs,
+      branchId,
+      hallId,
+      orderStatus,
+      shiftFromTs,
+      shiftToTs
+    );
+    List<WaiterMotivationRow> out = new ArrayList<>();
+    for (StatsService.WaiterMotivationRow r : rows) {
+      out.add(new WaiterMotivationRow(
+        r.staffUserId(),
+        r.username(),
+        r.ordersCount(),
+        r.tipsCents(),
+        r.avgSlaMinutes()
+      ));
+    }
+    return out;
+  }
+
+  @GetMapping("/stats/top-waiters.csv")
+  public ResponseEntity<String> getTopWaitersCsv(
+    @RequestParam(value = "tenantId") Long tenantId,
+    @RequestParam(value = "from", required = false) String from,
+    @RequestParam(value = "to", required = false) String to,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @RequestParam(value = "hallId", required = false) Long hallId,
+    @RequestParam(value = "status", required = false) String orderStatus,
+    @RequestParam(value = "shiftFrom", required = false) String shiftFrom,
+    @RequestParam(value = "shiftTo", required = false) String shiftTo,
+    Authentication auth
+  ) {
+    requireSuper(auth);
+    Instant fromTs = parseInstantOrDate(from, true);
+    Instant toTs = parseInstantOrDate(to, false);
+    Instant shiftFromTs = parseInstantOrDateOrNull(shiftFrom, true);
+    Instant shiftToTs = parseInstantOrDateOrNull(shiftTo, false);
+    List<StatsService.WaiterMotivationRow> rows = statsService.waiterMotivationForTenant(
+      tenantId,
+      fromTs,
+      toTs,
+      branchId,
+      hallId,
+      orderStatus,
+      shiftFromTs,
+      shiftToTs
+    );
+    StringBuilder sb = new StringBuilder();
+    sb.append("staff_user_id,username,orders_count,tips_cents,avg_sla_minutes\n");
+    for (StatsService.WaiterMotivationRow r : rows) {
+      sb.append(r.staffUserId()).append(',')
+        .append(r.username() == null ? "" : r.username().replace(",", " ")).append(',')
+        .append(r.ordersCount()).append(',')
+        .append(r.tipsCents()).append(',')
+        .append(r.avgSlaMinutes() == null ? "" : r.avgSlaMinutes()).append('\n');
+    }
+    String filename = "tenant-top-waiters-" + tenantId + ".csv";
+    return ResponseEntity.ok()
+      .contentType(MediaType.parseMediaType("text/csv"))
+      .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+      .body(sb.toString());
   }
 
   @GetMapping("/stats/summary.csv")
@@ -583,15 +993,32 @@ public class SuperAdminController {
     @RequestParam(value = "tenantId") Long tenantId,
     @RequestParam(value = "from", required = false) String from,
     @RequestParam(value = "to", required = false) String to,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @RequestParam(value = "hallId", required = false) Long hallId,
+    @RequestParam(value = "status", required = false) String orderStatus,
+    @RequestParam(value = "shiftFrom", required = false) String shiftFrom,
+    @RequestParam(value = "shiftTo", required = false) String shiftTo,
     Authentication auth
   ) {
     requireSuper(auth);
     Instant fromTs = parseInstantOrDate(from, true);
     Instant toTs = parseInstantOrDate(to, false);
-    StatsService.Summary s = statsService.summaryForTenant(tenantId, fromTs, toTs);
-    BranchReviewAgg reviewsAgg = branchReviewAggForTenant(tenantId, fromTs, toTs);
+    Instant shiftFromTs = parseInstantOrDateOrNull(shiftFrom, true);
+    Instant shiftToTs = parseInstantOrDateOrNull(shiftTo, false);
+    StatsService.Summary s = statsService.summaryForTenantFiltered(
+      tenantId,
+      fromTs,
+      toTs,
+      branchId,
+      hallId,
+      orderStatus,
+      shiftFromTs,
+      shiftToTs
+    );
+    BranchReviewAgg reviewsAgg = branchReviewAggForTenant(tenantId, fromTs, toTs, branchId);
+    long avgCheckCents = s.paidBillsCount() == 0 ? 0L : (s.grossCents() / s.paidBillsCount());
     StringBuilder sb = new StringBuilder();
-    sb.append("from,to,orders,calls,paid_bills,gross_cents,tips_cents,active_tables,avg_branch_rating,branch_reviews_count\n");
+    sb.append("from,to,orders,calls,paid_bills,gross_cents,tips_cents,active_tables,avg_check_cents,avg_sla_minutes,avg_branch_rating,branch_reviews_count\n");
     sb.append(s.from()).append(',')
       .append(s.to()).append(',')
       .append(s.ordersCount()).append(',')
@@ -600,6 +1027,8 @@ public class SuperAdminController {
       .append(s.grossCents()).append(',')
       .append(s.tipsCents()).append(',')
       .append(s.activeTablesCount()).append(',')
+      .append(avgCheckCents).append(',')
+      .append(s.avgSlaMinutes() == null ? "" : s.avgSlaMinutes()).append(',')
       .append(reviewsAgg.avgRating).append(',')
       .append(reviewsAgg.count).append('\n');
     String filename = "tenant-summary-" + tenantId + ".csv";
@@ -614,17 +1043,46 @@ public class SuperAdminController {
     @RequestParam(value = "tenantId") Long tenantId,
     @RequestParam(value = "from", required = false) String from,
     @RequestParam(value = "to", required = false) String to,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @RequestParam(value = "status", required = false) String orderStatus,
+    @RequestParam(value = "shiftFrom", required = false) String shiftFrom,
+    @RequestParam(value = "shiftTo", required = false) String shiftTo,
     Authentication auth
   ) {
     requireSuper(auth);
     Instant fromTs = parseInstantOrDate(from, true);
     Instant toTs = parseInstantOrDate(to, false);
-    List<StatsService.BranchSummaryRow> rows = statsService.summaryByBranchForTenant(tenantId, fromTs, toTs);
+    Instant shiftFromTs = parseInstantOrDateOrNull(shiftFrom, true);
+    Instant shiftToTs = parseInstantOrDateOrNull(shiftTo, false);
+    List<StatsService.BranchSummaryRow> rows = statsService.summaryByBranchForTenant(
+      tenantId,
+      fromTs,
+      toTs,
+      branchId,
+      orderStatus,
+      shiftFromTs,
+      shiftToTs
+    );
+    List<Long> branchIds = rows.stream().map(StatsService.BranchSummaryRow::branchId).toList();
+    Map<Long, Branch> branchMap = branchRepo.findAllById(branchIds).stream()
+      .collect(Collectors.toMap(b -> b.id, b -> b));
+    Set<Long> restaurantIds = branchMap.values().stream()
+      .map(b -> b.restaurantId)
+      .filter(Objects::nonNull)
+      .collect(Collectors.toSet());
+    Map<Long, String> restaurantNames = restaurantIds.isEmpty()
+      ? Map.of()
+      : restaurantRepo.findAllById(restaurantIds).stream().collect(Collectors.toMap(r -> r.id, r -> r.name));
     StringBuilder sb = new StringBuilder();
-    sb.append("branch_id,branch_name,orders,calls,paid_bills,gross_cents,tips_cents\n");
+    sb.append("branch_id,branch_name,restaurant_id,restaurant_name,orders,calls,paid_bills,gross_cents,tips_cents\n");
     for (StatsService.BranchSummaryRow r : rows) {
+      Branch b = branchMap.get(r.branchId());
+      Long restaurantId = b == null ? null : b.restaurantId;
+      String restaurantName = restaurantId == null ? "" : restaurantNames.getOrDefault(restaurantId, "");
       sb.append(r.branchId()).append(',')
         .append(r.branchName()).append(',')
+        .append(restaurantId == null ? "" : restaurantId).append(',')
+        .append(restaurantName.replace(",", " ")).append(',')
         .append(r.ordersCount()).append(',')
         .append(r.callsCount()).append(',')
         .append(r.paidBillsCount()).append(',')
@@ -643,6 +1101,18 @@ public class SuperAdminController {
       Instant now = Instant.now();
       return isStart ? now.minusSeconds(30L * 24 * 3600) : now;
     }
+    String s = v.trim();
+    try {
+      return Instant.parse(s);
+    } catch (Exception ignored) {
+      LocalDate d = LocalDate.parse(s);
+      return isStart ? d.atStartOfDay().toInstant(ZoneOffset.UTC)
+        : d.plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC).minusSeconds(1);
+    }
+  }
+
+  private static Instant parseInstantOrDateOrNull(String v, boolean isStart) {
+    if (v == null || v.isBlank()) return null;
     String s = v.trim();
     try {
       return Instant.parse(s);

@@ -18,6 +18,8 @@ import md.virtualwaiter.domain.StaffReview;
 import md.virtualwaiter.domain.StaffUser;
 import md.virtualwaiter.domain.TableParty;
 import md.virtualwaiter.domain.WaiterCall;
+import md.virtualwaiter.domain.Branch;
+import md.virtualwaiter.domain.BranchMenuItemOverride;
 import md.virtualwaiter.security.QrSignatureService;
 import md.virtualwaiter.domain.PaymentIntent;
 import md.virtualwaiter.domain.PaymentTransaction;
@@ -25,6 +27,8 @@ import md.virtualwaiter.repo.CafeTableRepo;
 import md.virtualwaiter.repo.GuestSessionRepo;
 import md.virtualwaiter.repo.MenuCategoryRepo;
 import md.virtualwaiter.repo.MenuItemRepo;
+import md.virtualwaiter.repo.BranchRepo;
+import md.virtualwaiter.repo.BranchMenuItemOverrideRepo;
 import md.virtualwaiter.repo.OrderItemRepo;
 import md.virtualwaiter.repo.OrderRepo;
 import md.virtualwaiter.repo.WaiterCallRepo;
@@ -90,6 +94,8 @@ public class PublicController {
   private final GuestSessionRepo sessionRepo;
   private final MenuCategoryRepo categoryRepo;
   private final MenuItemRepo itemRepo;
+  private final BranchRepo branchRepo;
+  private final BranchMenuItemOverrideRepo menuItemOverrideRepo;
   private final OrderRepo orderRepo;
   private final OrderItemRepo orderItemRepo;
   private final WaiterCallRepo waiterCallRepo;
@@ -138,6 +144,8 @@ public class PublicController {
     GuestSessionRepo sessionRepo,
     MenuCategoryRepo categoryRepo,
     MenuItemRepo itemRepo,
+    BranchRepo branchRepo,
+    BranchMenuItemOverrideRepo menuItemOverrideRepo,
     OrderRepo orderRepo,
     OrderItemRepo orderItemRepo,
     WaiterCallRepo waiterCallRepo,
@@ -185,6 +193,8 @@ public class PublicController {
     this.sessionRepo = sessionRepo;
     this.categoryRepo = categoryRepo;
     this.itemRepo = itemRepo;
+    this.branchRepo = branchRepo;
+    this.menuItemOverrideRepo = menuItemOverrideRepo;
     this.orderRepo = orderRepo;
     this.orderItemRepo = orderItemRepo;
     this.waiterCallRepo = waiterCallRepo;
@@ -362,6 +372,8 @@ public class PublicController {
     }
     CafeTable table = tableRepo.findById(s.tableId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
+    Branch branch = branchRepo.findById(table.branchId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
     if (table.assignedWaiterId == null) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Waiter not assigned");
     }
@@ -545,12 +557,18 @@ public class PublicController {
     }
     CafeTable table = tableRepo.findByPublicId(tablePublicId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
+    Branch branch = branchRepo.findById(table.branchId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
     MenuItem item = itemRepo.findById(id)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Menu item not found"));
     MenuCategory cat = categoryRepo.findById(item.categoryId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found"));
-    if (!Objects.equals(cat.branchId, table.branchId)) {
-      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong branch");
+    if (!Objects.equals(cat.tenantId, branch.tenantId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong tenant");
+    }
+    BranchMenuItemOverride override = menuItemOverrideRepo.findByBranchIdAndMenuItemId(branch.id, item.id).orElse(null);
+    if (!resolveMenuItemActive(item, override) || resolveMenuItemStopList(item, override)) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Menu item not available");
     }
 
     String loc = normalizeLocale(locale);
@@ -585,12 +603,18 @@ public class PublicController {
     }
     CafeTable table = tableRepo.findByPublicId(tablePublicId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
+    Branch branch = branchRepo.findById(table.branchId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
     MenuItem item = itemRepo.findById(id)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Menu item not found"));
     MenuCategory cat = categoryRepo.findById(item.categoryId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found"));
-    if (!Objects.equals(cat.branchId, table.branchId)) {
-      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong branch");
+    if (!Objects.equals(cat.tenantId, branch.tenantId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong tenant");
+    }
+    BranchMenuItemOverride override = menuItemOverrideRepo.findByBranchIdAndMenuItemId(branch.id, item.id).orElse(null);
+    if (!resolveMenuItemActive(item, override) || resolveMenuItemStopList(item, override)) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Menu item not available");
     }
 
     String loc = normalizeLocale(locale);
@@ -644,14 +668,25 @@ public class PublicController {
     }
     CafeTable table = tableRepo.findByPublicId(tablePublicId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
+    Branch branch = branchRepo.findById(table.branchId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
 
     String loc = normalizeLocale(locale);
-    List<MenuCategory> cats = categoryRepo.findByBranchIdAndIsActiveOrderBySortOrderAscIdAsc(table.branchId, true);
+    List<MenuCategory> cats = categoryRepo.findByTenantIdAndIsActiveOrderBySortOrderAscIdAsc(branch.tenantId, true);
     List<Long> catIds = cats.stream().map(c -> c.id).toList();
-    List<MenuItem> items = catIds.isEmpty() ? List.of() : itemRepo.findByCategoryIdInAndIsActiveAndIsStopList(catIds, true, false);
+    List<MenuItem> items = catIds.isEmpty() ? List.of() : itemRepo.findByCategoryIdIn(catIds);
+    Map<Long, BranchMenuItemOverride> overrides = items.isEmpty()
+      ? Map.of()
+      : menuItemOverrideRepo.findByBranchIdAndMenuItemIdIn(branch.id, items.stream().map(i -> i.id).toList())
+        .stream()
+        .collect(java.util.stream.Collectors.toMap(o -> o.menuItemId, o -> o));
 
     Map<Long, List<MenuItemDto>> itemsByCat = new HashMap<>();
     for (MenuItem it : items) {
+      BranchMenuItemOverride override = overrides.get(it.id);
+      if (!resolveMenuItemActive(it, override) || resolveMenuItemStopList(it, override)) {
+        continue;
+      }
       itemsByCat.computeIfAbsent(it.categoryId, k -> new ArrayList<>())
         .add(new MenuItemDto(
           it.id,
@@ -673,6 +708,7 @@ public class PublicController {
 
     List<MenuCategoryDto> out = new ArrayList<>();
     for (MenuCategory c : cats) {
+      if (!itemsByCat.containsKey(c.id)) continue;
       out.add(new MenuCategoryDto(
         c.id,
         pick(loc, c.nameRu, c.nameRo, c.nameEn),
@@ -718,6 +754,8 @@ public class PublicController {
     CafeTable table = tableRepo.findById(s.tableId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
     BranchSettingsService.Resolved settings = settingsService.resolveForBranch(table.branchId);
+    Branch branch = branchRepo.findById(table.branchId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
     if (settings.requireOtpForFirstOrder() && !s.isVerified) {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "OTP required before first order");
     }
@@ -740,6 +778,21 @@ public class PublicController {
     }
     for (Long id : ids) {
       if (!menu.containsKey(id)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown menu item: " + id);
+    }
+    Map<Long, BranchMenuItemOverride> overrides = ids.isEmpty()
+      ? Map.of()
+      : menuItemOverrideRepo.findByBranchIdAndMenuItemIdIn(branch.id, ids)
+        .stream()
+        .collect(java.util.stream.Collectors.toMap((BranchMenuItemOverride o) -> o.menuItemId, o -> o));
+    for (MenuItem mi : menu.values()) {
+      MenuCategory cat = categoryRepo.findById(mi.categoryId).orElse(null);
+      if (cat == null || !Objects.equals(cat.tenantId, branch.tenantId)) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Menu item not available");
+      }
+      BranchMenuItemOverride override = overrides.get(mi.id);
+      if (!resolveMenuItemActive(mi, override) || resolveMenuItemStopList(mi, override)) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Menu item not available");
+      }
     }
 
     Order o = new Order();
@@ -2042,6 +2095,14 @@ public class PublicController {
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
     LoyaltyService.LoyaltyProfile p = loyaltyService.getProfile(table.branchId, s.verifiedPhone);
     return new LoyaltyProfileResponse(p.phone(), p.pointsBalance(), p.favorites(), p.offers());
+  }
+
+  private static boolean resolveMenuItemActive(MenuItem it, BranchMenuItemOverride override) {
+    return override != null ? override.isActive : it.isActive;
+  }
+
+  private static boolean resolveMenuItemStopList(MenuItem it, BranchMenuItemOverride override) {
+    return override != null ? override.isStopList : it.isStopList;
   }
 
 }

@@ -6,5 +6,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.List;
 
 public interface ModifierGroupRepo extends JpaRepository<ModifierGroup, Long> {
-  List<ModifierGroup> findByBranchIdOrderByIdAsc(Long branchId);
+  List<ModifierGroup> findByTenantIdOrderByIdAsc(Long tenantId);
 }

@@ -4,11 +4,13 @@ import md.virtualwaiter.VirtualWaiterApplication;
 import md.virtualwaiter.domain.Branch;
 import md.virtualwaiter.domain.BranchSettings;
 import md.virtualwaiter.domain.MenuCategory;
+import md.virtualwaiter.domain.Restaurant;
 import md.virtualwaiter.domain.StaffUser;
 import md.virtualwaiter.domain.Tenant;
 import md.virtualwaiter.repo.BranchRepo;
 import md.virtualwaiter.repo.BranchSettingsRepo;
 import md.virtualwaiter.repo.MenuCategoryRepo;
+import md.virtualwaiter.repo.RestaurantRepo;
 import md.virtualwaiter.repo.StaffUserRepo;
 import md.virtualwaiter.repo.TenantRepo;
 import org.junit.jupiter.api.BeforeEach;
@@ -46,6 +48,7 @@ class AdminPhotoUrlValidationTest {
   @Autowired BranchRepo branchRepo;
   @Autowired BranchSettingsRepo branchSettingsRepo;
   @Autowired MenuCategoryRepo categoryRepo;
+  @Autowired RestaurantRepo restaurantRepo;
   @Autowired TenantRepo tenantRepo;
   @Autowired PasswordEncoder passwordEncoder;
 
@@ -58,16 +61,24 @@ class AdminPhotoUrlValidationTest {
     staffUserRepo.deleteAll();
     categoryRepo.deleteAll();
     branchSettingsRepo.deleteAll();
-    tenantRepo.deleteAll();
     branchRepo.deleteAll();
+    restaurantRepo.deleteAll();
+    tenantRepo.deleteAll();
 
     Tenant t = new Tenant();
     t.name = "T1";
     t.isActive = true;
     t = tenantRepo.save(t);
 
+    Restaurant r = new Restaurant();
+    r.tenantId = t.id;
+    r.name = "R1";
+    r.isActive = true;
+    r = restaurantRepo.save(r);
+
     Branch b = new Branch();
     b.tenantId = t.id;
+    b.restaurantId = r.id;
     b.name = "B1";
     b.isActive = true;
     b = branchRepo.save(b);
@@ -78,7 +89,7 @@ class AdminPhotoUrlValidationTest {
     branchSettingsRepo.save(s);
 
     MenuCategory c = new MenuCategory();
-    c.branchId = b.id;
+    c.tenantId = t.id;
     c.nameRu = "Cat";
     c.sortOrder = 0;
     c.isActive = true;
@@ -119,7 +130,7 @@ class AdminPhotoUrlValidationTest {
   @Test
   void acceptsGoodPhotoUrl() throws Exception {
     String body = String.format(Locale.ROOT,
-      "{\"categoryId\": %d, \"nameRu\": \"Item\", \"priceCents\": 100, \"photoUrls\": \"https://cdn.example.com/img.jpg\"}",
+      "{\"categoryId\": %d, \"nameRu\": \"Item\", \"priceCents\": 100, \"photoUrls\": \"/media/menu/img.jpg\"}",
       cat.id
     );
     mvc.perform(post("/api/admin/menu/items")

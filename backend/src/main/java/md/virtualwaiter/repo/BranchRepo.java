@@ -7,4 +7,6 @@ import java.util.List;
 
 public interface BranchRepo extends JpaRepository<Branch, Long> {
   List<Branch> findByTenantId(Long tenantId);
+  List<Branch> findByRestaurantId(Long restaurantId);
+  List<Branch> findByTenantIdAndRestaurantId(Long tenantId, Long restaurantId);
 }

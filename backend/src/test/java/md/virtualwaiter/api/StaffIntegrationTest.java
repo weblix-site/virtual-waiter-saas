@@ -2,7 +2,6 @@ package md.virtualwaiter.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
@@ -63,7 +62,7 @@ class StaffIntegrationTest {
     String adminCookie = loginCookie("admin1", "demo123");
     ensureHall(adminCookie);
 
-    String staffAuth = basicAuth("waiter1", "demo123");
+    String staffAuth = loginCookie("waiter1", "demo123");
 
     ResponseEntity<String> hallsRes = exchange("/api/staff/halls", staffAuth, null, HttpMethod.GET, true);
     assertThat(hallsRes.getStatusCode().value()).isEqualTo(200);
@@ -100,10 +99,6 @@ class StaffIntegrationTest {
     return cookies.get(0).split(";", 2)[0];
   }
 
-  private String basicAuth(String username, String password) {
-    String token = Base64.getEncoder().encodeToString((username + ":" + password).getBytes());
-    return "Basic " + token;
-  }
 
   private Map<String, Object> postJson(String path, String authOrCookie, Object payload) throws Exception {
     HttpHeaders headers = new HttpHeaders();

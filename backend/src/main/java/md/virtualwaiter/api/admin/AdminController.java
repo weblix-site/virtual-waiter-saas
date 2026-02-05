@@ -2,6 +2,8 @@ package md.virtualwaiter.api.admin;
 
 import md.virtualwaiter.domain.AuditLog;
 import md.virtualwaiter.domain.Branch;
+import md.virtualwaiter.domain.BranchMenuItemOverride;
+import md.virtualwaiter.domain.MenuTemplate;
 import md.virtualwaiter.domain.BranchDiscount;
 import md.virtualwaiter.domain.BranchHall;
 import md.virtualwaiter.domain.BranchReview;
@@ -26,7 +28,9 @@ import md.virtualwaiter.domain.WaiterCall;
 import md.virtualwaiter.domain.Order;
 import md.virtualwaiter.repo.AuditLogRepo;
 import md.virtualwaiter.repo.BranchHallRepo;
+import md.virtualwaiter.repo.BranchMenuItemOverrideRepo;
 import md.virtualwaiter.repo.BranchRepo;
+import md.virtualwaiter.repo.RestaurantRepo;
 import md.virtualwaiter.repo.BranchDiscountRepo;
 import md.virtualwaiter.repo.BranchReviewRepo;
 import md.virtualwaiter.repo.BranchSettingsRepo;
@@ -42,6 +46,7 @@ import md.virtualwaiter.repo.InventoryItemRepo;
 import md.virtualwaiter.repo.MenuCategoryRepo;
 import md.virtualwaiter.repo.MenuItemIngredientRepo;
 import md.virtualwaiter.repo.MenuItemModifierGroupRepo;
+import md.virtualwaiter.repo.MenuTemplateRepo;
 import md.virtualwaiter.repo.MenuItemRepo;
 import md.virtualwaiter.repo.ModifierGroupRepo;
 import md.virtualwaiter.repo.ModifierOptionRepo;
@@ -94,6 +99,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.io.IOException;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.regex.Pattern;
@@ -110,8 +116,11 @@ public class AdminController {
   private final BranchReviewRepo branchReviewRepo;
   private final MenuCategoryRepo categoryRepo;
   private final MenuItemRepo itemRepo;
+  private final BranchMenuItemOverrideRepo menuItemOverrideRepo;
   private final CafeTableRepo tableRepo;
   private final BranchRepo branchRepo;
+  private final MenuTemplateRepo menuTemplateRepo;
+  private final RestaurantRepo restaurantRepo;
   private final BranchDiscountRepo branchDiscountRepo;
   private final BranchHallRepo hallRepo;
   private final HallPlanRepo hallPlanRepo;
@@ -149,8 +158,11 @@ public class AdminController {
     BranchReviewRepo branchReviewRepo,
     MenuCategoryRepo categoryRepo,
     MenuItemRepo itemRepo,
+    BranchMenuItemOverrideRepo menuItemOverrideRepo,
     CafeTableRepo tableRepo,
     BranchRepo branchRepo,
+    MenuTemplateRepo menuTemplateRepo,
+    RestaurantRepo restaurantRepo,
     BranchDiscountRepo branchDiscountRepo,
     BranchHallRepo hallRepo,
     HallPlanRepo hallPlanRepo,
@@ -187,8 +199,11 @@ public class AdminController {
     this.branchReviewRepo = branchReviewRepo;
     this.categoryRepo = categoryRepo;
     this.itemRepo = itemRepo;
+    this.menuItemOverrideRepo = menuItemOverrideRepo;
     this.tableRepo = tableRepo;
     this.branchRepo = branchRepo;
+    this.menuTemplateRepo = menuTemplateRepo;
+    this.restaurantRepo = restaurantRepo;
     this.branchDiscountRepo = branchDiscountRepo;
     this.hallRepo = hallRepo;
     this.hallPlanRepo = hallPlanRepo;
@@ -266,6 +281,34 @@ public class AdminController {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "User has no branch");
     }
     return u.branchId;
+  }
+
+  public record BranchInfoDto(
+    long id,
+    long tenantId,
+    Long restaurantId,
+    String restaurantName,
+    String name,
+    Long menuTemplateId,
+    String menuTemplateName
+  ) {}
+
+  @GetMapping("/branch")
+  public BranchInfoDto getBranch(@RequestParam(value = "branchId", required = false) Long branchId, Authentication auth) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
+    String restaurantName = null;
+    if (b.restaurantId != null) {
+      restaurantName = restaurantRepo.findById(b.restaurantId).map(r -> r.name).orElse(null);
+    }
+    String menuTemplateName = null;
+    if (b.menuTemplateId != null) {
+      menuTemplateName = menuTemplateRepo.findById(b.menuTemplateId).map(t -> t.name).orElse(null);
+    }
+    return new BranchInfoDto(b.id, b.tenantId, b.restaurantId, restaurantName, b.name, b.menuTemplateId, menuTemplateName);
   }
 
   private Long resolveHallIdFromPlan(StaffUser u, Long hallId, Long planId) {
@@ -1136,7 +1179,9 @@ public class AdminController {
     if (req.currencyCode != null && !req.currencyCode.isBlank()) {
       String nextCurrency = s.currencyCode == null ? "MDL" : s.currencyCode;
       if (!Objects.equals(prevCurrency, nextCurrency)) {
-        List<MenuCategory> cats = categoryRepo.findByBranchIdOrderBySortOrderAscIdAsc(bid);
+        Branch b = branchRepo.findById(bid)
+          .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+        List<MenuCategory> cats = categoryRepo.findByTenantIdOrderBySortOrderAscIdAsc(b.tenantId);
         if (!cats.isEmpty()) {
           List<Long> catIds = cats.stream().map(c -> c.id).toList();
           itemRepo.updateCurrencyByCategoryIds(nextCurrency, catIds);
@@ -1240,10 +1285,10 @@ public class AdminController {
   ) {
     StaffUser u = requireAdmin(auth);
     long bid = resolveBranchId(u, branchId);
-    branchRepo.findById(bid)
+    Branch b = branchRepo.findById(bid)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
 
-    if (hallRepo.findByBranchId(bid).stream().noneMatch(h -> "Демо‑зал".equalsIgnoreCase(h.name))) {
+    if (hallRepo.findByBranchIdOrderBySortOrderAscIdAsc(bid).stream().noneMatch(h -> "Демо‑зал".equalsIgnoreCase(h.name))) {
       BranchHall h = new BranchHall();
       h.branchId = bid;
       h.name = "Демо‑зал";
@@ -1255,7 +1300,7 @@ public class AdminController {
     List<CafeTable> existingTables = tableRepo.findByBranchId(bid);
     boolean hasDemoTables = existingTables.stream().anyMatch(t -> "DEMO".equalsIgnoreCase(t.layoutZone));
     if (!hasDemoTables) {
-      List<BranchHall> halls = hallRepo.findByBranchId(bid);
+      List<BranchHall> halls = hallRepo.findByBranchIdOrderBySortOrderAscIdAsc(bid);
       Long hallId = halls.stream().filter(h -> "Демо‑зал".equalsIgnoreCase(h.name)).map(h -> h.id).findFirst()
         .orElse(halls.isEmpty() ? null : halls.get(0).id);
       for (int i = 1; i <= 10; i++) {
@@ -1274,11 +1319,11 @@ public class AdminController {
       }
     }
 
-    List<MenuCategory> categories = categoryRepo.findByBranchIdOrderBySortOrderAsc(bid);
+    List<MenuCategory> categories = categoryRepo.findByTenantIdOrderBySortOrderAscIdAsc(b.tenantId);
     MenuCategory cat = categories.stream().filter(c -> "Демо‑меню".equalsIgnoreCase(c.nameRu)).findFirst().orElse(null);
     if (cat == null) {
       cat = new MenuCategory();
-      cat.branchId = bid;
+      cat.tenantId = b.tenantId;
       cat.nameRu = "Демо‑меню";
       cat.nameRo = "Meniu demo";
       cat.nameEn = "Demo menu";
@@ -1341,8 +1386,11 @@ public class AdminController {
   ) {
     StaffUser u = requireAdmin(auth);
     long bid = resolveBranchId(u, branchId);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
 
-    List<BranchHall> halls = hallRepo.findByBranchId(bid);
+    List<BranchHall> halls = hallRepo.findByBranchIdOrderBySortOrderAscIdAsc(bid);
     List<OnboardingHall> hallDtos = new ArrayList<>();
     for (BranchHall h : halls) {
       hallDtos.add(new OnboardingHall(h.name, h.layoutBgUrl, h.layoutZonesJson));
@@ -1367,7 +1415,7 @@ public class AdminController {
       ));
     }
 
-    List<MenuCategory> cats = categoryRepo.findByBranchIdOrderBySortOrderAsc(bid);
+    List<MenuCategory> cats = categoryRepo.findByTenantIdOrderBySortOrderAscIdAsc(b.tenantId);
     List<OnboardingCategory> catDtos = new ArrayList<>();
     for (MenuCategory c : cats) {
       catDtos.add(new OnboardingCategory(c.nameRu, c.nameRo, c.nameEn, c.sortOrder, c.isActive));
@@ -1381,7 +1429,10 @@ public class AdminController {
     Map<Long, String> catNameById = new HashMap<>();
     for (MenuCategory c : cats) catNameById.put(c.id, c.nameRu);
     List<OnboardingItem> itemDtos = new ArrayList<>();
+    Map<Long, BranchMenuItemOverride> overrides = loadMenuItemOverrides(b.id, items.stream().map(i -> i.id).toList());
     for (MenuItem it : items) {
+      BranchMenuItemOverride o = overrides.get(it.id);
+      boolean active = resolveMenuItemActive(it, o);
       itemDtos.add(new OnboardingItem(
         catNameById.get(it.categoryId),
         it.nameRu,
@@ -1392,7 +1443,7 @@ public class AdminController {
         it.descriptionEn,
         it.priceCents,
         it.currency,
-        it.isActive
+        active
       ));
     }
 
@@ -1415,11 +1466,12 @@ public class AdminController {
   ) {
     StaffUser u = requireAdmin(auth);
     long bid = resolveBranchId(u, branchId);
-    branchRepo.findById(bid)
+    Branch b = branchRepo.findById(bid)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
 
     Map<String, BranchHall> hallByName = new HashMap<>();
-    for (BranchHall h : hallRepo.findByBranchId(bid)) hallByName.put(h.name, h);
+    for (BranchHall h : hallRepo.findByBranchIdOrderBySortOrderAscIdAsc(bid)) hallByName.put(h.name, h);
 
     if (tpl != null && tpl.halls != null) {
       for (OnboardingHall h : tpl.halls) {
@@ -1464,7 +1516,7 @@ public class AdminController {
       }
     }
 
-    List<MenuCategory> cats = categoryRepo.findByBranchIdOrderBySortOrderAsc(bid);
+    List<MenuCategory> cats = categoryRepo.findByTenantIdOrderBySortOrderAscIdAsc(b.tenantId);
     Map<String, MenuCategory> catByName = new HashMap<>();
     for (MenuCategory c : cats) catByName.put(c.nameRu, c);
 
@@ -1474,7 +1526,7 @@ public class AdminController {
         MenuCategory existing = catByName.get(c.nameRu);
         if (existing == null) {
           MenuCategory nc = new MenuCategory();
-          nc.branchId = bid;
+          nc.tenantId = b.tenantId;
           nc.nameRu = c.nameRu.trim();
           nc.nameRo = c.nameRo;
           nc.nameEn = c.nameEn;
@@ -1491,20 +1543,27 @@ public class AdminController {
         if (it == null || it.nameRu == null || it.nameRu.isBlank() || it.categoryNameRu == null || it.categoryNameRu.isBlank()) continue;
         MenuCategory cat = catByName.get(it.categoryNameRu);
         if (cat == null) continue;
-        boolean exists = itemRepo.findByCategoryId(cat.id).stream().anyMatch(x -> it.nameRu.equalsIgnoreCase(x.nameRu));
-        if (exists) continue;
-        MenuItem ni = new MenuItem();
-        ni.categoryId = cat.id;
-        ni.nameRu = it.nameRu.trim();
-        ni.nameRo = it.nameRo;
-        ni.nameEn = it.nameEn;
-        ni.descriptionRu = it.descriptionRu;
-        ni.descriptionRo = it.descriptionRo;
-        ni.descriptionEn = it.descriptionEn;
-        ni.priceCents = it.priceCents;
-        ni.currency = it.currency == null || it.currency.isBlank() ? "MDL" : it.currency.trim().toUpperCase(Locale.ROOT);
-        ni.isActive = it.isActive;
-        itemRepo.save(ni);
+        MenuItem existingItem = itemRepo.findByCategoryId(cat.id).stream()
+          .filter(x -> it.nameRu.equalsIgnoreCase(x.nameRu))
+          .findFirst()
+          .orElse(null);
+        MenuItem ni = existingItem;
+        if (ni == null) {
+          ni = new MenuItem();
+          ni.categoryId = cat.id;
+          ni.nameRu = it.nameRu.trim();
+          ni.nameRo = it.nameRo;
+          ni.nameEn = it.nameEn;
+          ni.descriptionRu = it.descriptionRu;
+          ni.descriptionRo = it.descriptionRo;
+          ni.descriptionEn = it.descriptionEn;
+          ni.priceCents = it.priceCents;
+          ni.currency = it.currency == null || it.currency.isBlank() ? "MDL" : it.currency.trim().toUpperCase(Locale.ROOT);
+          ni.isActive = true;
+          ni.isStopList = false;
+          ni = itemRepo.save(ni);
+        }
+        upsertMenuItemOverride(b.id, ni.id, it.isActive, false);
       }
     }
 
@@ -1545,8 +1604,9 @@ public class AdminController {
   ) {
     StaffUser u = requireAdmin(auth);
     long bid = resolveBranchId(u, branchId);
-    branchRepo.findById(bid)
+    Branch b = branchRepo.findById(bid)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
 
     // delete demo staff
     List<StaffUser> staff = staffUserRepo.findByBranchId(bid);
@@ -1556,18 +1616,15 @@ public class AdminController {
       }
     }
 
-    // delete demo menu item + category if only demo
-    List<MenuCategory> categories = categoryRepo.findByBranchIdOrderBySortOrderAsc(bid);
+    // disable demo menu for this branch (do not delete shared menu)
+    List<MenuCategory> categories = categoryRepo.findByTenantIdOrderBySortOrderAscIdAsc(b.tenantId);
     for (MenuCategory cat : categories) {
       if ("Демо‑меню".equalsIgnoreCase(cat.nameRu)) {
         List<MenuItem> items = itemRepo.findByCategoryId(cat.id);
         for (MenuItem it : items) {
           if ("Демо блюдо".equalsIgnoreCase(it.nameRu) && "Демо‑позиция для быстрого старта".equals(it.descriptionRu)) {
-            itemRepo.delete(it);
+            upsertMenuItemOverride(b.id, it.id, false, false);
           }
-        }
-        if (itemRepo.findByCategoryId(cat.id).isEmpty()) {
-          categoryRepo.delete(cat);
         }
       }
     }
@@ -1582,7 +1639,7 @@ public class AdminController {
     }
 
     // delete demo hall if empty
-    List<BranchHall> halls = hallRepo.findByBranchId(bid);
+    List<BranchHall> halls = hallRepo.findByBranchIdOrderBySortOrderAscIdAsc(bid);
     for (BranchHall h : halls) {
       if (!"Демо‑зал".equalsIgnoreCase(h.name)) continue;
       boolean hasTables = tableRepo.findByBranchId(bid).stream().anyMatch(t -> Objects.equals(t.hallId, h.id));
@@ -1600,7 +1657,7 @@ public class AdminController {
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
 
     List<OnboardingCheckItem> items = new ArrayList<>();
-    boolean hallsOk = !hallRepo.findByBranchId(bid).isEmpty();
+    boolean hallsOk = !hallRepo.findByBranchIdOrderBySortOrderAscIdAsc(bid).isEmpty();
     items.add(new OnboardingCheckItem(
       "halls",
       "Залы",
@@ -1616,7 +1673,7 @@ public class AdminController {
       tablesOk ? "Ок" : "Добавьте столы"
     ));
 
-    List<MenuCategory> categories = categoryRepo.findByBranchIdOrderBySortOrderAsc(bid);
+    List<MenuCategory> categories = categoryRepo.findByTenantIdOrderBySortOrderAscIdAsc(b.tenantId);
     boolean catsOk = !categories.isEmpty();
     items.add(new OnboardingCheckItem(
       "menu_categories",
@@ -1628,7 +1685,10 @@ public class AdminController {
     boolean itemsOk = false;
     if (catsOk) {
       List<Long> catIds = categories.stream().map(c -> c.id).toList();
-      itemsOk = !itemRepo.findByCategoryIdIn(catIds).isEmpty();
+      List<MenuItem> menuItems = itemRepo.findByCategoryIdIn(catIds);
+      List<Long> itemIds = menuItems.stream().map(i -> i.id).toList();
+      Map<Long, BranchMenuItemOverride> overrides = loadMenuItemOverrides(bid, itemIds);
+      itemsOk = menuItems.stream().anyMatch(it -> resolveMenuItemActive(it, overrides.get(it.id)));
     }
     items.add(new OnboardingCheckItem(
       "menu_items",
@@ -1672,7 +1732,7 @@ public class AdminController {
     ));
 
     boolean demoSeeded = staffUserRepo.findByBranchId(bid).stream().anyMatch(su -> "waiter_demo".equalsIgnoreCase(su.username))
-      || hallRepo.findByBranchId(bid).stream().anyMatch(h -> "Демо‑зал".equalsIgnoreCase(h.name))
+      || hallRepo.findByBranchIdOrderBySortOrderAscIdAsc(bid).stream().anyMatch(h -> "Демо‑зал".equalsIgnoreCase(h.name))
       || tableRepo.findByBranchId(bid).stream().anyMatch(t -> "DEMO".equalsIgnoreCase(t.layoutZone));
 
     boolean ready = items.stream().allMatch(OnboardingCheckItem::ok);
@@ -1872,11 +1932,14 @@ public class AdminController {
   ) {
     StaffUser u = requireAdmin(auth);
     long bid = resolveBranchId(u, branchId);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
     MenuItem mi = itemRepo.findById(menuItemId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Menu item not found"));
     MenuCategory cat = categoryRepo.findById(mi.categoryId).orElse(null);
-    if (cat == null || cat.branchId != bid) {
-      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Menu item not in branch");
+    if (cat == null || !Objects.equals(cat.tenantId, b.tenantId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Menu item not in tenant");
     }
     List<MenuItemIngredient> ingredients = ingredientRepo.findByMenuItemId(menuItemId);
     Map<Long, InventoryItem> inventory = new HashMap<>();
@@ -1909,11 +1972,14 @@ public class AdminController {
   ) {
     StaffUser u = requireAdmin(auth);
     long bid = resolveBranchId(u, branchId);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
     MenuItem mi = itemRepo.findById(menuItemId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Menu item not found"));
     MenuCategory cat = categoryRepo.findById(mi.categoryId).orElse(null);
-    if (cat == null || cat.branchId != bid) {
-      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Menu item not in branch");
+    if (cat == null || !Objects.equals(cat.tenantId, b.tenantId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Menu item not in tenant");
     }
     ingredientRepo.deleteByMenuItemId(menuItemId);
     List<IngredientView> out = new ArrayList<>();
@@ -2083,6 +2149,265 @@ public class AdminController {
     return out;
   }
 
+  // --- Menu templates ---
+  public record MenuTemplateDto(
+    long id,
+    long tenantId,
+    Long restaurantId,
+    String name,
+    boolean isActive,
+    String scope
+  ) {}
+
+  public record SaveMenuTemplateRequest(@NotBlank String name, @NotBlank String scope) {}
+  public record ApplyMenuTemplateRequest(@NotNull Long templateId, Boolean replaceExisting) {}
+
+  private record MenuTemplateCategoryPayload(
+    String nameRu,
+    String nameRo,
+    String nameEn,
+    int sortOrder,
+    boolean isActive
+  ) {}
+
+  private record MenuTemplateItemPayload(
+    String categoryNameRu,
+    String nameRu,
+    String nameRo,
+    String nameEn,
+    String descriptionRu,
+    String descriptionRo,
+    String descriptionEn,
+    String ingredientsRu,
+    String ingredientsRo,
+    String ingredientsEn,
+    String allergens,
+    String weight,
+    String tags,
+    String photoUrls,
+    Integer kcal,
+    Integer proteinG,
+    Integer fatG,
+    Integer carbsG,
+    int priceCents,
+    String currency,
+    boolean isActive,
+    boolean isStopList
+  ) {}
+
+  @GetMapping("/menu-templates")
+  public List<MenuTemplateDto> listMenuTemplates(
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @RequestParam(value = "includeInactive", required = false) Boolean includeInactive,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
+    List<MenuTemplate> out = new ArrayList<>();
+    out.addAll(menuTemplateRepo.findByTenantIdAndRestaurantIdIsNullOrderByIdAsc(b.tenantId));
+    if (b.restaurantId != null) {
+      out.addAll(menuTemplateRepo.findByTenantIdAndRestaurantIdOrderByIdAsc(b.tenantId, b.restaurantId));
+    }
+    boolean showInactive = includeInactive != null && includeInactive;
+    return out.stream()
+      .filter(t -> showInactive || t.isActive)
+      .map(t -> new MenuTemplateDto(
+        t.id,
+        t.tenantId,
+        t.restaurantId,
+        t.name,
+        t.isActive,
+        t.restaurantId == null ? "TENANT" : "RESTAURANT"
+      ))
+      .toList();
+  }
+
+  @PostMapping("/menu-templates/save")
+  public MenuTemplateDto saveMenuTemplate(
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @Valid @RequestBody SaveMenuTemplateRequest req,
+    Authentication auth
+  ) throws IOException {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
+    boolean scopeRestaurant = "RESTAURANT".equalsIgnoreCase(req.scope);
+    if (scopeRestaurant && b.restaurantId == null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Branch has no restaurant");
+    }
+    List<MenuCategory> categories = categoryRepo.findByTenantIdOrderBySortOrderAscIdAsc(b.tenantId);
+    List<Long> catIds = categories.stream().map(c -> c.id).toList();
+    List<MenuItem> items = catIds.isEmpty() ? List.of() : itemRepo.findByCategoryIdIn(catIds);
+    Map<Long, BranchMenuItemOverride> overrides = loadMenuItemOverrides(b.id, items.stream().map(i -> i.id).toList());
+    Map<Long, MenuCategory> catMap = categories.stream().collect(Collectors.toMap(c -> c.id, c -> c));
+    List<MenuTemplateCategoryPayload> categoryPayloads = new ArrayList<>();
+    for (MenuCategory c : categories) {
+      categoryPayloads.add(new MenuTemplateCategoryPayload(c.nameRu, c.nameRo, c.nameEn, c.sortOrder, c.isActive));
+    }
+    List<MenuTemplateItemPayload> itemPayloads = new ArrayList<>();
+    for (MenuItem it : items) {
+      MenuCategory c = catMap.get(it.categoryId);
+      String catNameRu = c == null ? null : c.nameRu;
+      if (catNameRu == null || catNameRu.isBlank()) continue;
+      BranchMenuItemOverride o = overrides.get(it.id);
+      boolean active = resolveMenuItemActive(it, o);
+      boolean stop = resolveMenuItemStopList(it, o);
+      itemPayloads.add(new MenuTemplateItemPayload(
+        catNameRu,
+        it.nameRu,
+        it.nameRo,
+        it.nameEn,
+        it.descriptionRu,
+        it.descriptionRo,
+        it.descriptionEn,
+        it.ingredientsRu,
+        it.ingredientsRo,
+        it.ingredientsEn,
+        it.allergens,
+        it.weight,
+        it.tags,
+        it.photoUrls,
+        it.kcal,
+        it.proteinG,
+        it.fatG,
+        it.carbsG,
+        it.priceCents,
+        it.currency,
+        active,
+        stop
+      ));
+    }
+    ObjectMapper mapper = new ObjectMapper();
+    String payloadJson = mapper.writeValueAsString(Map.of(
+      "categories", categoryPayloads,
+      "items", itemPayloads
+    ));
+    MenuTemplate t = new MenuTemplate();
+    t.tenantId = b.tenantId;
+    t.restaurantId = scopeRestaurant ? b.restaurantId : null;
+    t.name = req.name;
+    t.payloadJson = payloadJson;
+    t.isActive = true;
+    t.createdAt = Instant.now();
+    t.updatedAt = Instant.now();
+    t = menuTemplateRepo.save(t);
+    auditService.log(u, "CREATE", "MenuTemplate", t.id, null);
+    return new MenuTemplateDto(t.id, t.tenantId, t.restaurantId, t.name, t.isActive, t.restaurantId == null ? "TENANT" : "RESTAURANT");
+  }
+
+  @PostMapping("/menu-templates/apply")
+  @Transactional
+  public void applyMenuTemplate(
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @Valid @RequestBody ApplyMenuTemplateRequest req,
+    Authentication auth
+  ) throws IOException {
+    StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
+    MenuTemplate t = menuTemplateRepo.findById(req.templateId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Template not found"));
+    if (!Objects.equals(t.tenantId, b.tenantId)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Template does not belong to tenant");
+    }
+    if (t.restaurantId != null && !Objects.equals(t.restaurantId, b.restaurantId)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Template does not belong to restaurant");
+    }
+    boolean replaceExisting = req.replaceExisting == null || req.replaceExisting;
+    ObjectMapper mapper = new ObjectMapper();
+    JsonNode root = mapper.readTree(t.payloadJson);
+    JsonNode categoriesNode = root.get("categories");
+    JsonNode itemsNode = root.get("items");
+    if (categoriesNode == null || !categoriesNode.isArray()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Template categories missing");
+    }
+    List<MenuCategory> tenantCategories = categoryRepo.findByTenantIdOrderBySortOrderAscIdAsc(b.tenantId);
+    Map<String, Long> categoryIdByName = new HashMap<>();
+    for (JsonNode c : categoriesNode) {
+      String nameRu = c.get("nameRu").asText(null);
+      if (nameRu == null || nameRu.isBlank()) continue;
+      MenuCategory existing = tenantCategories.stream()
+        .filter(cat -> nameRu.equalsIgnoreCase(cat.nameRu))
+        .findFirst()
+        .orElse(null);
+      MenuCategory mc = existing;
+      if (mc == null) {
+        mc = new MenuCategory();
+        mc.tenantId = b.tenantId;
+        mc.nameRu = nameRu;
+        mc.nameRo = c.get("nameRo").asText(null);
+        mc.nameEn = c.get("nameEn").asText(null);
+        mc.sortOrder = c.has("sortOrder") ? c.get("sortOrder").asInt(0) : 0;
+        mc.isActive = !c.has("isActive") || c.get("isActive").asBoolean(true);
+        mc = categoryRepo.save(mc);
+      }
+      categoryIdByName.put(nameRu, mc.id);
+    }
+    Set<Long> templateItemIds = new HashSet<>();
+    if (itemsNode != null && itemsNode.isArray()) {
+      for (JsonNode it : itemsNode) {
+        String catNameRu = it.get("categoryNameRu").asText(null);
+        Long catId = catNameRu == null ? null : categoryIdByName.get(catNameRu);
+        if (catId == null) continue;
+        String itemNameRu = it.get("nameRu").asText(null);
+        if (itemNameRu == null || itemNameRu.isBlank()) continue;
+        MenuItem mi = itemRepo.findByCategoryId(catId).stream()
+          .filter(x -> itemNameRu.equalsIgnoreCase(x.nameRu))
+          .findFirst()
+          .orElse(null);
+        if (mi == null) {
+          mi = new MenuItem();
+          mi.categoryId = catId;
+          mi.nameRu = itemNameRu;
+          mi.nameRo = it.get("nameRo").asText(null);
+          mi.nameEn = it.get("nameEn").asText(null);
+          mi.descriptionRu = it.get("descriptionRu").asText(null);
+          mi.descriptionRo = it.get("descriptionRo").asText(null);
+          mi.descriptionEn = it.get("descriptionEn").asText(null);
+          mi.ingredientsRu = it.get("ingredientsRu").asText(null);
+          mi.ingredientsRo = it.get("ingredientsRo").asText(null);
+          mi.ingredientsEn = it.get("ingredientsEn").asText(null);
+          mi.allergens = it.get("allergens").asText(null);
+          mi.weight = it.get("weight").asText(null);
+          mi.tags = it.get("tags").asText(null);
+          mi.photoUrls = it.get("photoUrls").asText(null);
+          mi.kcal = it.has("kcal") && !it.get("kcal").isNull() ? it.get("kcal").asInt() : null;
+          mi.proteinG = it.has("proteinG") && !it.get("proteinG").isNull() ? it.get("proteinG").asInt() : null;
+          mi.fatG = it.has("fatG") && !it.get("fatG").isNull() ? it.get("fatG").asInt() : null;
+          mi.carbsG = it.has("carbsG") && !it.get("carbsG").isNull() ? it.get("carbsG").asInt() : null;
+          mi.priceCents = it.has("priceCents") ? it.get("priceCents").asInt(0) : 0;
+          mi.currency = it.get("currency").asText("MDL");
+          mi.isActive = true;
+          mi.isStopList = false;
+          mi = itemRepo.save(mi);
+        }
+        boolean nextActive = !it.has("isActive") || it.get("isActive").asBoolean(true);
+        boolean nextStop = it.has("isStopList") && it.get("isStopList").asBoolean(false);
+        upsertMenuItemOverride(b.id, mi.id, nextActive, nextStop);
+        templateItemIds.add(mi.id);
+      }
+    }
+    if (replaceExisting) {
+      List<Long> allCatIds = tenantCategories.stream().map(c -> c.id).toList();
+      List<MenuItem> allItems = allCatIds.isEmpty() ? List.of() : itemRepo.findByCategoryIdIn(allCatIds);
+      for (MenuItem mi : allItems) {
+        if (!templateItemIds.contains(mi.id)) {
+          upsertMenuItemOverride(b.id, mi.id, false, resolveMenuItemStopList(mi, null));
+        }
+      }
+    }
+    b.menuTemplateId = t.id;
+    branchRepo.save(b);
+    auditService.log(u, "APPLY_TEMPLATE", "Branch", b.id, "templateId=" + t.id);
+  }
+
   // --- Menu categories ---
   public record MenuCategoryDto(long id, String nameRu, String nameRo, String nameEn, int sortOrder, boolean isActive) {}
   public record CreateCategoryRequest(@NotBlank String nameRu, String nameRo, String nameEn, Integer sortOrder, Boolean isActive) {}
@@ -2091,7 +2416,10 @@ public class AdminController {
   public List<MenuCategoryDto> listCategories(@RequestParam(value = "branchId", required = false) Long branchId, Authentication auth) {
     StaffUser u = requireAdmin(auth);
     long bid = resolveBranchId(u, branchId);
-    List<MenuCategory> cats = categoryRepo.findByBranchIdOrderBySortOrderAscIdAsc(bid);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
+    List<MenuCategory> cats = categoryRepo.findByTenantIdOrderBySortOrderAscIdAsc(b.tenantId);
     List<MenuCategoryDto> out = new ArrayList<>();
     for (MenuCategory c : cats) {
       out.add(new MenuCategoryDto(c.id, c.nameRu, c.nameRo, c.nameEn, c.sortOrder, c.isActive));
@@ -2107,8 +2435,11 @@ public class AdminController {
   ) {
     StaffUser u = requireAdmin(auth);
     long bid = resolveBranchId(u, branchId);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
     MenuCategory c = new MenuCategory();
-    c.branchId = bid;
+    c.tenantId = b.tenantId;
     c.nameRu = req.nameRu;
     c.nameRo = req.nameRo;
     c.nameEn = req.nameEn;
@@ -2124,9 +2455,15 @@ public class AdminController {
   @PatchMapping("/menu/categories/{id}")
   public MenuCategoryDto updateCategory(@PathVariable long id, @RequestBody UpdateCategoryRequest req, Authentication auth) {
     StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, null);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
     MenuCategory c = categoryRepo.findById(id)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found"));
-    requireBranchAccess(u, c.branchId);
+    requireBranchAccess(u, b.id);
+    if (!Objects.equals(c.tenantId, b.tenantId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong tenant");
+    }
     if (req.nameRu != null) c.nameRu = req.nameRu;
     if (req.nameRo != null) c.nameRo = req.nameRo;
     if (req.nameEn != null) c.nameEn = req.nameEn;
@@ -2140,9 +2477,15 @@ public class AdminController {
   @DeleteMapping("/menu/categories/{id}")
   public void deleteCategory(@PathVariable long id, Authentication auth) {
     StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, null);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
     MenuCategory c = categoryRepo.findById(id)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found"));
-    requireBranchAccess(u, c.branchId);
+    requireBranchAccess(u, b.id);
+    if (!Objects.equals(c.tenantId, b.tenantId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong tenant");
+    }
     categoryRepo.delete(c);
     auditService.log(u, "DELETE", "MenuCategory", c.id, null);
   }
@@ -2207,21 +2550,29 @@ public class AdminController {
   ) {
     StaffUser u = requireAdmin(auth);
     long bid = resolveBranchId(u, branchId);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
     List<MenuItem> items;
     if (categoryId != null) {
       MenuCategory c = categoryRepo.findById(categoryId)
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found"));
-      if (!Objects.equals(c.branchId, bid)) {
-        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong branch");
+      if (!Objects.equals(c.tenantId, b.tenantId)) {
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong tenant");
       }
       items = itemRepo.findByCategoryId(categoryId);
     } else {
-      List<MenuCategory> cats = categoryRepo.findByBranchIdOrderBySortOrderAscIdAsc(bid);
+      List<MenuCategory> cats = categoryRepo.findByTenantIdOrderBySortOrderAscIdAsc(b.tenantId);
       List<Long> catIds = cats.stream().map(x -> x.id).toList();
       items = catIds.isEmpty() ? List.of() : itemRepo.findByCategoryIdIn(catIds);
     }
+    List<Long> itemIds = items.stream().map(it -> it.id).toList();
+    Map<Long, BranchMenuItemOverride> overrides = loadMenuItemOverrides(b.id, itemIds);
     List<MenuItemDto> out = new ArrayList<>();
-    for (MenuItem it : items) out.add(toDto(it));
+    for (MenuItem it : items) {
+      BranchMenuItemOverride o = overrides.get(it.id);
+      out.add(toDto(it, o));
+    }
     return out;
   }
 
@@ -2233,10 +2584,13 @@ public class AdminController {
   ) {
     StaffUser u = requireAdmin(auth);
     long bid = resolveBranchId(u, branchId);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
     MenuCategory c = categoryRepo.findById(req.categoryId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found"));
-    if (!Objects.equals(c.branchId, bid)) {
-      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong branch");
+    if (!Objects.equals(c.tenantId, b.tenantId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong tenant");
     }
     MenuItem it = new MenuItem();
     it.categoryId = req.categoryId;
@@ -2269,11 +2623,15 @@ public class AdminController {
     } else {
       it.currency = settingsService.resolveForBranch(bid).currencyCode();
     }
-    it.isActive = req.isActive == null || req.isActive;
-    it.isStopList = req.isStopList != null && req.isStopList;
+    it.isActive = true;
+    it.isStopList = false;
     it = itemRepo.save(it);
+    if (req.isActive != null || req.isStopList != null) {
+      upsertMenuItemOverride(b.id, it.id, req.isActive == null || req.isActive, req.isStopList != null && req.isStopList);
+    }
     auditService.log(u, "CREATE", "MenuItem", it.id, null);
-    return toDto(it);
+    BranchMenuItemOverride o = menuItemOverrideRepo.findByBranchIdAndMenuItemId(b.id, it.id).orElse(null);
+    return toDto(it, o);
   }
 
   public record UpdateMenuItemRequest(
@@ -2302,18 +2660,31 @@ public class AdminController {
   ) {}
 
   @PatchMapping("/menu/items/{id}")
-  public MenuItemDto updateMenuItem(@PathVariable long id, @RequestBody UpdateMenuItemRequest req, Authentication auth) {
+  public MenuItemDto updateMenuItem(
+    @PathVariable long id,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @RequestBody UpdateMenuItemRequest req,
+    Authentication auth
+  ) {
     StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, branchId);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
     MenuItem it = itemRepo.findById(id)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Menu item not found"));
     MenuCategory c = categoryRepo.findById(it.categoryId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found"));
-    requireBranchAccess(u, c.branchId);
+    if (!Objects.equals(c.tenantId, b.tenantId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong tenant");
+    }
 
     if (req.categoryId != null && !Objects.equals(req.categoryId, it.categoryId)) {
       MenuCategory c2 = categoryRepo.findById(req.categoryId)
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found"));
-      requireBranchAccess(u, c2.branchId);
+      if (!Objects.equals(c2.tenantId, b.tenantId)) {
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong tenant");
+      }
       it.categoryId = req.categoryId;
     }
     if (req.nameRu != null) it.nameRu = req.nameRu;
@@ -2343,27 +2714,40 @@ public class AdminController {
       }
       it.currency = code;
     }
-    if (req.isActive != null) it.isActive = req.isActive;
-    if (req.isStopList != null) it.isStopList = req.isStopList;
+    if (req.isActive != null || req.isStopList != null) {
+      BranchMenuItemOverride existingOverride = menuItemOverrideRepo.findByBranchIdAndMenuItemId(b.id, it.id).orElse(null);
+      boolean nextActive = req.isActive == null ? resolveMenuItemActive(it, existingOverride) : req.isActive;
+      boolean nextStop = req.isStopList == null ? resolveMenuItemStopList(it, existingOverride) : req.isStopList;
+      upsertMenuItemOverride(b.id, it.id, nextActive, nextStop);
+    }
 
     it = itemRepo.save(it);
     auditService.log(u, "UPDATE", "MenuItem", it.id, null);
-    return toDto(it);
+    BranchMenuItemOverride o = menuItemOverrideRepo.findByBranchIdAndMenuItemId(b.id, it.id).orElse(null);
+    return toDto(it, o);
   }
 
   @DeleteMapping("/menu/items/{id}")
   public void deleteMenuItem(@PathVariable long id, Authentication auth) {
     StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, null);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
     MenuItem it = itemRepo.findById(id)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Menu item not found"));
     MenuCategory c = categoryRepo.findById(it.categoryId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found"));
-    requireBranchAccess(u, c.branchId);
+    requireBranchAccess(u, b.id);
+    if (!Objects.equals(c.tenantId, b.tenantId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong tenant");
+    }
     itemRepo.delete(it);
     auditService.log(u, "DELETE", "MenuItem", it.id, null);
   }
 
-  private static MenuItemDto toDto(MenuItem it) {
+  private static MenuItemDto toDto(MenuItem it, BranchMenuItemOverride override) {
+    boolean active = resolveMenuItemActive(it, override);
+    boolean stop = resolveMenuItemStopList(it, override);
     return new MenuItemDto(
       it.id,
       it.categoryId,
@@ -2386,9 +2770,39 @@ public class AdminController {
       it.carbsG,
       it.priceCents,
       it.currency,
-      it.isActive,
-      it.isStopList
+      active,
+      stop
     );
+  }
+
+  private static boolean resolveMenuItemActive(MenuItem it, BranchMenuItemOverride override) {
+    return override != null ? override.isActive : it.isActive;
+  }
+
+  private static boolean resolveMenuItemStopList(MenuItem it, BranchMenuItemOverride override) {
+    return override != null ? override.isStopList : it.isStopList;
+  }
+
+  private Map<Long, BranchMenuItemOverride> loadMenuItemOverrides(long branchId, List<Long> itemIds) {
+    if (itemIds.isEmpty()) return Map.of();
+    List<BranchMenuItemOverride> overrides = menuItemOverrideRepo.findByBranchIdAndMenuItemIdIn(branchId, itemIds);
+    Map<Long, BranchMenuItemOverride> out = new HashMap<>();
+    for (BranchMenuItemOverride o : overrides) out.put(o.menuItemId, o);
+    return out;
+  }
+
+  private void upsertMenuItemOverride(long branchId, long menuItemId, boolean isActive, boolean isStopList) {
+    BranchMenuItemOverride o = menuItemOverrideRepo.findByBranchIdAndMenuItemId(branchId, menuItemId)
+      .orElseGet(() -> {
+        BranchMenuItemOverride next = new BranchMenuItemOverride();
+        next.branchId = branchId;
+        next.menuItemId = menuItemId;
+        return next;
+      });
+    o.isActive = isActive;
+    o.isStopList = isStopList;
+    o.updatedAt = Instant.now();
+    menuItemOverrideRepo.save(o);
   }
 
   // --- Tables ---
@@ -3102,7 +3516,10 @@ public class AdminController {
   public List<ModifierGroupDto> listModifierGroups(@RequestParam(value = "branchId", required = false) Long branchId, Authentication auth) {
     StaffUser u = requireAdmin(auth);
     long bid = resolveBranchId(u, branchId);
-    List<ModifierGroup> groups = modifierGroupRepo.findByBranchIdOrderByIdAsc(bid);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
+    List<ModifierGroup> groups = modifierGroupRepo.findByTenantIdOrderByIdAsc(b.tenantId);
     List<ModifierGroupDto> out = new ArrayList<>();
     for (ModifierGroup g : groups) {
       out.add(new ModifierGroupDto(g.id, g.nameRu, g.nameRo, g.nameEn, g.isActive));
@@ -3118,8 +3535,11 @@ public class AdminController {
   ) {
     StaffUser u = requireAdmin(auth);
     long bid = resolveBranchId(u, branchId);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
     ModifierGroup g = new ModifierGroup();
-    g.branchId = bid;
+    g.tenantId = b.tenantId;
     g.nameRu = req.nameRu;
     g.nameRo = req.nameRo;
     g.nameEn = req.nameEn;
@@ -3131,9 +3551,15 @@ public class AdminController {
   @PatchMapping("/modifier-groups/{id}")
   public ModifierGroupDto updateModifierGroup(@PathVariable long id, @RequestBody UpdateModifierGroupRequest req, Authentication auth) {
     StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, null);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
     ModifierGroup g = modifierGroupRepo.findById(id)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Modifier group not found"));
-    requireBranchAccess(u, g.branchId);
+    requireBranchAccess(u, b.id);
+    if (!Objects.equals(g.tenantId, b.tenantId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong tenant");
+    }
     if (req.nameRu != null) g.nameRu = req.nameRu;
     if (req.nameRo != null) g.nameRo = req.nameRo;
     if (req.nameEn != null) g.nameEn = req.nameEn;
@@ -3145,9 +3571,15 @@ public class AdminController {
   @DeleteMapping("/modifier-groups/{id}")
   public void deleteModifierGroup(@PathVariable long id, Authentication auth) {
     StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, null);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
     ModifierGroup g = modifierGroupRepo.findById(id)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Modifier group not found"));
-    requireBranchAccess(u, g.branchId);
+    requireBranchAccess(u, b.id);
+    if (!Objects.equals(g.tenantId, b.tenantId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong tenant");
+    }
     modifierGroupRepo.delete(g);
   }
 
@@ -3160,7 +3592,13 @@ public class AdminController {
     StaffUser u = requireAdmin(auth);
     ModifierGroup g = modifierGroupRepo.findById(groupId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Modifier group not found"));
-    requireBranchAccess(u, g.branchId);
+    long bid = resolveBranchId(u, null);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
+    if (!Objects.equals(g.tenantId, b.tenantId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong tenant");
+    }
     List<ModifierOption> list = modifierOptionRepo.findByGroupId(groupId);
     List<ModifierOptionDto> out = new ArrayList<>();
     for (ModifierOption o : list) {
@@ -3174,7 +3612,13 @@ public class AdminController {
     StaffUser u = requireAdmin(auth);
     ModifierGroup g = modifierGroupRepo.findById(groupId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Modifier group not found"));
-    requireBranchAccess(u, g.branchId);
+    long bid = resolveBranchId(u, null);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
+    if (!Objects.equals(g.tenantId, b.tenantId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong tenant");
+    }
     ModifierOption o = new ModifierOption();
     o.groupId = groupId;
     o.nameRu = req.nameRu;
@@ -3193,7 +3637,13 @@ public class AdminController {
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Modifier option not found"));
     ModifierGroup g = modifierGroupRepo.findById(o.groupId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Modifier group not found"));
-    requireBranchAccess(u, g.branchId);
+    long bid = resolveBranchId(u, null);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
+    if (!Objects.equals(g.tenantId, b.tenantId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong tenant");
+    }
     if (req.nameRu != null) o.nameRu = req.nameRu;
     if (req.nameRo != null) o.nameRo = req.nameRo;
     if (req.nameEn != null) o.nameEn = req.nameEn;
@@ -3210,7 +3660,13 @@ public class AdminController {
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Modifier option not found"));
     ModifierGroup g = modifierGroupRepo.findById(o.groupId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Modifier group not found"));
-    requireBranchAccess(u, g.branchId);
+    long bid = resolveBranchId(u, null);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
+    if (!Objects.equals(g.tenantId, b.tenantId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong tenant");
+    }
     modifierOptionRepo.delete(o);
   }
 
@@ -3220,11 +3676,17 @@ public class AdminController {
   @GetMapping("/menu/items/{id}/modifier-groups")
   public List<ItemModifierGroupDto> getItemModifierGroups(@PathVariable long id, Authentication auth) {
     StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, null);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
     MenuItem it = itemRepo.findById(id)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Menu item not found"));
     MenuCategory c = categoryRepo.findById(it.categoryId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found"));
-    requireBranchAccess(u, c.branchId);
+    requireBranchAccess(u, b.id);
+    if (!Objects.equals(c.tenantId, b.tenantId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong tenant");
+    }
     List<MenuItemModifierGroup> list = menuItemModifierGroupRepo.findByMenuItemIdOrderBySortOrderAscIdAsc(id);
     List<ItemModifierGroupDto> out = new ArrayList<>();
     for (MenuItemModifierGroup mg : list) {
@@ -3240,11 +3702,17 @@ public class AdminController {
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
+    long bid = resolveBranchId(u, null);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
     MenuItem it = itemRepo.findById(id)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Menu item not found"));
     MenuCategory c = categoryRepo.findById(it.categoryId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found"));
-    requireBranchAccess(u, c.branchId);
+    requireBranchAccess(u, b.id);
+    if (!Objects.equals(c.tenantId, b.tenantId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong tenant");
+    }
 
     menuItemModifierGroupRepo.deleteByMenuItemId(id);
     List<ItemModifierGroupDto> out = new ArrayList<>();
@@ -3252,7 +3720,9 @@ public class AdminController {
       for (ItemModifierGroupDto g : req.groups) {
         ModifierGroup mg = modifierGroupRepo.findById(g.groupId)
           .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Modifier group not found"));
-        requireBranchAccess(u, mg.branchId);
+        if (!Objects.equals(mg.tenantId, b.tenantId)) {
+          throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong tenant");
+        }
         MenuItemModifierGroup link = new MenuItemModifierGroup();
         link.menuItemId = id;
         link.groupId = g.groupId;
@@ -3277,6 +3747,8 @@ public class AdminController {
     long grossCents,
     long tipsCents,
     long activeTablesCount,
+    long avgCheckCents,
+    Double avgSlaMinutes,
     double avgBranchRating,
     long branchReviewsCount
   ) {}
@@ -3359,6 +3831,9 @@ public class AdminController {
     @RequestParam(value = "hallId", required = false) Long hallId,
     @RequestParam(value = "planId", required = false) Long planId,
     @RequestParam(value = "waiterId", required = false) Long waiterId,
+    @RequestParam(value = "status", required = false) String orderStatus,
+    @RequestParam(value = "shiftFrom", required = false) String shiftFrom,
+    @RequestParam(value = "shiftTo", required = false) String shiftTo,
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
@@ -3384,7 +3859,19 @@ public class AdminController {
     }
     Instant fromTs = parseInstantOrDate(from, true);
     Instant toTs = parseInstantOrDate(to, false);
-    StatsService.Summary s = statsService.summaryForBranchFiltered(bid, fromTs, toTs, tableId, waiterId, hallId);
+    Instant shiftFromTs = parseInstantOrDateOrNull(shiftFrom, true);
+    Instant shiftToTs = parseInstantOrDateOrNull(shiftTo, false);
+    StatsService.Summary s = statsService.summaryForBranchFiltered(
+      bid,
+      fromTs,
+      toTs,
+      tableId,
+      waiterId,
+      hallId,
+      orderStatus,
+      shiftFromTs,
+      shiftToTs
+    );
     List<BranchReview> reviews = branchReviewRepo.findByBranchIdOrderByIdDesc(bid);
     reviews = filterBranchReviews(reviews, tableId, hallId, fromTs, toTs);
     double sumRating = 0.0;
@@ -3396,6 +3883,7 @@ public class AdminController {
       }
     }
     double avgRating = ratingCount == 0 ? 0.0 : (sumRating / ratingCount);
+    long avgCheckCents = s.paidBillsCount() == 0 ? 0L : (s.grossCents() / s.paidBillsCount());
     return new StatsSummaryResponse(
       s.from().toString(),
       s.to().toString(),
@@ -3405,6 +3893,8 @@ public class AdminController {
       s.grossCents(),
       s.tipsCents(),
       s.activeTablesCount(),
+      avgCheckCents,
+      s.avgSlaMinutes(),
       avgRating,
       ratingCount
     );
@@ -3419,6 +3909,9 @@ public class AdminController {
     @RequestParam(value = "hallId", required = false) Long hallId,
     @RequestParam(value = "planId", required = false) Long planId,
     @RequestParam(value = "waiterId", required = false) Long waiterId,
+    @RequestParam(value = "status", required = false) String orderStatus,
+    @RequestParam(value = "shiftFrom", required = false) String shiftFrom,
+    @RequestParam(value = "shiftTo", required = false) String shiftTo,
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
@@ -3444,7 +3937,19 @@ public class AdminController {
     }
     Instant fromTs = parseInstantOrDate(from, true);
     Instant toTs = parseInstantOrDate(to, false);
-    List<StatsService.DailyRow> rows = statsService.dailyForBranchFiltered(bid, fromTs, toTs, tableId, waiterId, hallId);
+    Instant shiftFromTs = parseInstantOrDateOrNull(shiftFrom, true);
+    Instant shiftToTs = parseInstantOrDateOrNull(shiftTo, false);
+    List<StatsService.DailyRow> rows = statsService.dailyForBranchFiltered(
+      bid,
+      fromTs,
+      toTs,
+      tableId,
+      waiterId,
+      hallId,
+      orderStatus,
+      shiftFromTs,
+      shiftToTs
+    );
     List<StatsDailyRow> out = new ArrayList<>();
     for (StatsService.DailyRow r : rows) {
       out.add(new StatsDailyRow(r.day(), r.ordersCount(), r.callsCount(), r.paidBillsCount(), r.grossCents(), r.tipsCents()));
@@ -3459,6 +3964,9 @@ public class AdminController {
     @RequestParam(value = "branchId", required = false) Long branchId,
     @RequestParam(value = "hallId", required = false) Long hallId,
     @RequestParam(value = "planId", required = false) Long planId,
+    @RequestParam(value = "status", required = false) String orderStatus,
+    @RequestParam(value = "shiftFrom", required = false) String shiftFrom,
+    @RequestParam(value = "shiftTo", required = false) String shiftTo,
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
@@ -3474,7 +3982,17 @@ public class AdminController {
     }
     Instant fromTs = parseInstantOrDate(from, true);
     Instant toTs = parseInstantOrDate(to, false);
-    List<StatsService.WaiterMotivationRow> rows = statsService.waiterMotivationForBranch(bid, fromTs, toTs, hallId);
+    Instant shiftFromTs = parseInstantOrDateOrNull(shiftFrom, true);
+    Instant shiftToTs = parseInstantOrDateOrNull(shiftTo, false);
+    List<StatsService.WaiterMotivationRow> rows = statsService.waiterMotivationForBranch(
+      bid,
+      fromTs,
+      toTs,
+      hallId,
+      orderStatus,
+      shiftFromTs,
+      shiftToTs
+    );
     List<WaiterMotivationRow> out = new ArrayList<>();
     for (StatsService.WaiterMotivationRow r : rows) {
       out.add(new WaiterMotivationRow(
@@ -3500,6 +4018,9 @@ public class AdminController {
     @RequestParam(value = "hallId", required = false) Long hallId,
     @RequestParam(value = "planId", required = false) Long planId,
     @RequestParam(value = "waiterId", required = false) Long waiterId,
+    @RequestParam(value = "status", required = false) String orderStatus,
+    @RequestParam(value = "shiftFrom", required = false) String shiftFrom,
+    @RequestParam(value = "shiftTo", required = false) String shiftTo,
     @RequestParam(value = "limit", required = false) Integer limit,
     Authentication auth
   ) {
@@ -3526,8 +4047,21 @@ public class AdminController {
     }
     Instant fromTs = parseInstantOrDate(from, true);
     Instant toTs = parseInstantOrDate(to, false);
+    Instant shiftFromTs = parseInstantOrDateOrNull(shiftFrom, true);
+    Instant shiftToTs = parseInstantOrDateOrNull(shiftTo, false);
     int lim = limit == null ? 10 : limit;
-    List<StatsService.TopItemRow> rows = statsService.topItemsForBranch(bid, fromTs, toTs, tableId, waiterId, hallId, lim);
+    List<StatsService.TopItemRow> rows = statsService.topItemsForBranch(
+      bid,
+      fromTs,
+      toTs,
+      tableId,
+      waiterId,
+      hallId,
+      orderStatus,
+      shiftFromTs,
+      shiftToTs,
+      lim
+    );
     List<TopItemRow> out = new ArrayList<>();
     for (StatsService.TopItemRow r : rows) {
       out.add(new TopItemRow(r.menuItemId(), r.name(), r.qty(), r.grossCents()));
@@ -3544,6 +4078,9 @@ public class AdminController {
     @RequestParam(value = "hallId", required = false) Long hallId,
     @RequestParam(value = "planId", required = false) Long planId,
     @RequestParam(value = "waiterId", required = false) Long waiterId,
+    @RequestParam(value = "status", required = false) String orderStatus,
+    @RequestParam(value = "shiftFrom", required = false) String shiftFrom,
+    @RequestParam(value = "shiftTo", required = false) String shiftTo,
     @RequestParam(value = "limit", required = false) Integer limit,
     Authentication auth
   ) {
@@ -3570,8 +4107,21 @@ public class AdminController {
     }
     Instant fromTs = parseInstantOrDate(from, true);
     Instant toTs = parseInstantOrDate(to, false);
+    Instant shiftFromTs = parseInstantOrDateOrNull(shiftFrom, true);
+    Instant shiftToTs = parseInstantOrDateOrNull(shiftTo, false);
     int lim = limit == null ? 10 : limit;
-    List<StatsService.TopCategoryRow> rows = statsService.topCategoriesForBranch(bid, fromTs, toTs, tableId, waiterId, hallId, lim);
+    List<StatsService.TopCategoryRow> rows = statsService.topCategoriesForBranch(
+      bid,
+      fromTs,
+      toTs,
+      tableId,
+      waiterId,
+      hallId,
+      orderStatus,
+      shiftFromTs,
+      shiftToTs,
+      lim
+    );
     List<TopCategoryRow> out = new ArrayList<>();
     for (StatsService.TopCategoryRow r : rows) {
       out.add(new TopCategoryRow(r.categoryId(), r.name(), r.qty(), r.grossCents()));

@@ -14,8 +14,8 @@ public class ModifierGroup {
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   public Long id;
 
-  @Column(name = "branch_id", nullable = false)
-  public Long branchId;
+  @Column(name = "tenant_id", nullable = false)
+  public Long tenantId;
 
   @Column(name = "name_ru", nullable = false)
   public String nameRu;

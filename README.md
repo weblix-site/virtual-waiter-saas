@@ -72,6 +72,13 @@ Flyway создаёт демо‑данные:
 - Admin: `http://localhost:3000/admin`
 - Super Admin: `http://localhost:3000/superadmin`
 
+## Роли и доступы
+- `SUPER_ADMIN` — полный доступ ко всем заведениям и филиалам.
+- `OWNER` — владелец ресторана (admin‑like для своих филиалов).
+- `ADMIN` — админ своих филиалов.
+- `MANAGER` — менеджер одного филиала.
+- `WAITER`, `HOST`, `KITCHEN`, `BAR` — персонал филиала.
+
 ## Аутентификация staff‑пользователей
 Используется **httpOnly cookie** (Basic Auth отключён).
 

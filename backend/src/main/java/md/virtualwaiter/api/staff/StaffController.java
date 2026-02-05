@@ -28,6 +28,7 @@ import md.virtualwaiter.repo.BillRequestRepo;
 import md.virtualwaiter.repo.BillRequestItemRepo;
 import md.virtualwaiter.repo.TablePartyRepo;
 import md.virtualwaiter.repo.BranchRepo;
+import md.virtualwaiter.repo.RestaurantRepo;
 import md.virtualwaiter.repo.BranchHallRepo;
 import md.virtualwaiter.repo.HallPlanRepo;
 import md.virtualwaiter.security.QrSignatureService;
@@ -85,6 +86,7 @@ public class StaffController {
   private final TablePartyRepo partyRepo;
   private final GuestSessionRepo guestSessionRepo;
   private final BranchRepo branchRepo;
+  private final RestaurantRepo restaurantRepo;
   private final BranchHallRepo hallRepo;
   private final HallPlanRepo hallPlanRepo;
   private final QrSignatureService qrSig;
@@ -113,6 +115,7 @@ public class StaffController {
     TablePartyRepo partyRepo,
     GuestSessionRepo guestSessionRepo,
     BranchRepo branchRepo,
+    RestaurantRepo restaurantRepo,
     BranchHallRepo hallRepo,
     HallPlanRepo hallPlanRepo,
     QrSignatureService qrSig,
@@ -140,6 +143,7 @@ public class StaffController {
     this.partyRepo = partyRepo;
     this.guestSessionRepo = guestSessionRepo;
     this.branchRepo = branchRepo;
+    this.restaurantRepo = restaurantRepo;
     this.hallRepo = hallRepo;
     this.hallPlanRepo = hallPlanRepo;
     this.qrSig = qrSig;
@@ -223,6 +227,9 @@ public class StaffController {
     String username,
     String role,
     long branchId,
+    String branchName,
+    Long restaurantId,
+    String restaurantName,
     String firstName,
     String lastName,
     Integer age,
@@ -237,11 +244,20 @@ public class StaffController {
   @GetMapping("/me")
   public MeResponse me(Authentication auth) {
     StaffUser u = current(auth);
+    Branch b = u.branchId == null ? null : branchRepo.findById(u.branchId).orElse(null);
+    Long restaurantId = b == null ? null : b.restaurantId;
+    String restaurantName = null;
+    if (restaurantId != null) {
+      restaurantName = restaurantRepo.findById(restaurantId).map(r -> r.name).orElse(null);
+    }
     return new MeResponse(
       u.id,
       u.username,
       u.role,
       u.branchId,
+      b == null ? null : b.name,
+      restaurantId,
+      restaurantName,
       u.firstName,
       u.lastName,
       u.age,

@@ -7,9 +7,11 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
+import java.time.Instant;
+
 @Entity
-@Table(name = "branches")
-public class Branch {
+@Table(name = "menu_templates")
+public class MenuTemplate {
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   public Long id;
@@ -17,36 +19,21 @@ public class Branch {
   @Column(name = "tenant_id", nullable = false)
   public Long tenantId;
 
-  @Column(name = "restaurant_id", nullable = false)
+  @Column(name = "restaurant_id")
   public Long restaurantId;
 
   @Column(nullable = false)
   public String name;
 
-  @Column(name = "logo_url")
-  public String logoUrl;
-
-  @Column(name = "country")
-  public String country;
-
-  @Column(name = "address")
-  public String address;
-
-  @Column(name = "phone")
-  public String phone;
-
-  @Column(name = "contact_person")
-  public String contactPerson;
+  @Column(name = "payload_json", nullable = false)
+  public String payloadJson;
 
   @Column(name = "is_active", nullable = false)
   public boolean isActive = true;
 
-  @Column(name = "layout_bg_url")
-  public String layoutBgUrl;
+  @Column(name = "created_at", nullable = false)
+  public Instant createdAt = Instant.now();
 
-  @Column(name = "layout_zones_json")
-  public String layoutZonesJson;
-
-  @Column(name = "menu_template_id")
-  public Long menuTemplateId;
+  @Column(name = "updated_at", nullable = false)
+  public Instant updatedAt = Instant.now();
 }

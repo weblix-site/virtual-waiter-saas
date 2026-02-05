@@ -14,7 +14,9 @@ const dict: Record<string, Record<Lang, string>> = {
   logout: { ru: "Выйти", ro: "Ieși", en: "Logout" },
   sessionExpired: { ru: "Сессия истекла. Войдите снова.", ro: "Sesiunea a expirat. Autentificați‑vă din nou.", en: "Session expired. Please sign in again." },
   refresh: { ru: "Обновить", ro: "Reîmprospătează", en: "Refresh" },
+  scope: { ru: "Контекст", ro: "Context", en: "Scope" },
   tenants: { ru: "Заведения (тенанты)", ro: "Tenanți", en: "Tenants" },
+  restaurants: { ru: "Рестораны", ro: "Restaurante", en: "Restaurants" },
   branches: { ru: "Филиалы", ro: "Filiale", en: "Branches" },
   branchSettings: { ru: "Настройки филиала", ro: "Setări filială", en: "Branch settings" },
   defaultLanguage: { ru: "Язык по умолчанию (гость)", ro: "Limba implicită (oaspete)", en: "Default language (guest)" },
@@ -30,15 +32,19 @@ const dict: Record<string, Record<Lang, string>> = {
   inactive: { ru: "Неактивен", ro: "Inactiv", en: "Inactive" },
   allStatuses: { ru: "Все статусы", ro: "Toate statusurile", en: "All statuses" },
   selectTenant: { ru: "Выберите тeнанта", ro: "Selectați tenantul", en: "Select tenant" },
+  selectRestaurant: { ru: "Выберите ресторан", ro: "Selectați restaurantul", en: "Select restaurant" },
   selectBranch: { ru: "Выберите филиал", ro: "Selectați filiala", en: "Select branch" },
   newTenantName: { ru: "Имя нового тенанта", ro: "Nume tenant nou", en: "New tenant name" },
   createTenant: { ru: "Создать тенанта", ro: "Creează tenant", en: "Create tenant" },
+  newRestaurantName: { ru: "Имя нового ресторана", ro: "Nume restaurant nou", en: "New restaurant name" },
+  createRestaurant: { ru: "Создать ресторан", ro: "Creează restaurant", en: "Create restaurant" },
   newBranchName: { ru: "Имя нового филиала", ro: "Nume filială nouă", en: "New branch name" },
   createBranch: { ru: "Создать филиал", ro: "Creează filială", en: "Create branch" },
   enable: { ru: "Включить", ro: "Activează", en: "Enable" },
   disable: { ru: "Выключить", ro: "Dezactivează", en: "Disable" },
   delete: { ru: "Удалить", ro: "Șterge", en: "Delete" },
   tenant: { ru: "Тенант", ro: "Tenant", en: "Tenant" },
+  restaurant: { ru: "Ресторан", ro: "Restaurant", en: "Restaurant" },
   loadStaff: { ru: "Загрузить персонал", ro: "Încarcă personal", en: "Load staff" },
   firstName: { ru: "Имя", ro: "Prenume", en: "First name" },
   lastName: { ru: "Фамилия", ro: "Nume", en: "Last name" },
@@ -65,7 +71,7 @@ const dict: Record<string, Record<Lang, string>> = {
   roleBar: { ru: "Бармен", ro: "Barman", en: "Bar" },
   roleAdmin: { ru: "Администратор", ro: "Administrator", en: "Admin" },
   roleManager: { ru: "Менеджер", ro: "Manager", en: "Manager" },
-  roleOwner: { ru: "Владелец", ro: "Proprietar", en: "Owner" },
+  roleOwner: { ru: "Владелец ресторана", ro: "Proprietar restaurant", en: "Restaurant owner" },
   roleSuperAdmin: { ru: "Супер‑админ", ro: "Super‑admin", en: "Super admin" },
   currencies: { ru: "Валюты", ro: "Valute", en: "Currencies" },
   addCurrency: { ru: "Добавить валюту", ro: "Adaugă valută", en: "Add currency" },
@@ -131,6 +137,15 @@ const dict: Record<string, Record<Lang, string>> = {
   zoneName: { ru: "Название зоны", ro: "Nume zonă", en: "Zone name" },
   addZone: { ru: "Добавить зону", ro: "Adaugă zonă", en: "Add zone" },
   stats: { ru: "Статистика", ro: "Statistici", en: "Stats" },
+  orderStatus: { ru: "Статус заказа", ro: "Status comandă", en: "Order status" },
+  shiftFrom: { ru: "Смена с", ro: "Schimb de la", en: "Shift from" },
+  shiftTo: { ru: "Смена по", ro: "Schimb până la", en: "Shift to" },
+  avgCheck: { ru: "Средний чек", ro: "Bon mediu", en: "Average check" },
+  avgSla: { ru: "Средний SLA (мин.)", ro: "SLA mediu (min.)", en: "Average SLA (min.)" },
+  topItems: { ru: "Топ‑позиции", ro: "Top produse", en: "Top items" },
+  topWaiters: { ru: "Топ‑официанты", ro: "Top chelneri", en: "Top waiters" },
+  qty: { ru: "Кол-во", ro: "Cantitate", en: "Qty" },
+  slaMinutes: { ru: "SLA (мин.)", ro: "SLA (min.)", en: "SLA (min.)" },
   branchReviewsAvg: { ru: "Средний рейтинг", ro: "Rating mediu", en: "Average rating" },
   branchReviewsCount: { ru: "Кол-во отзывов", ro: "Număr recenzii", en: "Reviews count" },
   fromDate: { ru: "С", ro: "De la", en: "From" },
@@ -138,6 +153,8 @@ const dict: Record<string, Record<Lang, string>> = {
   load: { ru: "Загрузить", ro: "Încarcă", en: "Load" },
   summaryCsv: { ru: "Сводка CSV", ro: "Rezumat CSV", en: "Summary CSV" },
   branchesCsv: { ru: "Филиалы CSV", ro: "Filiale CSV", en: "Branches CSV" },
+  topItemsCsv: { ru: "Топ‑позиции CSV", ro: "Top produse CSV", en: "Top items CSV" },
+  topWaitersCsv: { ru: "Топ‑официанты CSV", ro: "Top chelneri CSV", en: "Top waiters CSV" },
   period: { ru: "Период", ro: "Perioadă", en: "Period" },
   orders: { ru: "Заказы", ro: "Comenzi", en: "Orders" },
   waiterCalls: { ru: "Вызовы", ro: "Apeluri", en: "Waiter calls" },
@@ -189,8 +206,21 @@ const dict: Record<string, Record<Lang, string>> = {
 
 const t = (lang: Lang, key: string) => dict[key]?.[lang] ?? key;
 
+const ORDER_STATUS_OPTIONS = ["NEW", "ACCEPTED", "IN_PROGRESS", "READY", "SERVED", "CLOSED", "CANCELLED"];
+
 type Tenant = {
   id: number;
+  name: string;
+  logoUrl?: string | null;
+  country?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  contactPerson?: string | null;
+  isActive: boolean;
+};
+type Restaurant = {
+  id: number;
+  tenantId: number;
   name: string;
   logoUrl?: string | null;
   country?: string | null;
@@ -202,6 +232,7 @@ type Tenant = {
 type Branch = {
   id: number;
   tenantId: number;
+  restaurantId?: number | null;
   name: string;
   logoUrl?: string | null;
   country?: string | null;
@@ -250,6 +281,8 @@ type StatsSummary = {
   grossCents: number;
   tipsCents: number;
   activeTablesCount: number;
+  avgCheckCents?: number;
+  avgSlaMinutes?: number | null;
   avgBranchRating?: number;
   branchReviewsCount?: number;
 };
@@ -257,11 +290,28 @@ type StatsSummary = {
 type BranchSummaryRow = {
   branchId: number;
   branchName: string;
+  restaurantId?: number | null;
+  restaurantName?: string | null;
   ordersCount: number;
   callsCount: number;
   paidBillsCount: number;
   grossCents: number;
   tipsCents: number;
+};
+
+type TopItemRow = {
+  menuItemId: number;
+  name: string;
+  qty: number;
+  grossCents: number;
+};
+
+type WaiterMotivationRow = {
+  staffUserId: number;
+  username: string;
+  ordersCount: number;
+  tipsCents: number;
+  avgSlaMinutes?: number | null;
 };
 
 type HallDto = {
@@ -334,12 +384,25 @@ export default function SuperAdminPage() {
     return role ?? "";
   };
 
+  const restaurantLabel = (id?: number | null) => {
+    if (!id) return "-";
+    return restaurants.find((r) => r.id === id)?.name ?? `#${id}`;
+  };
+
+  const tenantLabel = (id?: number | null) => {
+    if (!id) return "-";
+    return tenants.find((t) => t.id === id)?.name ?? `#${id}`;
+  };
+
+  const restaurantOptionLabel = (r: Restaurant) => `${tenantLabel(r.tenantId)} / ${r.name}`;
+
   const isWaiterRole = (role?: string | null) => {
     const r = (role ?? "").toUpperCase();
     return r === "WAITER" || r === "HOST";
   };
 
   const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [staff, setStaff] = useState<StaffUser[]>([]);
   const [tenantId, setTenantId] = useState<number | "">("");
@@ -347,10 +410,16 @@ export default function SuperAdminPage() {
   const [branchSettings, setBranchSettings] = useState<BranchSettings | null>(null);
   const [tenantStatusFilter, setTenantStatusFilter] = useState<"" | "ACTIVE" | "INACTIVE">("");
   const [branchStatusFilter, setBranchStatusFilter] = useState<"" | "ACTIVE" | "INACTIVE">("");
+  const [branchRestaurantFilterId, setBranchRestaurantFilterId] = useState<number | "">("");
   const [statsFrom, setStatsFrom] = useState("");
   const [statsTo, setStatsTo] = useState("");
+  const [statsOrderStatus, setStatsOrderStatus] = useState("");
+  const [statsShiftFrom, setStatsShiftFrom] = useState("");
+  const [statsShiftTo, setStatsShiftTo] = useState("");
   const [stats, setStats] = useState<StatsSummary | null>(null);
   const [branchStats, setBranchStats] = useState<BranchSummaryRow[]>([]);
+  const [topItems, setTopItems] = useState<TopItemRow[]>([]);
+  const [topWaiters, setTopWaiters] = useState<WaiterMotivationRow[]>([]);
   const [tables, setTables] = useState<TableDto[]>([]);
   const [halls, setHalls] = useState<HallDto[]>([]);
   const [hallPlans, setHallPlans] = useState<HallPlanDto[]>([]);
@@ -407,6 +476,13 @@ export default function SuperAdminPage() {
   const [newTenantPhone, setNewTenantPhone] = useState("");
   const [newTenantContactPerson, setNewTenantContactPerson] = useState("");
   const [newTenantLogoUploading, setNewTenantLogoUploading] = useState(false);
+  const [newRestaurantName, setNewRestaurantName] = useState("");
+  const [newRestaurantLogoUrl, setNewRestaurantLogoUrl] = useState("");
+  const [newRestaurantCountry, setNewRestaurantCountry] = useState("");
+  const [newRestaurantAddress, setNewRestaurantAddress] = useState("");
+  const [newRestaurantPhone, setNewRestaurantPhone] = useState("");
+  const [newRestaurantContactPerson, setNewRestaurantContactPerson] = useState("");
+  const [newRestaurantLogoUploading, setNewRestaurantLogoUploading] = useState(false);
   const [newBranchName, setNewBranchName] = useState("");
   const [newBranchLogoUrl, setNewBranchLogoUrl] = useState("");
   const [newBranchCountry, setNewBranchCountry] = useState("");
@@ -414,6 +490,7 @@ export default function SuperAdminPage() {
   const [newBranchPhone, setNewBranchPhone] = useState("");
   const [newBranchContactPerson, setNewBranchContactPerson] = useState("");
   const [newBranchLogoUploading, setNewBranchLogoUploading] = useState(false);
+  const [newBranchRestaurantId, setNewBranchRestaurantId] = useState<number | "">("");
 
   const [editingTenantId, setEditingTenantId] = useState<number | null>(null);
   const [editTenantName, setEditTenantName] = useState("");
@@ -423,6 +500,14 @@ export default function SuperAdminPage() {
   const [editTenantPhone, setEditTenantPhone] = useState("");
   const [editTenantContactPerson, setEditTenantContactPerson] = useState("");
   const [editTenantLogoUploading, setEditTenantLogoUploading] = useState(false);
+  const [editingRestaurantId, setEditingRestaurantId] = useState<number | null>(null);
+  const [editRestaurantName, setEditRestaurantName] = useState("");
+  const [editRestaurantLogoUrl, setEditRestaurantLogoUrl] = useState("");
+  const [editRestaurantCountry, setEditRestaurantCountry] = useState("");
+  const [editRestaurantAddress, setEditRestaurantAddress] = useState("");
+  const [editRestaurantPhone, setEditRestaurantPhone] = useState("");
+  const [editRestaurantContactPerson, setEditRestaurantContactPerson] = useState("");
+  const [editRestaurantLogoUploading, setEditRestaurantLogoUploading] = useState(false);
 
   const [editingBranchId, setEditingBranchId] = useState<number | null>(null);
   const [editBranchName, setEditBranchName] = useState("");
@@ -432,6 +517,7 @@ export default function SuperAdminPage() {
   const [editBranchPhone, setEditBranchPhone] = useState("");
   const [editBranchContactPerson, setEditBranchContactPerson] = useState("");
   const [editBranchLogoUploading, setEditBranchLogoUploading] = useState(false);
+  const [editBranchRestaurantId, setEditBranchRestaurantId] = useState<number | "">("");
   const [newStaffUser, setNewStaffUser] = useState("");
   const [newStaffPass, setNewStaffPass] = useState("");
   const [newStaffRole, setNewStaffRole] = useState("ADMIN");
@@ -753,8 +839,13 @@ export default function SuperAdminPage() {
       if (tenantStatusFilter) qsTenants.set("isActive", tenantStatusFilter === "ACTIVE" ? "true" : "false");
       const res = await api(`/api/super/tenants${qsTenants.toString() ? `?${qsTenants.toString()}` : ""}`);
       setTenants(await res.json());
+      const qsRestaurants = new URLSearchParams();
+      if (tenantId) qsRestaurants.set("tenantId", String(tenantId));
+      const resRestaurants = await api(`/api/super/restaurants${qsRestaurants.toString() ? `?${qsRestaurants.toString()}` : ""}`);
+      setRestaurants(await resRestaurants.json());
       const qsBranches = new URLSearchParams();
       if (tenantId) qsBranches.set("tenantId", String(tenantId));
+      if (branchRestaurantFilterId) qsBranches.set("restaurantId", String(branchRestaurantFilterId));
       if (branchStatusFilter) qsBranches.set("isActive", branchStatusFilter === "ACTIVE" ? "true" : "false");
       const resBranches = await api(`/api/super/branches${qsBranches.toString() ? `?${qsBranches.toString()}` : ""}`);
       setBranches(await resBranches.json());
@@ -777,7 +868,7 @@ export default function SuperAdminPage() {
     loadTenants();
     loadCurrencies();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authReady, tenantStatusFilter, branchStatusFilter, tenantId]);
+  }, [authReady, tenantStatusFilter, branchStatusFilter, branchRestaurantFilterId, tenantId]);
 
   async function loadTables() {
     if (!branchId) return;
@@ -1113,11 +1204,20 @@ export default function SuperAdminPage() {
     qs.set("tenantId", String(tenantId));
     if (statsFrom) qs.set("from", statsFrom);
     if (statsTo) qs.set("to", statsTo);
+    if (branchId) qs.set("branchId", String(branchId));
+    if (branchId && hallId) qs.set("hallId", String(hallId));
+    if (statsOrderStatus) qs.set("status", statsOrderStatus);
+    if (statsShiftFrom) qs.set("shiftFrom", statsShiftFrom);
+    if (statsShiftTo) qs.set("shiftTo", statsShiftTo);
     const res = await api(`/api/super/stats/summary?${qs.toString()}`);
     const body = await res.json();
     setStats(body);
     const resBranches = await api(`/api/super/stats/branches?${qs.toString()}`);
     setBranchStats(await resBranches.json());
+    const resTopItems = await api(`/api/super/stats/top-items?${qs.toString()}`);
+    setTopItems(await resTopItems.json());
+    const resTopWaiters = await api(`/api/super/stats/top-waiters?${qs.toString()}`);
+    setTopWaiters(await resTopWaiters.json());
   }
 
   async function downloadSummaryCsv() {
@@ -1126,6 +1226,11 @@ export default function SuperAdminPage() {
     qs.set("tenantId", String(tenantId));
     if (statsFrom) qs.set("from", statsFrom);
     if (statsTo) qs.set("to", statsTo);
+    if (branchId) qs.set("branchId", String(branchId));
+    if (branchId && hallId) qs.set("hallId", String(hallId));
+    if (statsOrderStatus) qs.set("status", statsOrderStatus);
+    if (statsShiftFrom) qs.set("shiftFrom", statsShiftFrom);
+    if (statsShiftTo) qs.set("shiftTo", statsShiftTo);
     const res = await api(`/api/super/stats/summary.csv?${qs.toString()}`);
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
@@ -1144,12 +1249,62 @@ export default function SuperAdminPage() {
     qs.set("tenantId", String(tenantId));
     if (statsFrom) qs.set("from", statsFrom);
     if (statsTo) qs.set("to", statsTo);
+    if (branchId) qs.set("branchId", String(branchId));
+    if (statsOrderStatus) qs.set("status", statsOrderStatus);
+    if (statsShiftFrom) qs.set("shiftFrom", statsShiftFrom);
+    if (statsShiftTo) qs.set("shiftTo", statsShiftTo);
     const res = await api(`/api/super/stats/branches.csv?${qs.toString()}`);
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = "tenant-branches.csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function downloadTopItemsCsv() {
+    if (!tenantId) return;
+    const qs = new URLSearchParams();
+    qs.set("tenantId", String(tenantId));
+    if (statsFrom) qs.set("from", statsFrom);
+    if (statsTo) qs.set("to", statsTo);
+    if (branchId) qs.set("branchId", String(branchId));
+    if (branchId && hallId) qs.set("hallId", String(hallId));
+    if (statsOrderStatus) qs.set("status", statsOrderStatus);
+    if (statsShiftFrom) qs.set("shiftFrom", statsShiftFrom);
+    if (statsShiftTo) qs.set("shiftTo", statsShiftTo);
+    const res = await api(`/api/super/stats/top-items.csv?${qs.toString()}`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "tenant-top-items.csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function downloadTopWaitersCsv() {
+    if (!tenantId) return;
+    const qs = new URLSearchParams();
+    qs.set("tenantId", String(tenantId));
+    if (statsFrom) qs.set("from", statsFrom);
+    if (statsTo) qs.set("to", statsTo);
+    if (branchId) qs.set("branchId", String(branchId));
+    if (branchId && hallId) qs.set("hallId", String(hallId));
+    if (statsOrderStatus) qs.set("status", statsOrderStatus);
+    if (statsShiftFrom) qs.set("shiftFrom", statsShiftFrom);
+    if (statsShiftTo) qs.set("shiftTo", statsShiftTo);
+    const res = await api(`/api/super/stats/top-waiters.csv?${qs.toString()}`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "tenant-top-waiters.csv";
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -1201,12 +1356,64 @@ export default function SuperAdminPage() {
     loadTenants();
   }
 
+  async function createRestaurant() {
+    if (!tenantId) return;
+    await api(`/api/super/tenants/${tenantId}/restaurants`, {
+      method: "POST",
+      body: JSON.stringify({
+        name: newRestaurantName,
+        logoUrl: newRestaurantLogoUrl || null,
+        country: newRestaurantCountry || null,
+        address: newRestaurantAddress || null,
+        phone: newRestaurantPhone || null,
+        contactPerson: newRestaurantContactPerson || null,
+      }),
+    });
+    setNewRestaurantName("");
+    setNewRestaurantLogoUrl("");
+    setNewRestaurantCountry("");
+    setNewRestaurantAddress("");
+    setNewRestaurantPhone("");
+    setNewRestaurantContactPerson("");
+    loadTenants();
+  }
+
+  async function toggleRestaurant(r: Restaurant) {
+    await api(`/api/super/restaurants/${r.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ isActive: !r.isActive }),
+    });
+    loadTenants();
+  }
+
+  async function updateRestaurant(id: number) {
+    await api(`/api/super/restaurants/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        name: editRestaurantName,
+        logoUrl: editRestaurantLogoUrl || null,
+        country: editRestaurantCountry || null,
+        address: editRestaurantAddress || null,
+        phone: editRestaurantPhone || null,
+        contactPerson: editRestaurantContactPerson || null,
+      }),
+    });
+    setEditingRestaurantId(null);
+    loadTenants();
+  }
+
+  async function deleteRestaurant(id: number) {
+    await api(`/api/super/restaurants/${id}`, { method: "DELETE" });
+    loadTenants();
+  }
+
   async function createBranch() {
     if (!tenantId) return;
     await api(`/api/super/tenants/${tenantId}/branches`, {
       method: "POST",
       body: JSON.stringify({
         name: newBranchName,
+        restaurantId: newBranchRestaurantId || null,
         logoUrl: newBranchLogoUrl || null,
         country: newBranchCountry || null,
         address: newBranchAddress || null,
@@ -1220,6 +1427,7 @@ export default function SuperAdminPage() {
     setNewBranchAddress("");
     setNewBranchPhone("");
     setNewBranchContactPerson("");
+    setNewBranchRestaurantId("");
     loadTenants();
   }
 
@@ -1236,6 +1444,7 @@ export default function SuperAdminPage() {
       method: "PATCH",
       body: JSON.stringify({
         name: editBranchName,
+        restaurantId: editBranchRestaurantId || null,
         logoUrl: editBranchLogoUrl || null,
         country: editBranchCountry || null,
         address: editBranchAddress || null,
@@ -1359,6 +1568,24 @@ export default function SuperAdminPage() {
       {sessionExpired && <div style={{ color: "#b11e46", marginTop: 8 }}>{t(lang, "sessionExpired")}</div>}
       {error && <div style={{ color: "#b11e46", marginTop: 8 }}>{error}</div>}
 
+      <section style={{ marginTop: 16 }}>
+        <h2>{t(lang, "scope")}</h2>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <select value={tenantId} onChange={(e) => setTenantId(e.target.value ? Number(e.target.value) : "")}>
+            <option value="">{t(lang, "selectTenant")}</option>
+            {tenants.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+          <select value={branchRestaurantFilterId} onChange={(e) => setBranchRestaurantFilterId(e.target.value ? Number(e.target.value) : "")}>
+            <option value="">{t(lang, "selectRestaurant")}</option>
+            {restaurants.filter((r) => !tenantId || r.tenantId === tenantId).map((r) => (
+              <option key={r.id} value={r.id}>{restaurantOptionLabel(r)}</option>
+            ))}
+          </select>
+        </div>
+      </section>
+
       <section style={{ marginTop: 24 }}>
         <h2>{t(lang, "tenants")}</h2>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -1463,6 +1690,105 @@ export default function SuperAdminPage() {
       </section>
 
       <section style={{ marginTop: 24 }}>
+        <h2>{t(lang, "restaurants")}</h2>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <select value={tenantId} onChange={(e) => setTenantId(e.target.value ? Number(e.target.value) : "")}>
+            <option value="">{t(lang, "selectTenant")}</option>
+            {tenants.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+          <input placeholder={t(lang, "newRestaurantName")} value={newRestaurantName} onChange={(e) => setNewRestaurantName(e.target.value)} />
+          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            {t(lang, "photoUpload")}
+            <input
+              type="file"
+              accept="image/*"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                setNewRestaurantLogoUploading(true);
+                try {
+                  const url = await uploadMediaFile(file, "logo");
+                  setNewRestaurantLogoUrl(url);
+                } catch (err: any) {
+                  setError(err?.message ?? "Upload error");
+                } finally {
+                  setNewRestaurantLogoUploading(false);
+                  e.currentTarget.value = "";
+                }
+              }}
+            />
+          </label>
+          <input placeholder={t(lang, "logo")} value={newRestaurantLogoUrl} readOnly />
+          <input placeholder={t(lang, "country")} value={newRestaurantCountry} onChange={(e) => setNewRestaurantCountry(e.target.value)} />
+          <input placeholder={t(lang, "address")} value={newRestaurantAddress} onChange={(e) => setNewRestaurantAddress(e.target.value)} />
+          <input placeholder={t(lang, "phone")} value={newRestaurantPhone} onChange={(e) => setNewRestaurantPhone(e.target.value)} />
+          <input placeholder={t(lang, "contactPerson")} value={newRestaurantContactPerson} onChange={(e) => setNewRestaurantContactPerson(e.target.value)} />
+          <button onClick={createRestaurant} disabled={!tenantId}>{t(lang, "createRestaurant")}</button>
+          {newRestaurantLogoUploading && <span style={{ fontSize: 12 }}>{t(lang, "uploading")}</span>}
+        </div>
+        <div style={{ marginTop: 10 }}>
+          {restaurants.filter((r) => !tenantId || r.tenantId === tenantId).map((r) => (
+            <div key={r.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "4px 0", flexWrap: "wrap" }}>
+              <strong>{r.name}</strong>
+              <span>{t(lang, "tenant")} #{r.tenantId}</span>
+              <span>{r.isActive ? t(lang, "active") : t(lang, "inactive")}</span>
+              {r.country && <span>{t(lang, "country")}: {r.country}</span>}
+              {r.phone && <span>{t(lang, "phone")}: {r.phone}</span>}
+              <button onClick={() => toggleRestaurant(r)}>{r.isActive ? t(lang, "disable") : t(lang, "enable")}</button>
+              <button onClick={() => {
+                setEditingRestaurantId(r.id);
+                setEditRestaurantName(r.name ?? "");
+                setEditRestaurantLogoUrl(r.logoUrl ?? "");
+                setEditRestaurantCountry(r.country ?? "");
+                setEditRestaurantAddress(r.address ?? "");
+                setEditRestaurantPhone(r.phone ?? "");
+                setEditRestaurantContactPerson(r.contactPerson ?? "");
+              }}>{t(lang, "editEntity")}</button>
+              <button onClick={() => deleteRestaurant(r.id)}>{t(lang, "delete")}</button>
+            </div>
+          ))}
+        </div>
+        {editingRestaurantId && (
+          <div style={{ marginTop: 8, border: "1px dashed #ddd", padding: 10 }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <input placeholder={t(lang, "newRestaurantName")} value={editRestaurantName} onChange={(e) => setEditRestaurantName(e.target.value)} />
+              <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                {t(lang, "photoUpload")}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setEditRestaurantLogoUploading(true);
+                    try {
+                      const url = await uploadMediaFile(file, "logo");
+                      setEditRestaurantLogoUrl(url);
+                    } catch (err: any) {
+                      setError(err?.message ?? "Upload error");
+                    } finally {
+                      setEditRestaurantLogoUploading(false);
+                      e.currentTarget.value = "";
+                    }
+                  }}
+                />
+              </label>
+              <input placeholder={t(lang, "logo")} value={editRestaurantLogoUrl} readOnly />
+              <input placeholder={t(lang, "country")} value={editRestaurantCountry} onChange={(e) => setEditRestaurantCountry(e.target.value)} />
+              <input placeholder={t(lang, "address")} value={editRestaurantAddress} onChange={(e) => setEditRestaurantAddress(e.target.value)} />
+              <input placeholder={t(lang, "phone")} value={editRestaurantPhone} onChange={(e) => setEditRestaurantPhone(e.target.value)} />
+              <input placeholder={t(lang, "contactPerson")} value={editRestaurantContactPerson} onChange={(e) => setEditRestaurantContactPerson(e.target.value)} />
+              <button onClick={() => updateRestaurant(editingRestaurantId)}>{t(lang, "saveEntity")}</button>
+              <button onClick={() => setEditingRestaurantId(null)}>{t(lang, "cancelEdit")}</button>
+              {editRestaurantLogoUploading && <span style={{ fontSize: 12 }}>{t(lang, "uploading")}</span>}
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section style={{ marginTop: 24 }}>
         <h2>{t(lang, "branches")}</h2>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <select value={branchStatusFilter} onChange={(e) => setBranchStatusFilter(e.target.value as any)}>
@@ -1470,10 +1796,10 @@ export default function SuperAdminPage() {
             <option value="ACTIVE">{t(lang, "active")}</option>
             <option value="INACTIVE">{t(lang, "inactive")}</option>
           </select>
-          <select value={tenantId} onChange={(e) => setTenantId(e.target.value ? Number(e.target.value) : "")}>
-            <option value="">{t(lang, "tenant")}</option>
-            {tenants.map((t) => (
-              <option key={t.id} value={t.id}>{t.name}</option>
+          <select value={newBranchRestaurantId} onChange={(e) => setNewBranchRestaurantId(e.target.value ? Number(e.target.value) : "")}>
+            <option value="">{t(lang, "selectRestaurant")}</option>
+            {restaurants.filter((r) => !tenantId || r.tenantId === tenantId).map((r) => (
+              <option key={r.id} value={r.id}>{restaurantOptionLabel(r)}</option>
             ))}
           </select>
           <input placeholder={t(lang, "newBranchName")} value={newBranchName} onChange={(e) => setNewBranchName(e.target.value)} />
@@ -1507,10 +1833,11 @@ export default function SuperAdminPage() {
           {newBranchLogoUploading && <span style={{ fontSize: 12 }}>{t(lang, "uploading")}</span>}
         </div>
         <div style={{ marginTop: 10 }}>
-          {branches.filter((b) => !tenantId || b.tenantId === tenantId).map((b) => (
+          {branches.filter((b) => (!tenantId || b.tenantId === tenantId) && (!branchRestaurantFilterId || b.restaurantId === branchRestaurantFilterId)).map((b) => (
             <div key={b.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "4px 0", flexWrap: "wrap" }}>
               <strong>{b.name}</strong>
               <span>{t(lang, "tenant")} #{b.tenantId}</span>
+              <span>{t(lang, "restaurant")}: {restaurantLabel(b.restaurantId)}</span>
               <span>{b.isActive ? t(lang, "active") : t(lang, "inactive")}</span>
               {b.country && <span>{translate(lang, "country")}: {b.country}</span>}
               {b.phone && <span>{translate(lang, "phone")}: {b.phone}</span>}
@@ -1523,6 +1850,7 @@ export default function SuperAdminPage() {
                 setEditBranchAddress(b.address ?? "");
                 setEditBranchPhone(b.phone ?? "");
                 setEditBranchContactPerson(b.contactPerson ?? "");
+                setEditBranchRestaurantId(b.restaurantId ?? "");
               }}>{t(lang, "editEntity")}</button>
               <button onClick={() => deleteBranch(b.id)}>{t(lang, "delete")}</button>
             </div>
@@ -1531,6 +1859,12 @@ export default function SuperAdminPage() {
         {editingBranchId && (
           <div style={{ marginTop: 8, border: "1px dashed #ddd", padding: 10 }}>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <select value={editBranchRestaurantId} onChange={(e) => setEditBranchRestaurantId(e.target.value ? Number(e.target.value) : "")}>
+                <option value="">{t(lang, "selectRestaurant")}</option>
+                {restaurants.filter((r) => !tenantId || r.tenantId === tenantId).map((r) => (
+                  <option key={r.id} value={r.id}>{restaurantOptionLabel(r)}</option>
+                ))}
+              </select>
               <input placeholder={t(lang, "newBranchName")} value={editBranchName} onChange={(e) => setEditBranchName(e.target.value)} />
               <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 {t(lang, "photoUpload")}
@@ -1594,7 +1928,7 @@ export default function SuperAdminPage() {
           <select value={branchId} onChange={(e) => setBranchId(e.target.value ? Number(e.target.value) : "")}>
             <option value="">{t(lang, "selectBranch")}</option>
             {branches.map((b) => (
-              <option key={b.id} value={b.id}>{b.name}</option>
+              <option key={b.id} value={b.id}>{`${b.name} · ${tenantLabel(b.tenantId)} / ${restaurantLabel(b.restaurantId)}`}</option>
             ))}
           </select>
           <button onClick={loadBranchSettings} disabled={!branchId}>{t(lang, "load")}</button>
@@ -1708,7 +2042,7 @@ export default function SuperAdminPage() {
           <select value={branchId} onChange={(e) => setBranchId(e.target.value ? Number(e.target.value) : "")}>
             <option value="">{t(lang, "selectBranch")}</option>
             {branches.map((b) => (
-              <option key={b.id} value={b.id}>{b.name}</option>
+              <option key={b.id} value={b.id}>{`${b.name} · ${tenantLabel(b.tenantId)} / ${restaurantLabel(b.restaurantId)}`}</option>
             ))}
           </select>
           <button onClick={loadStaff} disabled={!branchId}>{t(lang, "loadStaff")}</button>
@@ -1827,7 +2161,7 @@ export default function SuperAdminPage() {
           <select value={branchId} onChange={(e) => setBranchId(e.target.value ? Number(e.target.value) : "")}>
             <option value="">{t(lang, "selectBranch")}</option>
             {branches.map((b) => (
-              <option key={b.id} value={b.id}>{b.name}</option>
+              <option key={b.id} value={b.id}>{`${b.name} · ${tenantLabel(b.tenantId)} / ${restaurantLabel(b.restaurantId)}`}</option>
             ))}
           </select>
           <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -2431,9 +2765,49 @@ export default function SuperAdminPage() {
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <label>{t(lang, "fromDate")} <input type="date" value={statsFrom} onChange={(e) => setStatsFrom(e.target.value)} /></label>
           <label>{t(lang, "toDate")} <input type="date" value={statsTo} onChange={(e) => setStatsTo(e.target.value)} /></label>
+          <label>
+            {t(lang, "branch")}
+            <select
+              value={branchId}
+              onChange={(e) => {
+                const next = e.target.value ? Number(e.target.value) : "";
+                setBranchId(next);
+                if (!next) setHallId("");
+              }}
+            >
+              <option value="">{t(lang, "all")}</option>
+              {branches
+                .filter((b) => !tenantId || b.tenantId === Number(tenantId))
+                .map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+            </select>
+          </label>
+          <label>
+            {t(lang, "hall")}
+            <select value={hallId} onChange={(e) => setHallId(e.target.value ? Number(e.target.value) : "")} disabled={!branchId}>
+              <option value="">{t(lang, "all")}</option>
+              {halls.map((h) => (
+                <option key={h.id} value={h.id}>{h.name}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            {t(lang, "orderStatus")}
+            <select value={statsOrderStatus} onChange={(e) => setStatsOrderStatus(e.target.value)}>
+              <option value="">{t(lang, "all")}</option>
+              {ORDER_STATUS_OPTIONS.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </label>
+          <label>{t(lang, "shiftFrom")} <input type="date" value={statsShiftFrom} onChange={(e) => setStatsShiftFrom(e.target.value)} /></label>
+          <label>{t(lang, "shiftTo")} <input type="date" value={statsShiftTo} onChange={(e) => setStatsShiftTo(e.target.value)} /></label>
           <button onClick={loadStats} disabled={!tenantId}>{t(lang, "load")}</button>
           <button onClick={downloadSummaryCsv} disabled={!tenantId}>{t(lang, "summaryCsv")}</button>
           <button onClick={downloadBranchesCsv} disabled={!tenantId}>{t(lang, "branchesCsv")}</button>
+          <button onClick={downloadTopItemsCsv} disabled={!tenantId}>{t(lang, "topItemsCsv")}</button>
+          <button onClick={downloadTopWaitersCsv} disabled={!tenantId}>{t(lang, "topWaitersCsv")}</button>
         </div>
         {stats && (
           <div style={{ marginTop: 10, border: "1px solid #eee", borderRadius: 8, padding: 10 }}>
@@ -2443,6 +2817,12 @@ export default function SuperAdminPage() {
             <div>{t(lang, "paidBills")}: {stats.paidBillsCount}</div>
             <div>{t(lang, "gross")}: {money(stats.grossCents)}</div>
             <div>{t(lang, "tips")}: {money(stats.tipsCents)}</div>
+            {stats.avgCheckCents != null && (
+              <div>{t(lang, "avgCheck")}: {money(stats.avgCheckCents)}</div>
+            )}
+            {stats.avgSlaMinutes != null && (
+              <div>{t(lang, "avgSla")}: {stats.avgSlaMinutes.toFixed(1)}</div>
+            )}
             <div>{t(lang, "activeTables")}: {stats.activeTablesCount}</div>
             {stats.avgBranchRating != null && (
               <div>
@@ -2458,6 +2838,7 @@ export default function SuperAdminPage() {
               <thead>
                 <tr>
                   <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "branch")}</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "restaurant")}</th>
                   <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "orders")}</th>
                   <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "calls")}</th>
                   <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "paidBills")}</th>
@@ -2469,6 +2850,7 @@ export default function SuperAdminPage() {
                 {branchStats.map((r) => (
                   <tr key={r.branchId}>
                     <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{r.branchName}</td>
+                    <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{r.restaurantName ?? restaurantLabel(r.restaurantId)}</td>
                     <td style={{ padding: "6px 4px", textAlign: "right", borderBottom: "1px solid #f0f0f0" }}>{r.ordersCount}</td>
                     <td style={{ padding: "6px 4px", textAlign: "right", borderBottom: "1px solid #f0f0f0" }}>{r.callsCount}</td>
                     <td style={{ padding: "6px 4px", textAlign: "right", borderBottom: "1px solid #f0f0f0" }}>{r.paidBillsCount}</td>
@@ -2478,6 +2860,64 @@ export default function SuperAdminPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+        {(topItems.length > 0 || topWaiters.length > 0) && (
+          <div style={{ marginTop: 12, display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))" }}>
+            <div>
+              <h3>{t(lang, "topItems")}</h3>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "items")}</th>
+                    <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "qty")}</th>
+                    <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "gross")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topItems.map((r) => (
+                    <tr key={r.menuItemId}>
+                      <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{r.name}</td>
+                      <td style={{ padding: "6px 4px", textAlign: "right", borderBottom: "1px solid #f0f0f0" }}>{r.qty}</td>
+                      <td style={{ padding: "6px 4px", textAlign: "right", borderBottom: "1px solid #f0f0f0" }}>{money(r.grossCents)}</td>
+                    </tr>
+                  ))}
+                  {topItems.length === 0 && (
+                    <tr>
+                      <td colSpan={3} style={{ padding: "6px 4px", color: "#666" }}>{t(lang, "noData")}</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div>
+              <h3>{t(lang, "topWaiters")}</h3>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "waiter")}</th>
+                    <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "orders")}</th>
+                    <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "tips")}</th>
+                    <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "slaMinutes")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topWaiters.map((r) => (
+                    <tr key={r.staffUserId}>
+                      <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{r.username} #{r.staffUserId}</td>
+                      <td style={{ padding: "6px 4px", textAlign: "right", borderBottom: "1px solid #f0f0f0" }}>{r.ordersCount}</td>
+                      <td style={{ padding: "6px 4px", textAlign: "right", borderBottom: "1px solid #f0f0f0" }}>{money(r.tipsCents)}</td>
+                      <td style={{ padding: "6px 4px", textAlign: "right", borderBottom: "1px solid #f0f0f0" }}>{r.avgSlaMinutes == null ? "—" : r.avgSlaMinutes.toFixed(1)}</td>
+                    </tr>
+                  ))}
+                  {topWaiters.length === 0 && (
+                    <tr>
+                      <td colSpan={4} style={{ padding: "6px 4px", color: "#666" }}>{t(lang, "noData")}</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </section>

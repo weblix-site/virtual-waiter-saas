@@ -8,17 +8,14 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 @Entity
-@Table(name = "branches")
-public class Branch {
+@Table(name = "restaurants")
+public class Restaurant {
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   public Long id;
 
   @Column(name = "tenant_id", nullable = false)
   public Long tenantId;
-
-  @Column(name = "restaurant_id", nullable = false)
-  public Long restaurantId;
 
   @Column(nullable = false)
   public String name;
@@ -40,13 +37,4 @@ public class Branch {
 
   @Column(name = "is_active", nullable = false)
   public boolean isActive = true;
-
-  @Column(name = "layout_bg_url")
-  public String layoutBgUrl;
-
-  @Column(name = "layout_zones_json")
-  public String layoutZonesJson;
-
-  @Column(name = "menu_template_id")
-  public Long menuTemplateId;
 }

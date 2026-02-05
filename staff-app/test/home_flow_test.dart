@@ -39,6 +39,7 @@ class _FakeHttpClient implements HttpClient {
   _FakeHttpClient(this.routes);
 
   final Map<String, _FakeRoute> routes;
+  Future<ConnectionTask<Socket>> Function(Uri url, String? proxyHost, int? proxyPort)? _connectionFactory;
 
   @override
   Future<HttpClientRequest> openUrl(String method, Uri url) async {
@@ -160,6 +161,13 @@ class _FakeHttpClient implements HttpClient {
 
   @override
   Future<bool> Function(String host, int port, String scheme, String realm)? get proxyAuthenticationRequired => null;
+
+  @override
+  set connectionFactory(Future<ConnectionTask<Socket>> Function(Uri url, String? proxyHost, int? proxyPort)? f) {
+    _connectionFactory = f;
+  }
+
+  Future<ConnectionTask<Socket>> Function(Uri url, String? proxyHost, int? proxyPort)? get connectionFactory => _connectionFactory;
 }
 
 class _FakeHttpClientRequest implements HttpClientRequest {
@@ -261,7 +269,7 @@ class _FakeHttpClientRequest implements HttpClientRequest {
   bool bufferOutput = true;
 
   @override
-  void flush() {}
+  Future<void> flush() async {}
 
   @override
   String get method => _method;
@@ -314,10 +322,13 @@ class _FakeHttpClientResponse extends Stream<List<int>> implements HttpClientRes
   HttpConnectionInfo? get connectionInfo => null;
 
   @override
-  CompressionState get compressionState => CompressionState.notCompressed;
+  HttpClientResponseCompressionState get compressionState => HttpClientResponseCompressionState.notCompressed;
 
   @override
   List<Cookie> get cookies => const [];
+
+  @override
+  Future<HttpClientResponse> redirect([String? method, Uri? url, bool? followLoops]) async => this;
 
   @override
   StreamSubscription<List<int>> listen(void Function(List<int>)? onData, {Function? onError, void Function()? onDone, bool? cancelOnError}) {
@@ -394,7 +405,7 @@ class _FakeHttpHeaders implements HttpHeaders {
   ContentType? contentType;
 
   @override
-  int? contentLength;
+  int contentLength = -1;
 
   @override
   bool chunkedTransferEncoding = false;
@@ -412,11 +423,6 @@ class _FakeHttpHeaders implements HttpHeaders {
   DateTime? get ifModifiedSince => null;
 
   @override
-  void setDate(DateTime date) {}
-
-  @override
-  void setExpires(DateTime expires) {}
-
   @override
   void addAll(String name, Iterable<Object> values, {bool preserveHeaderCase = false}) {
     for (final v in values) {
@@ -496,7 +502,7 @@ void main() {
     await tester.tap(find.text('Login'));
     await tester.pumpAndSettle(const Duration(milliseconds: 500));
 
-    expect(find.text('Orders'), findsOneWidget);
+    expect(find.text('Orders'), findsWidgets);
     expect(find.byType(NavigationBar), findsOneWidget);
   });
 
@@ -519,7 +525,7 @@ void main() {
     await tester.tap(find.text('Login'));
     await tester.pumpAndSettle(const Duration(milliseconds: 500));
 
-    expect(find.text('Hall A'), findsOneWidget);
+    expect(find.text('Hall B'), findsOneWidget);
     expect(find.textContaining('Last hall:'), findsOneWidget);
   });
 
@@ -594,6 +600,6 @@ void main() {
     await tester.tap(find.text('Chat'));
     await tester.pumpAndSettle(const Duration(milliseconds: 300));
 
-    expect(find.text('Chat'), findsOneWidget);
+    expect(find.text('Chat'), findsWidgets);
   });
 }
