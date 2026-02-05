@@ -73,6 +73,10 @@ const dict: Record<string, Record<Lang, string>> = {
   roleManager: { ru: "Менеджер", ro: "Manager", en: "Manager" },
   roleOwner: { ru: "Владелец ресторана", ro: "Proprietar restaurant", en: "Restaurant owner" },
   roleSuperAdmin: { ru: "Супер‑админ", ro: "Super‑admin", en: "Super admin" },
+  roleCashier: { ru: "Кассир", ro: "Casier", en: "Cashier" },
+  roleMarketer: { ru: "Маркетолог", ro: "Marketing", en: "Marketer" },
+  roleAccountant: { ru: "Бухгалтер", ro: "Contabil", en: "Accountant" },
+  roleSupport: { ru: "Техподдержка", ro: "Suport", en: "Support" },
   currencies: { ru: "Валюты", ro: "Valute", en: "Currencies" },
   addCurrency: { ru: "Добавить валюту", ro: "Adaugă valută", en: "Add currency" },
   code: { ru: "Код", ro: "Cod", en: "Code" },
@@ -381,6 +385,10 @@ export default function SuperAdminPage() {
     if (r === "MANAGER") return t(lang, "roleManager");
     if (r === "OWNER") return t(lang, "roleOwner");
     if (r === "SUPER_ADMIN") return t(lang, "roleSuperAdmin");
+    if (r === "CASHIER") return t(lang, "roleCashier");
+    if (r === "MARKETER") return t(lang, "roleMarketer");
+    if (r === "ACCOUNTANT") return t(lang, "roleAccountant");
+    if (r === "SUPPORT") return t(lang, "roleSupport");
     return role ?? "";
   };
 
@@ -2055,6 +2063,10 @@ export default function SuperAdminPage() {
             <option value="HOST">{roleLabel("HOST")}</option>
             <option value="KITCHEN">{roleLabel("KITCHEN")}</option>
             <option value="BAR">{roleLabel("BAR")}</option>
+            <option value="CASHIER">{roleLabel("CASHIER")}</option>
+            <option value="MARKETER">{roleLabel("MARKETER")}</option>
+            <option value="ACCOUNTANT">{roleLabel("ACCOUNTANT")}</option>
+            <option value="SUPPORT">{roleLabel("SUPPORT")}</option>
             <option value="ADMIN">{roleLabel("ADMIN")}</option>
             <option value="MANAGER">{roleLabel("MANAGER")}</option>
             <option value="OWNER">{roleLabel("OWNER")}</option>
@@ -2104,6 +2116,10 @@ export default function SuperAdminPage() {
                 <option value="HOST">{roleLabel("HOST")}</option>
                 <option value="KITCHEN">{roleLabel("KITCHEN")}</option>
                 <option value="BAR">{roleLabel("BAR")}</option>
+                <option value="CASHIER">{roleLabel("CASHIER")}</option>
+                <option value="MARKETER">{roleLabel("MARKETER")}</option>
+                <option value="ACCOUNTANT">{roleLabel("ACCOUNTANT")}</option>
+                <option value="SUPPORT">{roleLabel("SUPPORT")}</option>
                 <option value="ADMIN">{roleLabel("ADMIN")}</option>
                 <option value="MANAGER">{roleLabel("MANAGER")}</option>
                 <option value="OWNER">{roleLabel("OWNER")}</option>

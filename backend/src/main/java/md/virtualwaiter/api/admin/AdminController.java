@@ -3151,7 +3151,11 @@ public class AdminController {
     StaffUser u = requireAdmin(auth);
     long bid = resolveBranchId(u, branchId);
     String role = req.role.trim().toUpperCase(Locale.ROOT);
-    if (!Set.of("WAITER", "KITCHEN", "ADMIN", "HOST", "BAR", "MANAGER", "OWNER").contains(role)) {
+    if (!Set.of(
+      "WAITER", "HOST", "KITCHEN", "BAR",
+      "CASHIER", "MARKETER", "ACCOUNTANT", "SUPPORT",
+      "ADMIN", "MANAGER", "OWNER"
+    ).contains(role)) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported role");
     }
     StaffUser su = new StaffUser();
@@ -4426,7 +4430,11 @@ public class AdminController {
     }
     if (req.role != null) {
       String role = req.role.trim().toUpperCase(Locale.ROOT);
-      if (!Set.of("WAITER", "KITCHEN", "ADMIN", "HOST", "BAR", "MANAGER", "OWNER").contains(role)) {
+      if (!Set.of(
+        "WAITER", "HOST", "KITCHEN", "BAR",
+        "CASHIER", "MARKETER", "ACCOUNTANT", "SUPPORT",
+        "ADMIN", "MANAGER", "OWNER"
+      ).contains(role)) {
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported role");
       }
       su.role = role;

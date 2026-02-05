@@ -549,7 +549,11 @@ public class SuperAdminController {
   public StaffUserDto createStaff(@Valid @RequestBody CreateStaffUserRequest req, Authentication auth) {
     StaffUser u = requireSuper(auth);
     String role = req.role.trim().toUpperCase(Locale.ROOT);
-    if (!Set.of("WAITER", "HOST", "KITCHEN", "BAR", "ADMIN", "MANAGER", "SUPER_ADMIN", "OWNER").contains(role)) {
+    if (!Set.of(
+      "WAITER", "HOST", "KITCHEN", "BAR",
+      "CASHIER", "MARKETER", "ACCOUNTANT", "SUPPORT",
+      "ADMIN", "MANAGER", "SUPER_ADMIN", "OWNER"
+    ).contains(role)) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported role");
     }
     StaffUser su = new StaffUser();
@@ -601,7 +605,11 @@ public class SuperAdminController {
     }
     if (req.role != null) {
       String role = req.role.trim().toUpperCase(Locale.ROOT);
-      if (!Set.of("WAITER", "HOST", "KITCHEN", "BAR", "ADMIN", "MANAGER", "SUPER_ADMIN", "OWNER").contains(role)) {
+      if (!Set.of(
+        "WAITER", "HOST", "KITCHEN", "BAR",
+        "CASHIER", "MARKETER", "ACCOUNTANT", "SUPPORT",
+        "ADMIN", "MANAGER", "SUPER_ADMIN", "OWNER"
+      ).contains(role)) {
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported role");
       }
       su.role = role;
