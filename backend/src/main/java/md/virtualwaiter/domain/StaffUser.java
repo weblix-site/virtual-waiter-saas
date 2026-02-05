@@ -28,6 +28,10 @@ public class StaffUser {
   @Column(nullable = false)
   public String role;
 
+  /** Optional extra permissions (CSV of Permission enum values). */
+  @Column(name = "permissions")
+  public String permissions;
+
   @Column(name = "is_active", nullable = false)
   public boolean isActive = true;
 

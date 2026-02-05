@@ -15,6 +15,7 @@ import md.virtualwaiter.service.StatsService;
 import md.virtualwaiter.service.AuditService;
 import md.virtualwaiter.security.AuthzService;
 import md.virtualwaiter.security.Permission;
+import md.virtualwaiter.security.PermissionUtils;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -520,6 +521,7 @@ public class SuperAdminController {
     Long branchId,
     String username,
     String role,
+    String permissions,
     boolean isActive,
     String firstName,
     String lastName,
@@ -536,6 +538,7 @@ public class SuperAdminController {
     @NotBlank String username,
     @NotBlank String password,
     @NotBlank String role,
+    String permissions,
     String firstName,
     String lastName,
     Integer age,
@@ -563,6 +566,11 @@ public class SuperAdminController {
     su.username = req.username.trim();
     su.passwordHash = passwordEncoder.encode(req.password);
     su.role = role;
+    try {
+      su.permissions = PermissionUtils.normalize(req.permissions);
+    } catch (IllegalArgumentException ex) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported permission");
+    }
     su.isActive = true;
     su.firstName = trimOrNull(req.firstName);
     su.lastName = trimOrNull(req.lastName);
@@ -576,7 +584,7 @@ public class SuperAdminController {
     su = staffUserRepo.save(su);
     auditService.log(u, "CREATE", "StaffUser", su.id, null);
     return new StaffUserDto(
-      su.id, su.branchId, su.username, su.role, su.isActive,
+      su.id, su.branchId, su.username, su.role, su.permissions, su.isActive,
       su.firstName, su.lastName, su.age, su.gender, su.photoUrl,
       su.rating, su.recommended, su.experienceYears, su.favoriteItems
     );
@@ -585,6 +593,7 @@ public class SuperAdminController {
   public record UpdateStaffUserRequest(
     String password,
     String role,
+    String permissions,
     Boolean isActive,
     String firstName,
     String lastName,
@@ -616,6 +625,13 @@ public class SuperAdminController {
       }
       su.role = role;
     }
+    if (req.permissions != null) {
+      try {
+        su.permissions = PermissionUtils.normalize(req.permissions);
+      } catch (IllegalArgumentException ex) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported permission");
+      }
+    }
     if (req.isActive != null) su.isActive = req.isActive;
     if (req.firstName != null) su.firstName = trimOrNull(req.firstName);
     if (req.lastName != null) su.lastName = trimOrNull(req.lastName);
@@ -629,7 +645,7 @@ public class SuperAdminController {
     su = staffUserRepo.save(su);
     auditService.log(u, "UPDATE", "StaffUser", su.id, null);
     return new StaffUserDto(
-      su.id, su.branchId, su.username, su.role, su.isActive,
+      su.id, su.branchId, su.username, su.role, su.permissions, su.isActive,
       su.firstName, su.lastName, su.age, su.gender, su.photoUrl,
       su.rating, su.recommended, su.experienceYears, su.favoriteItems
     );
