@@ -226,7 +226,7 @@ public class StaffController {
     long id,
     String username,
     String role,
-    long branchId,
+    Long branchId,
     String branchName,
     Long restaurantId,
     String restaurantName,

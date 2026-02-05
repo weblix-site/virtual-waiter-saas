@@ -372,8 +372,6 @@ public class PublicController {
     }
     CafeTable table = tableRepo.findById(s.tableId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
-    Branch branch = branchRepo.findById(table.branchId)
-      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
     if (table.assignedWaiterId == null) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Waiter not assigned");
     }
