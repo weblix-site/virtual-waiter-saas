@@ -78,7 +78,7 @@ public class StaffPushService {
   }
 
   public void notifyBranch(long branchId, String type, long refId, Map<String, Object> extraData) {
-    List<StaffDeviceToken> tokens = tokenRepo.findByBranchId(branchId);
+    List<StaffDeviceToken> tokens = tokenRepo.findByBranchIdAndRevokedAtIsNull(branchId);
     if (tokens.isEmpty()) return;
 
     Long tableId = resolveTableId(type, refId);

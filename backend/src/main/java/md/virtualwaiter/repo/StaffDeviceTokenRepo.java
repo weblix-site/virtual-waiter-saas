@@ -9,5 +9,7 @@ import java.util.Optional;
 public interface StaffDeviceTokenRepo extends JpaRepository<StaffDeviceToken, Long> {
   Optional<StaffDeviceToken> findByToken(String token);
   List<StaffDeviceToken> findByBranchId(Long branchId);
-  void deleteByToken(String token);
+  List<StaffDeviceToken> findByBranchIdAndRevokedAtIsNull(Long branchId);
+  List<StaffDeviceToken> findByStaffUserId(Long staffUserId);
+  List<StaffDeviceToken> findByStaffUserIdAndRevokedAtIsNull(Long staffUserId);
 }

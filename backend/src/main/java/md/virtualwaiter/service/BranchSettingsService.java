@@ -64,7 +64,9 @@ public class BranchSettingsService {
     int commissionMonthlyFixedCents,
     int commissionMonthlyPercent,
     int commissionOrderPercent,
-    int commissionOrderFixedCents
+    int commissionOrderFixedCents,
+    String adminIpAllowlist,
+    String adminIpDenylist
   ) {}
 
   public Resolved resolveForBranch(long branchId) {
@@ -104,7 +106,9 @@ public class BranchSettingsService {
       intOr(s == null ? null : s.commissionMonthlyFixedCents, 0),
       intOr(s == null ? null : s.commissionMonthlyPercent, 0),
       intOr(s == null ? null : s.commissionOrderPercent, 0),
-      intOr(s == null ? null : s.commissionOrderFixedCents, 0)
+      intOr(s == null ? null : s.commissionOrderFixedCents, 0),
+      strOr(s == null ? null : s.adminIpAllowlist, ""),
+      strOr(s == null ? null : s.adminIpDenylist, "")
     );
   }
 

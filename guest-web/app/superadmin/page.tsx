@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import QRCode from "qrcode";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8080";
 
@@ -10,6 +11,7 @@ const dict: Record<string, Record<Lang, string>> = {
   superAdmin: { ru: "Супер‑админ", ro: "Super Admin", en: "Super Admin" },
   username: { ru: "Логин", ro: "Utilizator", en: "Username" },
   password: { ru: "Пароль", ro: "Parolă", en: "Password" },
+  totpCode: { ru: "Код 2FA", ro: "Cod 2FA", en: "2FA code" },
   login: { ru: "Войти", ro: "Intră", en: "Login" },
   logout: { ru: "Выйти", ro: "Ieși", en: "Logout" },
   sessionExpired: { ru: "Сессия истекла. Войдите снова.", ro: "Sesiunea a expirat. Autentificați‑vă din nou.", en: "Session expired. Please sign in again." },
@@ -24,6 +26,58 @@ const dict: Record<string, Record<Lang, string>> = {
   langRo: { ru: "Румынский", ro: "Română", en: "Romanian" },
   langEn: { ru: "Английский", ro: "Engleză", en: "English" },
   staffGlobal: { ru: "Персонал (глобально)", ro: "Personal (global)", en: "Staff (global)" },
+  rolesPermissionsTitle: { ru: "Права и роли", ro: "Roluri și permisiuni", en: "Roles & permissions" },
+  roleColumn: { ru: "Роль", ro: "Rol", en: "Role" },
+  permissionsColumn: { ru: "Права по умолчанию", ro: "Permisiuni implicite", en: "Default permissions" },
+  permissionsHelp: { ru: "Права можно переопределять для конкретного сотрудника.", ro: "Permisiunile pot fi suprascrise pentru un angajat.", en: "You can override permissions per staff user." },
+  selectStaff: { ru: "Сотрудник", ro: "Angajat", en: "Staff user" },
+  savePermissions: { ru: "Сохранить права", ro: "Salvează permisiuni", en: "Save permissions" },
+  permissionsSaved: { ru: "Права обновлены", ro: "Permisiunile au fost actualizate", en: "Permissions updated" },
+  permissionsOverride: { ru: "Переопределить права", ro: "Suprascrie permisiuni", en: "Override permissions" },
+  permAdminAccess: { ru: "Доступ к админ‑панели", ro: "Acces admin", en: "Admin access" },
+  permSuperadminAccess: { ru: "Доступ супер‑админа", ro: "Acces super‑admin", en: "Superadmin access" },
+  permStaffView: { ru: "Просмотр персонала", ro: "Vizualizare personal", en: "Staff view" },
+  permStaffManage: { ru: "Управление персоналом", ro: "Gestionare personal", en: "Staff manage" },
+  permMenuView: { ru: "Просмотр меню", ro: "Vizualizare meniu", en: "Menu view" },
+  permMenuManage: { ru: "Управление меню", ro: "Gestionare meniu", en: "Menu manage" },
+  permReportsView: { ru: "Просмотр отчетов", ro: "Vizualizare rapoarte", en: "Reports view" },
+  permAuditView: { ru: "Просмотр аудита", ro: "Vizualizare audit", en: "Audit view" },
+  permSettingsManage: { ru: "Настройки", ro: "Setări", en: "Settings manage" },
+  permPaymentsManage: { ru: "Оплаты", ro: "Plăți", en: "Payments manage" },
+  permInventoryManage: { ru: "Склад", ro: "Inventar", en: "Inventory manage" },
+  permLoyaltyManage: { ru: "Лояльность", ro: "Loialitate", en: "Loyalty manage" },
+  permMediaManage: { ru: "Медиа", ro: "Media", en: "Media manage" },
+  permHallPlanManage: { ru: "Планы зала", ro: "Plan sală", en: "Hall plan manage" },
+  deviceSessions: { ru: "Сессии устройств", ro: "Sesiuni dispozitive", en: "Device sessions" },
+  totpTitle: { ru: "Двухфакторная защита", ro: "Autentificare cu doi factori", en: "Two‑factor auth" },
+  totpStatusEnabled: { ru: "Включено", ro: "Activat", en: "Enabled" },
+  totpStatusDisabled: { ru: "Выключено", ro: "Dezactivat", en: "Disabled" },
+  totpSetup: { ru: "Создать секрет", ro: "Generează secret", en: "Generate secret" },
+  totpEnable: { ru: "Включить 2FA", ro: "Activează 2FA", en: "Enable 2FA" },
+  totpDisable: { ru: "Выключить 2FA", ro: "Dezactivează 2FA", en: "Disable 2FA" },
+  totpSecret: { ru: "Секрет", ro: "Secret", en: "Secret" },
+  totpHint: { ru: "Сканируйте QR/otpauth в приложении TOTP и введите код.", ro: "Scanează QR/otpauth în aplicația TOTP și introdu codul.", en: "Scan the QR/otpauth in a TOTP app and enter the code." },
+  adminIpAllowlist: { ru: "IP‑allowlist для админов", ro: "Allowlist IP pentru admini", en: "Admin IP allowlist" },
+  adminIpDenylist: { ru: "IP‑denylist для админов", ro: "Denylist IP pentru admini", en: "Admin IP denylist" },
+  adminIpListHelp: { ru: "Формат: IP или CIDR, через запятую/пробел/новую строку", ro: "Format: IP sau CIDR, separat prin virgulă/spațiu/linie", en: "Format: IP or CIDR, separated by comma/space/newline" },
+  adminIpAddCurrent: { ru: "Добавить мой IP", ro: "Adaugă IP‑ul meu", en: "Add my IP" },
+  adminIpInvalid: { ru: "Неверный формат IP/CIDR", ro: "Format IP/CIDR invalid", en: "Invalid IP/CIDR format" },
+  deviceSessionIncludeRevoked: { ru: "Показывать отозванные", ro: "Arată revocate", en: "Show revoked" },
+  deviceSessionFilterStaff: { ru: "Сотрудник", ro: "Angajat", en: "Staff" },
+  deviceSessionFilterBranch: { ru: "Филиал", ro: "Filială", en: "Branch" },
+  deviceSessionRefresh: { ru: "Обновить", ro: "Reîmprospătează", en: "Refresh" },
+  deviceSessionRevoke: { ru: "Отозвать", ro: "Revocă", en: "Revoke" },
+  deviceSessionRevokeConfirm: { ru: "Отозвать сессию устройства?", ro: "Revocare sesiune dispozitiv?", en: "Revoke device session?" },
+  deviceSessionRevokeFiltered: { ru: "Отозвать по фильтру", ro: "Revocă după filtru", en: "Revoke by filter" },
+  deviceSessionRevokeFilteredConfirm: { ru: "Отозвать все сессии по текущему фильтру?", ro: "Revocă toate sesiunile după filtru?", en: "Revoke all sessions by current filter?" },
+  deviceSessionRevokeDone: { ru: "Отозвано сессий", ro: "Sesiuni revocate", en: "Sessions revoked" },
+  deviceSessionEmpty: { ru: "Сессий нет", ro: "Nu sunt sesiuni", en: "No sessions" },
+  deviceSessionPlatform: { ru: "Платформа", ro: "Platformă", en: "Platform" },
+  deviceSessionDevice: { ru: "Устройство", ro: "Dispozitiv", en: "Device" },
+  deviceSessionToken: { ru: "Токен", ro: "Token", en: "Token" },
+  deviceSessionLastSeen: { ru: "Последняя активность", ro: "Ultima activitate", en: "Last seen" },
+  deviceSessionCreated: { ru: "Создано", ro: "Creat", en: "Created" },
+  deviceSessionRevoked: { ru: "Отозвано", ro: "Revocat", en: "Revoked" },
   profileFilter: { ru: "Профиль", ro: "Profil", en: "Profile" },
   profileAny: { ru: "Любой", ro: "Oricare", en: "Any" },
   profileFilled: { ru: "Заполнен", ro: "Completat", en: "Filled" },
@@ -56,6 +110,7 @@ const dict: Record<string, Record<Lang, string>> = {
   photoUrl: { ru: "Фото", ro: "Foto", en: "Photo" },
   photoUpload: { ru: "Загрузить фото", ro: "Încarcă foto", en: "Upload photo" },
   uploading: { ru: "Загрузка...", ro: "Se încarcă...", en: "Uploading..." },
+  loading: { ru: "Загрузка...", ro: "Se încarcă...", en: "Loading..." },
   rating: { ru: "Рейтинг (0–5)", ro: "Rating (0–5)", en: "Rating (0–5)" },
   recommended: { ru: "Рекомендуемый", ro: "Recomandat", en: "Recommended" },
   experienceYears: { ru: "Стаж (лет)", ro: "Experiență (ani)", en: "Experience (years)" },
@@ -258,12 +313,16 @@ type BranchSettings = {
   onlinePayKeyPath?: string | null;
   onlinePayRedirectUrl?: string | null;
   onlinePayReturnUrl?: string | null;
+  adminIpAllowlist?: string;
+  adminIpDenylist?: string;
 };
 type StaffUser = {
   id: number;
   branchId: number | null;
+  hallId?: number | null;
   username: string;
   role: string;
+  permissions?: string | null;
   isActive: boolean;
   firstName?: string | null;
   lastName?: string | null;
@@ -274,6 +333,20 @@ type StaffUser = {
   recommended?: boolean | null;
   experienceYears?: number | null;
   favoriteItems?: string | null;
+};
+
+type DeviceSession = {
+  id: number;
+  staffUserId: number;
+  username?: string | null;
+  branchId?: number | null;
+  platform?: string | null;
+  deviceId?: string | null;
+  deviceName?: string | null;
+  tokenMasked?: string | null;
+  createdAt?: string | null;
+  lastSeenAt?: string | null;
+  revokedAt?: string | null;
 };
 
 type StatsSummary = {
@@ -317,6 +390,68 @@ type WaiterMotivationRow = {
   tipsCents: number;
   avgSlaMinutes?: number | null;
 };
+
+function parseIpList(v?: string | null) {
+  if (!v) return [];
+  return v.split(/[,;\s]+/).map((s) => s.trim()).filter(Boolean);
+}
+
+function isIpBlocked(ip: string, allow?: string | null, deny?: string | null) {
+  if (!ip) return false;
+  const denyList = parseIpList(deny);
+  for (const rule of denyList) {
+    if (matchIp(ip, rule)) return true;
+  }
+  const allowList = parseIpList(allow);
+  if (allowList.length === 0) return false;
+  return !allowList.some((rule) => matchIp(ip, rule));
+}
+
+function matchIp(ip: string, rule: string) {
+  if (!rule) return false;
+  if (rule.includes("/")) return matchCidr(ip, rule);
+  return ip.trim() === rule.trim();
+}
+
+function matchCidr(ip: string, rule: string) {
+  const [net, bitsStr] = rule.split("/");
+  const bits = Number(bitsStr);
+  if (!Number.isFinite(bits)) return false;
+  const ipVal = ipv4ToInt(ip);
+  const netVal = ipv4ToInt(net);
+  if (ipVal == null || netVal == null) return false;
+  const mask = bits === 0 ? 0 : (~0 << (32 - bits)) >>> 0;
+  return (ipVal & mask) === (netVal & mask);
+}
+
+function ipv4ToInt(ip: string) {
+  const parts = ip.trim().split(".");
+  if (parts.length !== 4) return null;
+  let out = 0;
+  for (const p of parts) {
+    const n = Number(p);
+    if (!Number.isInteger(n) || n < 0 || n > 255) return null;
+    out = (out << 8) + n;
+  }
+  return out >>> 0;
+}
+
+function invalidIpTokens(v?: string | null) {
+  const tokens = parseIpList(v);
+  return tokens.filter((t) => !isValidIpRule(t));
+}
+
+function isValidIpRule(rule: string) {
+  if (!rule) return false;
+  if (rule.includes("/")) {
+    const [net, bitsStr] = rule.split("/");
+    if (!net || bitsStr == null) return false;
+    const bits = Number(bitsStr);
+    if (!Number.isInteger(bits) || bits < 0 || bits > 32) return false;
+    return ipv4ToInt(net) != null;
+  }
+  return ipv4ToInt(rule) != null;
+}
 
 type HallDto = {
   id: number;
@@ -368,9 +503,17 @@ function money(priceCents: number, currency = "MDL") {
 export default function SuperAdminPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [totpLoginCode, setTotpLoginCode] = useState("");
   const [authReady, setAuthReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sessionExpired, setSessionExpired] = useState(false);
+  const [totpStatus, setTotpStatus] = useState<{ enabled: boolean; hasSecret: boolean } | null>(null);
+  const [totpSecret, setTotpSecret] = useState<string | null>(null);
+  const [totpOtpauth, setTotpOtpauth] = useState<string | null>(null);
+  const [totpQrDataUrl, setTotpQrDataUrl] = useState<string | null>(null);
+  const [totpManageCode, setTotpManageCode] = useState("");
+  const [totpError, setTotpError] = useState<string | null>(null);
+  const [currentIp, setCurrentIp] = useState<string>("");
   const redirectingRef = useRef(false);
   const [lang, setLang] = useState<Lang>("ru");
   const translate = t;
@@ -409,10 +552,150 @@ export default function SuperAdminPage() {
     return r === "WAITER" || r === "HOST";
   };
 
+  const permissionLabels: Record<string, string> = {
+    ADMIN_ACCESS: "permAdminAccess",
+    SUPERADMIN_ACCESS: "permSuperadminAccess",
+    STAFF_VIEW: "permStaffView",
+    STAFF_MANAGE: "permStaffManage",
+    MENU_VIEW: "permMenuView",
+    MENU_MANAGE: "permMenuManage",
+    REPORTS_VIEW: "permReportsView",
+    AUDIT_VIEW: "permAuditView",
+    SETTINGS_MANAGE: "permSettingsManage",
+    PAYMENTS_MANAGE: "permPaymentsManage",
+    INVENTORY_MANAGE: "permInventoryManage",
+    LOYALTY_MANAGE: "permLoyaltyManage",
+    MEDIA_MANAGE: "permMediaManage",
+    HALL_PLAN_MANAGE: "permHallPlanManage",
+  };
+
+  const permissionOrder = [
+    "ADMIN_ACCESS",
+    "SUPERADMIN_ACCESS",
+    "STAFF_VIEW",
+    "STAFF_MANAGE",
+    "MENU_VIEW",
+    "MENU_MANAGE",
+    "REPORTS_VIEW",
+    "AUDIT_VIEW",
+    "SETTINGS_MANAGE",
+    "PAYMENTS_MANAGE",
+    "INVENTORY_MANAGE",
+    "LOYALTY_MANAGE",
+    "MEDIA_MANAGE",
+    "HALL_PLAN_MANAGE",
+  ];
+
+  const roleDefaultPermissions: Record<string, string[]> = {
+    SUPER_ADMIN: [
+      "SUPERADMIN_ACCESS",
+      "ADMIN_ACCESS",
+      "STAFF_VIEW",
+      "STAFF_MANAGE",
+      "MENU_VIEW",
+      "MENU_MANAGE",
+      "REPORTS_VIEW",
+      "AUDIT_VIEW",
+      "SETTINGS_MANAGE",
+      "PAYMENTS_MANAGE",
+      "INVENTORY_MANAGE",
+      "LOYALTY_MANAGE",
+      "MEDIA_MANAGE",
+      "HALL_PLAN_MANAGE",
+    ],
+    OWNER: [
+      "ADMIN_ACCESS",
+      "STAFF_VIEW",
+      "STAFF_MANAGE",
+      "MENU_VIEW",
+      "MENU_MANAGE",
+      "REPORTS_VIEW",
+      "AUDIT_VIEW",
+      "SETTINGS_MANAGE",
+      "PAYMENTS_MANAGE",
+      "INVENTORY_MANAGE",
+      "LOYALTY_MANAGE",
+      "MEDIA_MANAGE",
+      "HALL_PLAN_MANAGE",
+    ],
+    ADMIN: [
+      "ADMIN_ACCESS",
+      "STAFF_VIEW",
+      "STAFF_MANAGE",
+      "MENU_VIEW",
+      "MENU_MANAGE",
+      "REPORTS_VIEW",
+      "AUDIT_VIEW",
+      "SETTINGS_MANAGE",
+      "PAYMENTS_MANAGE",
+      "INVENTORY_MANAGE",
+      "LOYALTY_MANAGE",
+      "MEDIA_MANAGE",
+      "HALL_PLAN_MANAGE",
+    ],
+    MANAGER: [
+      "ADMIN_ACCESS",
+      "STAFF_VIEW",
+      "STAFF_MANAGE",
+      "MENU_VIEW",
+      "MENU_MANAGE",
+      "REPORTS_VIEW",
+      "AUDIT_VIEW",
+      "SETTINGS_MANAGE",
+      "PAYMENTS_MANAGE",
+      "INVENTORY_MANAGE",
+      "LOYALTY_MANAGE",
+      "MEDIA_MANAGE",
+      "HALL_PLAN_MANAGE",
+    ],
+    CASHIER: ["ADMIN_ACCESS", "REPORTS_VIEW", "PAYMENTS_MANAGE"],
+    MARKETER: ["ADMIN_ACCESS", "REPORTS_VIEW", "LOYALTY_MANAGE", "MENU_VIEW"],
+    ACCOUNTANT: ["ADMIN_ACCESS", "REPORTS_VIEW", "PAYMENTS_MANAGE", "AUDIT_VIEW"],
+    SUPPORT: ["ADMIN_ACCESS", "AUDIT_VIEW", "REPORTS_VIEW"],
+  };
+
+  const normalizePermList = (list: string[]) => {
+    const set = new Set(
+      list
+        .map((s) => s.trim().toUpperCase())
+        .filter((s) => s.length > 0)
+    );
+    return permissionOrder.filter((p) => set.has(p));
+  };
+
+  const parsePermissionsCsv = (raw?: string | null) => normalizePermList((raw ?? "").split(/[,\s]+/));
+
+  const defaultPermsForRole = (role?: string | null) =>
+    normalizePermList(roleDefaultPermissions[(role ?? "").toUpperCase()] ?? []);
+
+  const formatPermList = (list: string[]) =>
+    list.length ? list.map((p) => t(lang, permissionLabels[p] ?? p)).join(", ") : "—";
+
+  const rolesMatrix = [
+    "SUPER_ADMIN",
+    "OWNER",
+    "ADMIN",
+    "MANAGER",
+    "CASHIER",
+    "MARKETER",
+    "ACCOUNTANT",
+    "SUPPORT",
+    "WAITER",
+    "HOST",
+    "KITCHEN",
+    "BAR",
+  ];
+
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [staff, setStaff] = useState<StaffUser[]>([]);
+  const [deviceSessions, setDeviceSessions] = useState<DeviceSession[]>([]);
+  const [deviceIncludeRevoked, setDeviceIncludeRevoked] = useState(false);
+  const [deviceBranchId, setDeviceBranchId] = useState<number | "">("");
+  const [deviceStaffFilterId, setDeviceStaffFilterId] = useState<number | "">("");
+  const [deviceLoading, setDeviceLoading] = useState(false);
+  const [deviceError, setDeviceError] = useState<string | null>(null);
   const [tenantId, setTenantId] = useState<number | "">("");
   const [branchId, setBranchId] = useState<number | "">("");
   const [branchSettings, setBranchSettings] = useState<BranchSettings | null>(null);
@@ -529,10 +812,17 @@ export default function SuperAdminPage() {
   const [newStaffUser, setNewStaffUser] = useState("");
   const [newStaffPass, setNewStaffPass] = useState("");
   const [newStaffRole, setNewStaffRole] = useState("ADMIN");
+  const [newStaffHallId, setNewStaffHallId] = useState<number | "">("");
   const [staffProfileFilter, setStaffProfileFilter] = useState("");
+  const [permissionsStaffId, setPermissionsStaffId] = useState<number | "">("");
+  const [permissionsOverride, setPermissionsOverride] = useState(false);
+  const [permissionsSelected, setPermissionsSelected] = useState<string[]>([]);
+  const [permissionsSaving, setPermissionsSaving] = useState(false);
+  const [permissionsMessage, setPermissionsMessage] = useState<string | null>(null);
   const [editingStaffId, setEditingStaffId] = useState<number | null>(null);
   const [editStaffRole, setEditStaffRole] = useState("ADMIN");
   const [editStaffActive, setEditStaffActive] = useState(true);
+  const [editStaffHallId, setEditStaffHallId] = useState<number | "">("");
   const [editStaffFirstName, setEditStaffFirstName] = useState("");
   const [editStaffLastName, setEditStaffLastName] = useState("");
   const [editStaffAge, setEditStaffAge] = useState("");
@@ -575,6 +865,16 @@ export default function SuperAdminPage() {
       localStorage.removeItem("superStaffProfileFilter");
     }
   }, [staffProfileFilter]);
+
+  useEffect(() => {
+    if (!permissionsStaffId) return;
+    const su = staff.find((s) => s.id === permissionsStaffId);
+    if (!su) return;
+    const override = !!(su.permissions && su.permissions.trim());
+    setPermissionsOverride(override);
+    setPermissionsSelected(override ? parsePermissionsCsv(su.permissions) : defaultPermsForRole(su.role));
+    setPermissionsMessage(null);
+  }, [permissionsStaffId, staff]);
 
   async function api(path: string, init?: RequestInit) {
     const res = await fetch(`${API_BASE}${path}`, {
@@ -815,12 +1115,13 @@ export default function SuperAdminPage() {
     try {
       await api("/api/auth/login", {
         method: "POST",
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username, password, totpCode: totpLoginCode || null }),
       });
       localStorage.setItem("superUser", username);
       setAuthReady(true);
       loadTenants();
       loadCurrencies();
+      loadTotpStatus(true);
     } catch (e: any) {
       setError(e?.message ?? "Auth error");
     }
@@ -833,9 +1134,74 @@ export default function SuperAdminPage() {
       localStorage.removeItem("superUser");
       setUsername("");
       setPassword("");
+      setTotpLoginCode("");
       setAuthReady(false);
       setError(null);
       setSessionExpired(false);
+      setTotpStatus(null);
+      setTotpSecret(null);
+      setTotpOtpauth(null);
+      setTotpQrDataUrl(null);
+      setTotpManageCode("");
+      setTotpError(null);
+    }
+  }
+
+  async function loadTotpStatus(force = false) {
+    if (!authReady && !force) return;
+    try {
+      const res = await api("/api/super/2fa/status");
+      if (!res.ok) {
+        setTotpStatus(null);
+        return;
+      }
+      const body = await res.json();
+      setTotpStatus(body);
+    } catch {
+      setTotpStatus(null);
+    }
+  }
+
+  async function setupTotp() {
+    setTotpError(null);
+    try {
+      const res = await api("/api/super/2fa/setup", { method: "POST" });
+      const body = await res.json();
+      setTotpSecret(body.secret);
+      setTotpOtpauth(body.otpauthUrl);
+      setTotpStatus({ enabled: body.enabled, hasSecret: true });
+    } catch (e: any) {
+      setTotpError(e?.message ?? "2FA error");
+    }
+  }
+
+  async function enableTotp() {
+    setTotpError(null);
+    try {
+      const res = await api("/api/super/2fa/enable", {
+        method: "POST",
+        body: JSON.stringify({ code: totpManageCode }),
+      });
+      const body = await res.json();
+      setTotpStatus(body);
+      setTotpManageCode("");
+    } catch (e: any) {
+      setTotpError(e?.message ?? "2FA error");
+    }
+  }
+
+  async function disableTotp() {
+    setTotpError(null);
+    try {
+      const res = await api("/api/super/2fa/disable", {
+        method: "POST",
+        body: JSON.stringify({ code: totpManageCode }),
+      });
+      const body = await res.json();
+      setTotpStatus(body);
+      setTotpManageCode("");
+    } catch (e: any) {
+      setTotpError(e?.message ?? "2FA error");
     }
   }
 
@@ -875,8 +1241,29 @@ export default function SuperAdminPage() {
   useEffect(() => {
     loadTenants();
     loadCurrencies();
+    loadTotpStatus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authReady, tenantStatusFilter, branchStatusFilter, branchRestaurantFilterId, tenantId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function buildQr() {
+      if (!totpOtpauth) {
+        setTotpQrDataUrl(null);
+        return;
+      }
+      try {
+        const url = await QRCode.toDataURL(totpOtpauth, { width: 160, margin: 1 });
+        if (!cancelled) setTotpQrDataUrl(url);
+      } catch {
+        if (!cancelled) setTotpQrDataUrl(null);
+      }
+    }
+    buildQr();
+    return () => {
+      cancelled = true;
+    };
+  }, [totpOtpauth]);
 
   async function loadTables() {
     if (!branchId) return;
@@ -893,14 +1280,23 @@ export default function SuperAdminPage() {
   async function loadBranchSettings() {
     if (!branchId) {
       setBranchSettings(null);
+      setCurrentIp("");
       return;
     }
     try {
       const res = await api(`/api/admin/branch-settings?branchId=${branchId}`);
       const body = await res.json();
       setBranchSettings(body);
+      try {
+        const ipRes = await api("/api/admin/my-ip");
+        const ipBody = await ipRes.json();
+        setCurrentIp(ipBody?.ip ?? "");
+      } catch {
+        setCurrentIp("");
+      }
     } catch (_) {
       setBranchSettings(null);
+      setCurrentIp("");
     }
   }
 
@@ -920,6 +1316,8 @@ export default function SuperAdminPage() {
         onlinePayKeyPath: branchSettings.onlinePayKeyPath,
         onlinePayRedirectUrl: branchSettings.onlinePayRedirectUrl,
         onlinePayReturnUrl: branchSettings.onlinePayReturnUrl,
+        adminIpAllowlist: branchSettings.adminIpAllowlist ?? "",
+        adminIpDenylist: branchSettings.adminIpDenylist ?? "",
       }),
     });
     loadBranchSettings();
@@ -1469,15 +1867,75 @@ export default function SuperAdminPage() {
     setStaff(await res.json());
   }
 
+  async function loadDeviceSessions() {
+    if (!authReady) return;
+    setDeviceLoading(true);
+    setDeviceError(null);
+    try {
+      const params = new URLSearchParams();
+      if (deviceIncludeRevoked) params.set("includeRevoked", "true");
+      if (deviceBranchId !== "") params.set("branchId", String(deviceBranchId));
+      if (deviceStaffFilterId !== "") params.set("staffUserId", String(deviceStaffFilterId));
+      const qs = params.toString();
+      const res = await api(`/api/super/devices${qs ? `?${qs}` : ""}`);
+      setDeviceSessions(await res.json());
+    } catch (e: any) {
+      setDeviceError(e?.message ?? t(lang, "requestFailed"));
+    } finally {
+      setDeviceLoading(false);
+    }
+  }
+
+  async function revokeDeviceSession(id: number) {
+    if (!confirm(t(lang, "deviceSessionRevokeConfirm"))) return;
+    try {
+      await api(`/api/super/devices/${id}/revoke`, { method: "POST" });
+      await loadDeviceSessions();
+    } catch (e: any) {
+      setDeviceError(e?.message ?? t(lang, "requestFailed"));
+    }
+  }
+
+  async function revokeDeviceSessionsFiltered() {
+    if (!confirm(t(lang, "deviceSessionRevokeFilteredConfirm"))) return;
+    try {
+      let revoked = 0;
+      if (deviceStaffFilterId !== "") {
+        const res = await api("/api/super/devices/revoke-by-user", {
+          method: "POST",
+          body: JSON.stringify({ staffUserId: deviceStaffFilterId }),
+        });
+        const body = await res.json().catch(() => ({}));
+        revoked = body?.revoked ?? 0;
+      } else if (deviceBranchId !== "") {
+        const res = await api("/api/super/devices/revoke-by-branch", {
+          method: "POST",
+          body: JSON.stringify({ branchId: deviceBranchId }),
+        });
+        const body = await res.json().catch(() => ({}));
+        revoked = body?.revoked ?? 0;
+      } else {
+        setDeviceError(t(lang, "selectBranch"));
+        return;
+      }
+      alert(`${t(lang, "deviceSessionRevokeDone")}: ${revoked}`);
+      await loadDeviceSessions();
+    } catch (e: any) {
+      setDeviceError(e?.message ?? t(lang, "requestFailed"));
+    }
+  }
+
   async function createStaff() {
     if (!branchId) return;
+    const hallId = newStaffHallId === "" ? null : newStaffHallId;
     await api("/api/super/staff", {
       method: "POST",
-      body: JSON.stringify({ branchId, username: newStaffUser, password: newStaffPass, role: newStaffRole }),
+      body: JSON.stringify({ branchId, username: newStaffUser, password: newStaffPass, role: newStaffRole, hallId }),
     });
     setNewStaffUser("");
     setNewStaffPass("");
     setNewStaffRole("ADMIN");
+    setNewStaffHallId("");
     loadStaff();
   }
 
@@ -1502,6 +1960,7 @@ export default function SuperAdminPage() {
       body: JSON.stringify({
         role: editStaffRole,
         isActive: editStaffActive,
+        hallId: editStaffHallId === "" ? null : editStaffHallId,
         firstName: editStaffFirstName,
         lastName: editStaffLastName,
         age: ageVal,
@@ -1515,6 +1974,24 @@ export default function SuperAdminPage() {
     });
     setEditingStaffId(null);
     loadStaff();
+  }
+
+  async function saveStaffPermissions() {
+    if (!permissionsStaffId) return;
+    setPermissionsSaving(true);
+    try {
+      const normalized = normalizePermList(permissionsSelected);
+      await api(`/api/super/staff/${permissionsStaffId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ permissions: permissionsOverride ? normalized.join(",") : "" }),
+      });
+      setPermissionsMessage(t(lang, "permissionsSaved"));
+      loadStaff();
+    } catch (e: any) {
+      setError(e?.message ?? "Permissions update failed");
+    } finally {
+      setPermissionsSaving(false);
+    }
   }
 
   async function resetStaffPassword(id: number) {
@@ -1555,6 +2032,7 @@ export default function SuperAdminPage() {
           </div>
           <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder={t(lang, "username")} />
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={t(lang, "password")} />
+          <input value={totpLoginCode} onChange={(e) => setTotpLoginCode(e.target.value)} placeholder={t(lang, "totpCode")} />
           <button onClick={login} style={{ padding: "10px 14px" }}>{t(lang, "login")}</button>
         </div>
       </main>
@@ -1575,6 +2053,47 @@ export default function SuperAdminPage() {
       </div>
       {sessionExpired && <div style={{ color: "#b11e46", marginTop: 8 }}>{t(lang, "sessionExpired")}</div>}
       {error && <div style={{ color: "#b11e46", marginTop: 8 }}>{error}</div>}
+      {totpStatus && (
+        <section
+          style={{
+            marginTop: 12,
+            padding: 12,
+            border: "1px solid #e2e8f0",
+            borderRadius: 10,
+            background: "#f8fafc",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ fontSize: 16, fontWeight: 600 }}>{t(lang, "totpTitle")}</div>
+            <span style={{ fontSize: 12, padding: "2px 8px", borderRadius: 999, background: totpStatus.enabled ? "#dcfce7" : "#fee2e2", color: "#0f172a" }}>
+              {totpStatus.enabled ? t(lang, "totpStatusEnabled") : t(lang, "totpStatusDisabled")}
+            </span>
+          </div>
+          <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <button onClick={setupTotp}>{t(lang, "totpSetup")}</button>
+            <input value={totpManageCode} onChange={(e) => setTotpManageCode(e.target.value)} placeholder={t(lang, "totpCode")} />
+            <button onClick={enableTotp} disabled={!totpManageCode}>{t(lang, "totpEnable")}</button>
+            <button onClick={disableTotp} disabled={!totpManageCode}>{t(lang, "totpDisable")}</button>
+            {totpError && <span style={{ color: "#b11e46" }}>{totpError}</span>}
+          </div>
+          {totpSecret && (
+            <div style={{ marginTop: 8, fontSize: 13, color: "#475569", display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+              {totpQrDataUrl && (
+                <img src={totpQrDataUrl} alt="TOTP QR" width={160} height={160} style={{ border: "1px solid #e2e8f0", borderRadius: 8, background: "#fff" }} />
+              )}
+              <div style={{ minWidth: 240 }}>
+                <div>{t(lang, "totpSecret")}: <code>{totpSecret}</code></div>
+                {totpOtpauth && (
+                  <div style={{ wordBreak: "break-all", marginTop: 4 }}>
+                    otpauth: <code>{totpOtpauth}</code>
+                  </div>
+                )}
+                <div style={{ marginTop: 4 }}>{t(lang, "totpHint")}</div>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
 
       <section style={{ marginTop: 16 }}>
         <h2>{t(lang, "scope")}</h2>
@@ -2034,6 +2553,53 @@ export default function SuperAdminPage() {
                 <div style={{ fontSize: 12, color: "#b11e46" }}>{onlinePayFieldError("returnUrl", branchSettings.onlinePayReturnUrl)}</div>
               )}
             </label>
+            <label>
+              {t(lang, "adminIpAllowlist")}
+              <textarea
+                rows={3}
+                value={branchSettings.adminIpAllowlist ?? ""}
+                onChange={(e) => setBranchSettings({ ...branchSettings, adminIpAllowlist: e.target.value })}
+                placeholder="10.0.0.0/24, 203.0.113.5"
+              />
+              <div style={{ fontSize: 12, color: "#6b7280" }}>{t(lang, "adminIpListHelp")}</div>
+              <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!currentIp) return;
+                    const next = `${branchSettings.adminIpAllowlist ?? ""}${branchSettings.adminIpAllowlist?.trim() ? ", " : ""}${currentIp}`;
+                    setBranchSettings({ ...branchSettings, adminIpAllowlist: next });
+                  }}
+                >
+                  {t(lang, "adminIpAddCurrent")}
+                </button>
+              </div>
+              {invalidIpTokens(branchSettings.adminIpAllowlist).length > 0 && (
+                <div style={{ fontSize: 12, color: "#b11e46", marginTop: 4 }}>
+                  {t(lang, "adminIpInvalid")}: {invalidIpTokens(branchSettings.adminIpAllowlist).join(", ")}
+                </div>
+              )}
+            </label>
+            <label>
+              {t(lang, "adminIpDenylist")}
+              <textarea
+                rows={3}
+                value={branchSettings.adminIpDenylist ?? ""}
+                onChange={(e) => setBranchSettings({ ...branchSettings, adminIpDenylist: e.target.value })}
+                placeholder="0.0.0.0/0"
+              />
+              <div style={{ fontSize: 12, color: "#6b7280" }}>{t(lang, "adminIpListHelp")}</div>
+              {invalidIpTokens(branchSettings.adminIpDenylist).length > 0 && (
+                <div style={{ fontSize: 12, color: "#b11e46", marginTop: 4 }}>
+                  {t(lang, "adminIpInvalid")}: {invalidIpTokens(branchSettings.adminIpDenylist).join(", ")}
+                </div>
+              )}
+            </label>
+            {currentIp && (
+              <div style={{ fontSize: 12, color: isIpBlocked(currentIp, branchSettings.adminIpAllowlist, branchSettings.adminIpDenylist) ? "#b11e46" : "#065f46" }}>
+                IP: {currentIp} {isIpBlocked(currentIp, branchSettings.adminIpAllowlist, branchSettings.adminIpDenylist) ? "— доступ будет заблокирован" : "— доступ разрешен"}
+              </div>
+            )}
             {branchSettings.onlinePayEnabled && missingOnlinePayFields().length > 0 && (
               <div style={{ color: "#b11e46", fontSize: 12 }}>
                 {t(lang, "onlinePayProviderHint")}: {missingOnlinePayFields().join(", ")}
@@ -2071,6 +2637,12 @@ export default function SuperAdminPage() {
             <option value="MANAGER">{roleLabel("MANAGER")}</option>
             <option value="OWNER">{roleLabel("OWNER")}</option>
           </select>
+          <select value={newStaffHallId} onChange={(e) => setNewStaffHallId(e.target.value ? Number(e.target.value) : "")}>
+            <option value="">{t(lang, "hall")} — {t(lang, "all")}</option>
+            {halls.map((h) => (
+              <option key={h.id} value={h.id}>{h.name}</option>
+            ))}
+          </select>
           <button onClick={createStaff} disabled={!branchId}>{t(lang, "createStaff")}</button>
         </div>
         <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -2088,11 +2660,17 @@ export default function SuperAdminPage() {
             <div key={s.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "4px 0" }}>
               <strong>{s.username}</strong>
               <span>{roleLabel(s.role)}</span>
+              {s.hallId && (
+                <span style={{ color: "#6b7280" }}>
+                  {t(lang, "hall")}: {halls.find((h) => h.id === s.hallId)?.name ?? `#${s.hallId}`}
+                </span>
+              )}
               <span>{s.isActive ? t(lang, "active") : t(lang, "inactive")}</span>
               <button onClick={() => {
                 setEditingStaffId(s.id);
                 setEditStaffRole(s.role);
                 setEditStaffActive(s.isActive);
+                setEditStaffHallId(s.hallId ?? "");
                 setEditStaffFirstName(s.firstName ?? "");
                 setEditStaffLastName(s.lastName ?? "");
                 setEditStaffAge(s.age != null ? String(s.age) : "");
@@ -2124,6 +2702,12 @@ export default function SuperAdminPage() {
                 <option value="MANAGER">{roleLabel("MANAGER")}</option>
                 <option value="OWNER">{roleLabel("OWNER")}</option>
                 <option value="SUPER_ADMIN">{roleLabel("SUPER_ADMIN")}</option>
+              </select>
+              <select value={editStaffHallId} onChange={(e) => setEditStaffHallId(e.target.value ? Number(e.target.value) : "")}>
+                <option value="">{t(lang, "hall")} — {t(lang, "all")}</option>
+                {halls.map((h) => (
+                  <option key={h.id} value={h.id}>{h.name}</option>
+                ))}
               </select>
               <label><input type="checkbox" checked={editStaffActive} onChange={(e) => setEditStaffActive(e.target.checked)} /> {t(lang, "active")}</label>
               <input placeholder={t(lang, "firstName")} value={editStaffFirstName} onChange={(e) => setEditStaffFirstName(e.target.value)} />
@@ -2169,6 +2753,176 @@ export default function SuperAdminPage() {
             </div>
           </div>
         )}
+      </section>
+
+      <section style={{ marginTop: 24 }}>
+        <h2>{t(lang, "rolesPermissionsTitle")}</h2>
+        <div style={{ color: "#667085", fontSize: 12 }}>{t(lang, "permissionsHelp")}</div>
+        <div style={{ marginTop: 10, overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr>
+                <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "roleColumn")}</th>
+                <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "permissionsColumn")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rolesMatrix.map((role) => (
+                <tr key={role}>
+                  <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{roleLabel(role)}</td>
+                  <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0", color: "#344054" }}>
+                    {formatPermList(defaultPermsForRole(role))}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div style={{ marginTop: 12, border: "1px solid #eee", borderRadius: 8, padding: 12 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              {t(lang, "selectStaff")}
+              <select
+                value={permissionsStaffId}
+                onChange={(e) => {
+                  const next = e.target.value ? Number(e.target.value) : "";
+                  setPermissionsStaffId(next);
+                  if (!next) {
+                    setPermissionsOverride(false);
+                    setPermissionsSelected([]);
+                    setPermissionsMessage(null);
+                  }
+                }}
+              >
+                <option value="">{t(lang, "selectStaff")}</option>
+                {staff.map((s) => (
+                  <option key={s.id} value={s.id}>{s.username}</option>
+                ))}
+              </select>
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <input
+                type="checkbox"
+                checked={permissionsOverride}
+                disabled={!permissionsStaffId}
+                onChange={(e) => {
+                  const next = e.target.checked;
+                  setPermissionsOverride(next);
+                  if (!next && permissionsStaffId) {
+                    const su = staff.find((s) => s.id === permissionsStaffId);
+                    if (su) setPermissionsSelected(defaultPermsForRole(su.role));
+                  }
+                }}
+              />
+              {t(lang, "permissionsOverride")}
+            </label>
+            <button onClick={saveStaffPermissions} disabled={!permissionsStaffId || permissionsSaving}>
+              {permissionsSaving ? t(lang, "loading") : t(lang, "savePermissions")}
+            </button>
+            {permissionsMessage && <span style={{ color: "#065f46", fontSize: 12 }}>{permissionsMessage}</span>}
+          </div>
+          <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 8 }}>
+            {permissionOrder.map((perm) => (
+              <label key={perm} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <input
+                  type="checkbox"
+                  checked={permissionsSelected.includes(perm)}
+                  disabled={!permissionsStaffId || !permissionsOverride}
+                  onChange={() => {
+                    setPermissionsSelected((prev) => {
+                      const next = prev.includes(perm)
+                        ? prev.filter((p) => p !== perm)
+                        : [...prev, perm];
+                      return normalizePermList(next);
+                    });
+                  }}
+                />
+                {t(lang, permissionLabels[perm] ?? perm)}
+              </label>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section style={{ marginTop: 24 }}>
+        <h2>{t(lang, "deviceSessions")}</h2>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            {t(lang, "deviceSessionFilterBranch")}
+            <select value={deviceBranchId} onChange={(e) => setDeviceBranchId(e.target.value ? Number(e.target.value) : "")}>
+              <option value="">{t(lang, "selectBranch")}</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>{`${b.name} · ${tenantLabel(b.tenantId)} / ${restaurantLabel(b.restaurantId)}`}</option>
+              ))}
+            </select>
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            {t(lang, "deviceSessionFilterStaff")}
+            <select value={deviceStaffFilterId} onChange={(e) => setDeviceStaffFilterId(e.target.value ? Number(e.target.value) : "")}>
+              <option value="">{t(lang, "profileAny")}</option>
+              {staff.map((s) => (
+                <option key={s.id} value={s.id}>{s.username}</option>
+              ))}
+            </select>
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <input
+              type="checkbox"
+              checked={deviceIncludeRevoked}
+              onChange={(e) => setDeviceIncludeRevoked(e.target.checked)}
+            />
+            {t(lang, "deviceSessionIncludeRevoked")}
+          </label>
+          <button onClick={loadDeviceSessions} disabled={deviceLoading}>
+            {deviceLoading ? t(lang, "loading") : t(lang, "deviceSessionRefresh")}
+          </button>
+          <button onClick={revokeDeviceSessionsFiltered} disabled={deviceLoading}>
+            {t(lang, "deviceSessionRevokeFiltered")}
+          </button>
+        </div>
+        {deviceError && <div style={{ color: "#b11e46", marginTop: 6 }}>{deviceError}</div>}
+        <div style={{ marginTop: 10 }}>
+          {deviceSessions.length === 0 ? (
+            <div style={{ color: "#666" }}>{t(lang, "deviceSessionEmpty")}</div>
+          ) : (
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>ID</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "deviceSessionFilterStaff")}</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "deviceSessionFilterBranch")}</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "deviceSessionPlatform")}</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "deviceSessionDevice")}</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "deviceSessionToken")}</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "deviceSessionCreated")}</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "deviceSessionLastSeen")}</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "deviceSessionRevoked")}</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }} />
+                </tr>
+              </thead>
+              <tbody>
+                {deviceSessions.map((d) => (
+                  <tr key={d.id}>
+                    <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{d.id}</td>
+                    <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{d.username ?? `#${d.staffUserId}`}</td>
+                    <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{d.branchId ?? "-"}</td>
+                    <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{d.platform ?? "-"}</td>
+                    <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{d.deviceName ?? d.deviceId ?? "-"}</td>
+                    <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{d.tokenMasked ?? "-"}</td>
+                    <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{d.createdAt ? new Date(d.createdAt).toLocaleString() : "-"}</td>
+                    <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{d.lastSeenAt ? new Date(d.lastSeenAt).toLocaleString() : "-"}</td>
+                    <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{d.revokedAt ? new Date(d.revokedAt).toLocaleString() : "-"}</td>
+                    <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>
+                      <button onClick={() => revokeDeviceSession(d.id)} disabled={!!d.revokedAt}>
+                        {t(lang, "deviceSessionRevoke")}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </section>
 
       <section style={{ marginTop: 24 }}>

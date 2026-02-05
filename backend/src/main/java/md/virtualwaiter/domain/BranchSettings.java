@@ -117,4 +117,10 @@ public class BranchSettings {
 
   @Column(name = "commission_order_fixed_cents")
   public Integer commissionOrderFixedCents;
+
+  @Column(name = "admin_ip_allowlist")
+  public String adminIpAllowlist;
+
+  @Column(name = "admin_ip_denylist")
+  public String adminIpDenylist;
 }

@@ -163,6 +163,7 @@ public class StaffController {
   private static final Set<String> ROLE_ADMIN_LIKE = Set.of("ADMIN", "MANAGER", "SUPER_ADMIN", "OWNER");
   private static final Set<String> ROLE_WAITER_LIKE = Set.of("WAITER", "HOST");
   private static final Set<String> ROLE_KITCHEN_LIKE = Set.of("KITCHEN", "BAR");
+  private static final Set<String> ROLE_SHIFT_SCOPED = Set.of("WAITER", "HOST", "KITCHEN", "BAR", "CASHIER");
 
   private boolean expireBillIfNeeded(BillRequest br) {
     if (br == null) return false;
@@ -222,11 +223,34 @@ public class StaffController {
     return false;
   }
 
+  private Long enforceHallScope(StaffUser u, Long hallId) {
+    if (u.hallId == null) return hallId;
+    if (hallId != null && !Objects.equals(hallId, u.hallId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong hall");
+    }
+    return u.hallId;
+  }
+
+  private void requireHallScopeForTable(StaffUser u, Long tableHallId) {
+    if (u.hallId != null && !Objects.equals(u.hallId, tableHallId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong hall");
+    }
+  }
+
+  private void requireActiveShiftForStaff(StaffUser u) {
+    if (u == null) return;
+    String role = u.role == null ? "" : u.role.toUpperCase(Locale.ROOT);
+    if (ROLE_SHIFT_SCOPED.contains(role) && u.shiftStartedAt == null) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "Shift not started");
+    }
+  }
+
   public record MeResponse(
     long id,
     String username,
     String role,
     Long branchId,
+    Long hallId,
     String branchName,
     Long restaurantId,
     String restaurantName,
@@ -255,6 +279,7 @@ public class StaffController {
       u.username,
       u.role,
       u.branchId,
+      u.hallId,
       b == null ? null : b.name,
       restaurantId,
       restaurantName,
@@ -315,6 +340,7 @@ public class StaffController {
     Authentication auth
   ) {
     StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
+    hallId = enforceHallScope(u, hallId);
     List<CafeTable> tables = tableRepo.findByBranchId(u.branchId);
     if (hallId != null) {
       tables = tables.stream().filter(t -> Objects.equals(t.hallId, hallId)).toList();
@@ -359,6 +385,7 @@ public class StaffController {
     Authentication auth
   ) {
     StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
+    hallId = enforceHallScope(u, hallId);
     Instant fromTs = parseInstantOrDate(from, true);
     Instant toTs = parseInstantOrDate(to, false);
     List<StatsService.WaiterMotivationRow> rows = statsService.waiterMotivationForBranch(u.branchId, fromTs, toTs, hallId);
@@ -382,6 +409,7 @@ public class StaffController {
     Authentication auth
   ) {
     StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
+    hallId = enforceHallScope(u, hallId);
     int lim = limit == null ? 50 : Math.min(Math.max(limit, 1), 200);
     List<ChatMessage> all = chatMessageRepo.findByBranchIdOrderByIdDesc(u.branchId);
     Map<Long, ChatMessage> latestBySession = new LinkedHashMap<>();
@@ -431,6 +459,7 @@ public class StaffController {
     CafeTable table = tableRepo.findById(s.tableId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
     requireBranchAccess(u, table.branchId);
+    requireHallScopeForTable(u, table.hallId);
     List<ChatMessage> msgs = chatMessageRepo.findByBranchIdAndGuestSessionIdOrderByIdAsc(table.branchId, guestSessionId);
     List<ChatMessageDto> out = new ArrayList<>();
     for (ChatMessage m : msgs) {
@@ -442,6 +471,7 @@ public class StaffController {
   @PostMapping("/chat/send")
   public void chatSend(@RequestBody ChatSendRequest req, Authentication auth) {
     StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
+    requireActiveShiftForStaff(u);
     if (req == null || req.guestSessionId <= 0 || req.message == null || req.message.isBlank()) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid message");
     }
@@ -453,6 +483,7 @@ public class StaffController {
     CafeTable table = tableRepo.findById(s.tableId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
     requireBranchAccess(u, table.branchId);
+    requireHallScopeForTable(u, table.hallId);
     String msg = req.message.trim();
     if (msg.length() > 500) msg = msg.substring(0, 500);
     ChatMessage m = new ChatMessage();
@@ -479,6 +510,7 @@ public class StaffController {
     CafeTable table = tableRepo.findById(s.tableId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
     requireBranchAccess(u, table.branchId);
+    requireHallScopeForTable(u, table.hallId);
     ChatRead read = chatReadRepo.findByStaffUserIdAndGuestSessionId(u.id, req.guestSessionId).orElse(null);
     if (read == null) {
       read = new ChatRead();
@@ -500,6 +532,7 @@ public class StaffController {
     if (u.branchId == null) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "User has no branch");
     }
+    hallId = enforceHallScope(u, hallId);
     if (planId != null) {
       HallPlan p = hallPlanRepo.findById(planId)
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Plan not found"));
@@ -508,6 +541,7 @@ public class StaffController {
       if (!Objects.equals(h.branchId, u.branchId)) {
         throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong branch");
       }
+      requireHallScopeForTable(u, h.id);
       if (hallId != null && !Objects.equals(hallId, h.id)) {
         BranchHall requestedHall = hallRepo.findById(hallId)
           .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hall not found"));
@@ -540,6 +574,14 @@ public class StaffController {
   @GetMapping("/halls")
   public List<HallDto> halls(Authentication auth) {
     StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
+    if (u.hallId != null) {
+      BranchHall h = hallRepo.findById(u.hallId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hall not found"));
+      if (!Objects.equals(h.branchId, u.branchId)) {
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong branch");
+      }
+      return List.of(new HallDto(h.id, h.branchId, h.name, h.isActive, h.sortOrder, h.layoutBgUrl, h.layoutZonesJson, h.activePlanId));
+    }
     List<BranchHall> halls = hallRepo.findByBranchIdAndIsActiveTrueOrderBySortOrderAscIdAsc(u.branchId);
     List<HallDto> out = new ArrayList<>();
     for (BranchHall h : halls) {
@@ -553,6 +595,9 @@ public class StaffController {
   @GetMapping("/halls/{hallId}/plans")
   public List<StaffHallPlanDto> hallPlans(@PathVariable long hallId, Authentication auth) {
     StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
+    if (u.hallId != null && !Objects.equals(u.hallId, hallId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong hall");
+    }
     BranchHall h = hallRepo.findById(hallId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hall not found"));
     if (!Objects.equals(h.branchId, u.branchId)) {
@@ -587,6 +632,7 @@ public class StaffController {
     if (!Objects.equals(t.branchId, u.branchId)) {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong branch");
     }
+    requireHallScopeForTable(u, t.hallId);
     List<GuestSession> sessions = guestSessionRepo.findByTableIdOrderByIdDesc(tableId);
     List<StaffGuestSessionDto> out = new ArrayList<>();
     for (GuestSession s : sessions) {
@@ -641,6 +687,7 @@ public class StaffController {
       if (!Objects.equals(t.branchId, u.branchId)) {
         throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong branch");
       }
+      requireHallScopeForTable(u, t.hallId);
     }
 
     List<Order> orders;
@@ -721,6 +768,7 @@ public class StaffController {
     Authentication auth
   ) {
     StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
+    hallId = enforceHallScope(u, hallId);
     List<CafeTable> tables = tableRepo.findByBranchId(u.branchId);
     if (hallId != null) {
       tables = tables.stream().filter(t -> Objects.equals(t.hallId, hallId)).toList();
@@ -781,6 +829,7 @@ public class StaffController {
     Authentication auth
   ) {
     StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
+    hallId = enforceHallScope(u, hallId);
     Instant sinceTs;
     try {
       sinceTs = Instant.parse(since);
@@ -846,6 +895,7 @@ public class StaffController {
     Authentication auth
   ) {
     StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
+    hallId = enforceHallScope(u, hallId);
     if (ids == null || ids.isBlank()) return List.of();
     List<Long> orderIds = new ArrayList<>();
     for (String part : ids.split(",")) {
@@ -882,6 +932,7 @@ public class StaffController {
     Authentication auth
   ) {
     StaffUser u = requireRole(auth, "KITCHEN", "ADMIN");
+    hallId = enforceHallScope(u, hallId);
     List<CafeTable> tables = tableRepo.findByBranchId(u.branchId);
     if (hallId != null) {
       tables = tables.stream().filter(t -> Objects.equals(t.hallId, hallId)).toList();
@@ -942,6 +993,7 @@ public class StaffController {
   @PostMapping("/orders/{orderId}/status")
   public void updateStatus(@PathVariable long orderId, @RequestBody UpdateStatusReq req, Authentication auth) {
     StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
+    requireActiveShiftForStaff(u);
     Order o = orderRepo.findById(orderId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Order not found"));
     // simple branch-level authorization
@@ -950,6 +1002,7 @@ public class StaffController {
     if (!Objects.equals(t.branchId, u.branchId)) {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong branch");
     }
+    requireHallScopeForTable(u, t.hallId);
     if (req == null || req.status == null || req.status.isBlank()) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Missing status");
     }
@@ -1033,6 +1086,7 @@ public class StaffController {
   @GetMapping("/waiter-calls/active")
   public List<StaffWaiterCallDto> activeCalls(@RequestParam(value = "hallId", required = false) Long hallId, Authentication auth) {
     StaffUser u = requireRole(auth, "WAITER", "ADMIN");
+    hallId = enforceHallScope(u, hallId);
     List<CafeTable> tables = tableRepo.findByBranchId(u.branchId);
     if (hallId != null) {
       tables = tables.stream().filter(t -> Objects.equals(t.hallId, hallId)).toList();
@@ -1060,6 +1114,7 @@ public class StaffController {
     Authentication auth
   ) {
     StaffUser u = requireRole(auth, "WAITER", "ADMIN");
+    requireActiveShiftForStaff(u);
     WaiterCall c = waiterCallRepo.findById(id)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Waiter call not found"));
     CafeTable t = tableRepo.findById(c.tableId)
@@ -1067,6 +1122,7 @@ public class StaffController {
     if (!Objects.equals(t.branchId, u.branchId)) {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong branch");
     }
+    requireHallScopeForTable(u, t.hallId);
     if (req == null || req.status == null || req.status.isBlank()) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Missing status");
     }
@@ -1090,6 +1146,7 @@ public class StaffController {
     if (!Objects.equals(table.branchId, u.branchId)) {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong branch");
     }
+    requireHallScopeForTable(u, table.hallId);
     long ts = java.time.Instant.now().getEpochSecond();
     String sig = qrSig.signTablePublicId(tablePublicId, ts);
     String url = publicBaseUrl + "/t/" + table.publicId + "?sig=" + sig + "&ts=" + ts;
@@ -1117,6 +1174,7 @@ public class StaffController {
   @GetMapping("/bill-requests/active")
   public List<StaffBillRequestDto> activeBillRequests(@RequestParam(value = "hallId", required = false) Long hallId, Authentication auth) {
     StaffUser u = requireRole(auth, "WAITER", "ADMIN");
+    hallId = enforceHallScope(u, hallId);
     List<BillRequest> reqs = billRequestRepo.findByStatusOrderByCreatedAtAsc("CREATED");
     if (reqs.isEmpty()) return List.of();
 
@@ -1133,6 +1191,7 @@ public class StaffController {
       CafeTable t = tables.get(br.tableId);
       if (t == null) continue;
       if (u.branchId != null && !Objects.equals(t.branchId, u.branchId)) continue;
+      requireHallScopeForTable(u, t.hallId);
       if (hallId != null && !Objects.equals(t.hallId, hallId)) continue;
       List<BillRequestItem> items = billRequestItemRepo.findByBillRequestId(br.id);
       List<StaffBillLine> lines = new ArrayList<>();
@@ -1151,6 +1210,7 @@ public class StaffController {
   @PostMapping("/bill-requests/{id}/confirm-paid")
   public ConfirmPaidResponse confirmPaid(@PathVariable("id") long id, Authentication auth) {
     StaffUser staff = requireRole(auth, "WAITER", "ADMIN");
+    requireActiveShiftForStaff(staff);
     BillRequest br = billRequestRepo.findById(id)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Bill request not found"));
     CafeTable t = tableRepo.findById(br.tableId)
@@ -1158,6 +1218,7 @@ public class StaffController {
     if (staff.branchId != null && !Objects.equals(t.branchId, staff.branchId)) {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong branch");
     }
+    requireHallScopeForTable(staff, t.hallId);
     if (!"CREATED".equals(br.status)) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Bill request is not active");
     }
@@ -1195,6 +1256,7 @@ public class StaffController {
   @PostMapping("/bill-requests/{id}/cancel")
   public CancelBillRequestResponse cancelBillRequest(@PathVariable("id") long id, Authentication auth) {
     StaffUser staff = requireRole(auth, "WAITER", "ADMIN");
+    requireActiveShiftForStaff(staff);
     BillRequest br = billRequestRepo.findById(id)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Bill request not found"));
     CafeTable t = tableRepo.findById(br.tableId)
@@ -1202,6 +1264,7 @@ public class StaffController {
     if (staff.branchId != null && !Objects.equals(t.branchId, staff.branchId)) {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong branch");
     }
+    requireHallScopeForTable(staff, t.hallId);
     if (!"CREATED".equals(br.status)) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Bill request is not active");
     }
@@ -1227,6 +1290,7 @@ public class StaffController {
   @PostMapping("/parties/{id}/close")
   public ClosePartyResponse closeParty(@PathVariable("id") long id, Authentication auth) {
     StaffUser staff = requireRole(auth, "WAITER", "ADMIN");
+    requireActiveShiftForStaff(staff);
     TableParty p = partyRepo.findById(id)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Party not found"));
     CafeTable t = tableRepo.findById(p.tableId)
@@ -1234,6 +1298,7 @@ public class StaffController {
     if (staff.branchId != null && !Objects.equals(t.branchId, staff.branchId)) {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong branch");
     }
+    requireHallScopeForTable(staff, t.hallId);
     if (!"ACTIVE".equals(p.status)) {
       return new ClosePartyResponse(p.id, p.status);
     }
@@ -1261,7 +1326,7 @@ public class StaffController {
   }
 
   // --- Device tokens (push) ---
-  public record RegisterDeviceRequest(String token, String platform) {}
+  public record RegisterDeviceRequest(String token, String platform, String deviceId, String deviceName) {}
   public record RegisterDeviceResponse(boolean registered) {}
 
   @PostMapping("/devices/register")
@@ -1275,6 +1340,9 @@ public class StaffController {
     t.platform = req.platform.trim().toUpperCase(Locale.ROOT);
     t.staffUserId = u.id;
     t.branchId = u.branchId;
+    t.deviceId = req.deviceId == null || req.deviceId.isBlank() ? null : req.deviceId.trim();
+    t.deviceName = req.deviceName == null || req.deviceName.isBlank() ? null : req.deviceName.trim();
+    t.revokedAt = null;
     t.lastSeenAt = java.time.Instant.now();
     staffDeviceTokenRepo.save(t);
     return new RegisterDeviceResponse(true);
@@ -1288,7 +1356,11 @@ public class StaffController {
     if (req == null || req.token == null || req.token.isBlank()) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "token required");
     }
-    staffDeviceTokenRepo.deleteByToken(req.token.trim());
+    StaffDeviceToken t = staffDeviceTokenRepo.findByToken(req.token.trim()).orElse(null);
+    if (t != null) {
+      t.revokedAt = Instant.now();
+      staffDeviceTokenRepo.save(t);
+    }
   }
 
   // --- Shift control ---

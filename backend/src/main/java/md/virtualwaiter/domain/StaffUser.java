@@ -18,6 +18,9 @@ public class StaffUser {
   @Column(name = "branch_id")
   public Long branchId;
 
+  @Column(name = "hall_id")
+  public Long hallId;
+
   @Column(nullable = false, unique = true)
   public String username;
 
@@ -31,6 +34,12 @@ public class StaffUser {
   /** Optional extra permissions (CSV of Permission enum values). */
   @Column(name = "permissions")
   public String permissions;
+
+  @Column(name = "totp_secret")
+  public String totpSecret;
+
+  @Column(name = "totp_enabled", nullable = false)
+  public boolean totpEnabled = false;
 
   @Column(name = "is_active", nullable = false)
   public boolean isActive = true;

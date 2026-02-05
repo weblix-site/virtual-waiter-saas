@@ -11,11 +11,13 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.core.annotation.Order;
 
 import java.io.IOException;
 import java.util.Arrays;
 
 @Component
+@Order(1)
 public class AuthCookieFilter extends OncePerRequestFilter {
   private final AuthTokenService tokenService;
   private final UserDetailsService userDetailsService;

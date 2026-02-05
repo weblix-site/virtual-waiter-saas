@@ -1,0 +1,2 @@
+ALTER TABLE staff_users
+  ADD COLUMN IF NOT EXISTS hall_id BIGINT;

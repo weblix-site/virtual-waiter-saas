@@ -2,13 +2,17 @@ package md.virtualwaiter.api.superadmin;
 
 import md.virtualwaiter.domain.Branch;
 import md.virtualwaiter.domain.BranchReview;
+import md.virtualwaiter.domain.BranchHall;
 import md.virtualwaiter.domain.Restaurant;
+import md.virtualwaiter.domain.StaffDeviceToken;
 import md.virtualwaiter.domain.StaffUser;
 import md.virtualwaiter.domain.Tenant;
 import md.virtualwaiter.repo.CafeTableRepo;
 import md.virtualwaiter.repo.BranchRepo;
+import md.virtualwaiter.repo.BranchHallRepo;
 import md.virtualwaiter.repo.BranchReviewRepo;
 import md.virtualwaiter.repo.RestaurantRepo;
+import md.virtualwaiter.repo.StaffDeviceTokenRepo;
 import md.virtualwaiter.repo.StaffUserRepo;
 import md.virtualwaiter.repo.TenantRepo;
 import md.virtualwaiter.service.StatsService;
@@ -16,6 +20,8 @@ import md.virtualwaiter.service.AuditService;
 import md.virtualwaiter.security.AuthzService;
 import md.virtualwaiter.security.Permission;
 import md.virtualwaiter.security.PermissionUtils;
+import md.virtualwaiter.security.RolePermissions;
+import md.virtualwaiter.security.TotpService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -47,6 +53,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.EnumSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -61,12 +68,15 @@ public class SuperAdminController {
   private final TenantRepo tenantRepo;
   private final RestaurantRepo restaurantRepo;
   private final BranchRepo branchRepo;
+  private final BranchHallRepo hallRepo;
   private final BranchReviewRepo branchReviewRepo;
   private final CafeTableRepo tableRepo;
+  private final StaffDeviceTokenRepo staffDeviceTokenRepo;
   private final PasswordEncoder passwordEncoder;
   private final StatsService statsService;
   private final AuditService auditService;
   private final AuthzService authzService;
+  private final TotpService totpService;
   private final int maxPhotoUrlLength;
   private final Set<String> allowedPhotoExts;
   private final String mediaPublicBaseUrl;
@@ -76,12 +86,15 @@ public class SuperAdminController {
     TenantRepo tenantRepo,
     RestaurantRepo restaurantRepo,
     BranchRepo branchRepo,
+    BranchHallRepo hallRepo,
     BranchReviewRepo branchReviewRepo,
     CafeTableRepo tableRepo,
+    StaffDeviceTokenRepo staffDeviceTokenRepo,
     PasswordEncoder passwordEncoder,
     StatsService statsService,
     AuditService auditService,
     AuthzService authzService,
+    TotpService totpService,
     @Value("${app.media.maxPhotoUrlLength:512}") int maxPhotoUrlLength,
     @Value("${app.media.allowedPhotoExts:jpg,jpeg,png,webp,gif}") String allowedPhotoExts,
     @Value("${app.media.publicBaseUrl:http://localhost:8080}") String mediaPublicBaseUrl
@@ -90,12 +103,15 @@ public class SuperAdminController {
     this.tenantRepo = tenantRepo;
     this.restaurantRepo = restaurantRepo;
     this.branchRepo = branchRepo;
+    this.hallRepo = hallRepo;
     this.branchReviewRepo = branchReviewRepo;
     this.tableRepo = tableRepo;
+    this.staffDeviceTokenRepo = staffDeviceTokenRepo;
     this.passwordEncoder = passwordEncoder;
     this.statsService = statsService;
     this.auditService = auditService;
     this.authzService = authzService;
+    this.totpService = totpService;
     this.maxPhotoUrlLength = maxPhotoUrlLength;
     this.allowedPhotoExts = parseExts(allowedPhotoExts);
     this.mediaPublicBaseUrl = trimTrailingSlash(mediaPublicBaseUrl);
@@ -109,6 +125,179 @@ public class SuperAdminController {
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unknown user"));
     authzService.require(u, Permission.SUPERADMIN_ACCESS);
     return u;
+  }
+
+  public record MeResponse(long id, String username, String role, Long branchId, Set<String> permissions) {}
+
+  @GetMapping("/me")
+  public MeResponse me(Authentication auth) {
+    StaffUser u = requireSuper(auth);
+    return new MeResponse(u.id, u.username, u.role, u.branchId, effectivePermissions(u));
+  }
+
+  public record TotpStatusResponse(boolean enabled, boolean hasSecret) {}
+  public record TotpSetupResponse(String secret, String otpauthUrl, boolean enabled) {}
+  public record TotpVerifyRequest(@NotBlank String code) {}
+
+  @GetMapping("/2fa/status")
+  public TotpStatusResponse totpStatus(Authentication auth) {
+    StaffUser u = requireSuper(auth);
+    return new TotpStatusResponse(u.totpEnabled, u.totpSecret != null && !u.totpSecret.isBlank());
+  }
+
+  @PostMapping("/2fa/setup")
+  public TotpSetupResponse totpSetup(Authentication auth) {
+    StaffUser u = requireSuper(auth);
+    String secret = totpService.generateSecret();
+    u.totpSecret = secret;
+    u.totpEnabled = false;
+    staffUserRepo.save(u);
+    String otpauth = totpService.buildOtpauthUrl(u.username, "VirtualWaiter", secret);
+    auditService.log(u, "UPDATE", "StaffUser2FA", u.id, "setup");
+    return new TotpSetupResponse(secret, otpauth, false);
+  }
+
+  @PostMapping("/2fa/enable")
+  public TotpStatusResponse totpEnable(@Valid @RequestBody TotpVerifyRequest req, Authentication auth) {
+    StaffUser u = requireSuper(auth);
+    if (u.totpSecret == null || u.totpSecret.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "2FA is not initialized");
+    }
+    if (!totpService.verifyCode(u.totpSecret, req.code(), System.currentTimeMillis())) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid code");
+    }
+    u.totpEnabled = true;
+    staffUserRepo.save(u);
+    auditService.log(u, "UPDATE", "StaffUser2FA", u.id, "enable");
+    return new TotpStatusResponse(true, true);
+  }
+
+  @PostMapping("/2fa/disable")
+  public TotpStatusResponse totpDisable(@Valid @RequestBody TotpVerifyRequest req, Authentication auth) {
+    StaffUser u = requireSuper(auth);
+    if (u.totpSecret == null || u.totpSecret.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "2FA is not initialized");
+    }
+    if (!totpService.verifyCode(u.totpSecret, req.code(), System.currentTimeMillis())) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid code");
+    }
+    u.totpEnabled = false;
+    u.totpSecret = null;
+    staffUserRepo.save(u);
+    auditService.log(u, "UPDATE", "StaffUser2FA", u.id, "disable");
+    return new TotpStatusResponse(false, false);
+  }
+
+  public record DeviceSessionDto(
+    long id,
+    long staffUserId,
+    String username,
+    Long branchId,
+    String platform,
+    String deviceId,
+    String deviceName,
+    String tokenMasked,
+    String createdAt,
+    String lastSeenAt,
+    String revokedAt
+  ) {}
+
+  public record RevokeDevicesResponse(int revoked) {}
+  public record RevokeByUserRequest(@NotNull Long staffUserId) {}
+  public record RevokeByBranchRequest(Long branchId) {}
+
+  @GetMapping("/devices")
+  public List<DeviceSessionDto> listDeviceSessions(
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @RequestParam(value = "staffUserId", required = false) Long staffUserId,
+    @RequestParam(value = "includeRevoked", required = false) Boolean includeRevoked,
+    Authentication auth
+  ) {
+    requireSuper(auth);
+    boolean include = includeRevoked != null && includeRevoked;
+    List<StaffDeviceToken> tokens;
+    if (staffUserId != null) {
+      tokens = include
+        ? staffDeviceTokenRepo.findByStaffUserId(staffUserId)
+        : staffDeviceTokenRepo.findByStaffUserIdAndRevokedAtIsNull(staffUserId);
+    } else if (branchId != null) {
+      tokens = include
+        ? staffDeviceTokenRepo.findByBranchId(branchId)
+        : staffDeviceTokenRepo.findByBranchIdAndRevokedAtIsNull(branchId);
+    } else {
+      tokens = staffDeviceTokenRepo.findAll();
+      if (!include) {
+        tokens = tokens.stream().filter(t -> t.revokedAt == null).toList();
+      }
+    }
+    List<Long> staffIds = tokens.stream().map(t -> t.staffUserId).distinct().toList();
+    Map<Long, String> usernames = staffUserRepo.findAllById(staffIds).stream()
+      .collect(Collectors.toMap(su -> su.id, su -> su.username));
+    return tokens.stream()
+      .sorted((a, b) -> {
+        Instant al = a.lastSeenAt;
+        Instant bl = b.lastSeenAt;
+        if (al == null && bl == null) return 0;
+        if (al == null) return 1;
+        if (bl == null) return -1;
+        return bl.compareTo(al);
+      })
+      .map(t -> new DeviceSessionDto(
+        t.id,
+        t.staffUserId,
+        usernames.get(t.staffUserId),
+        t.branchId,
+        t.platform,
+        t.deviceId,
+        t.deviceName,
+        maskToken(t.token),
+        t.createdAt == null ? null : t.createdAt.toString(),
+        t.lastSeenAt == null ? null : t.lastSeenAt.toString(),
+        t.revokedAt == null ? null : t.revokedAt.toString()
+      ))
+      .toList();
+  }
+
+  @PostMapping("/devices/{id}/revoke")
+  public void revokeDevice(@PathVariable long id, Authentication auth) {
+    requireSuper(auth);
+    StaffDeviceToken token = staffDeviceTokenRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Device session not found"));
+    if (token.revokedAt == null) {
+      token.revokedAt = Instant.now();
+      staffDeviceTokenRepo.save(token);
+    }
+  }
+
+  @PostMapping("/devices/revoke-by-user")
+  public RevokeDevicesResponse revokeDevicesByUser(@Valid @RequestBody RevokeByUserRequest req, Authentication auth) {
+    requireSuper(auth);
+    List<StaffDeviceToken> tokens = staffDeviceTokenRepo.findByStaffUserIdAndRevokedAtIsNull(req.staffUserId);
+    int revoked = 0;
+    Instant now = Instant.now();
+    for (StaffDeviceToken t : tokens) {
+      t.revokedAt = now;
+      revoked++;
+    }
+    staffDeviceTokenRepo.saveAll(tokens);
+    return new RevokeDevicesResponse(revoked);
+  }
+
+  @PostMapping("/devices/revoke-by-branch")
+  public RevokeDevicesResponse revokeDevicesByBranch(@RequestBody RevokeByBranchRequest req, Authentication auth) {
+    requireSuper(auth);
+    if (req == null || req.branchId == null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "branchId is required");
+    }
+    List<StaffDeviceToken> tokens = staffDeviceTokenRepo.findByBranchIdAndRevokedAtIsNull(req.branchId);
+    int revoked = 0;
+    Instant now = Instant.now();
+    for (StaffDeviceToken t : tokens) {
+      t.revokedAt = now;
+      revoked++;
+    }
+    staffDeviceTokenRepo.saveAll(tokens);
+    return new RevokeDevicesResponse(revoked);
   }
 
   // --- Tenants ---
@@ -519,6 +708,7 @@ public class SuperAdminController {
   public record StaffUserDto(
     long id,
     Long branchId,
+    Long hallId,
     String username,
     String role,
     String permissions,
@@ -538,6 +728,7 @@ public class SuperAdminController {
     @NotBlank String username,
     @NotBlank String password,
     @NotBlank String role,
+    Long hallId,
     String permissions,
     String firstName,
     String lastName,
@@ -563,6 +754,12 @@ public class SuperAdminController {
     }
     StaffUser su = new StaffUser();
     su.branchId = "SUPER_ADMIN".equals(role) ? null : req.branchId;
+    su.hallId = normalizeHallId(req.hallId);
+    if (su.branchId == null) {
+      su.hallId = null;
+    } else if (su.hallId != null) {
+      validateHallScope(su.hallId, su.branchId);
+    }
     su.username = req.username.trim();
     su.passwordHash = passwordEncoder.encode(req.password);
     su.role = role;
@@ -584,7 +781,7 @@ public class SuperAdminController {
     su = staffUserRepo.save(su);
     auditService.log(u, "CREATE", "StaffUser", su.id, null);
     return new StaffUserDto(
-      su.id, su.branchId, su.username, su.role, su.permissions, su.isActive,
+      su.id, su.branchId, su.hallId, su.username, su.role, su.permissions, su.isActive,
       su.firstName, su.lastName, su.age, su.gender, su.photoUrl,
       su.rating, su.recommended, su.experienceYears, su.favoriteItems
     );
@@ -593,6 +790,7 @@ public class SuperAdminController {
   public record UpdateStaffUserRequest(
     String password,
     String role,
+    Long hallId,
     String permissions,
     Boolean isActive,
     String firstName,
@@ -611,6 +809,8 @@ public class SuperAdminController {
     StaffUser u = requireSuper(auth);
     StaffUser su = staffUserRepo.findById(id)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Staff user not found"));
+    String prevRole = su.role;
+    String prevPerms = normalizePermsForAudit(su.permissions);
     if (req.password != null && !req.password.isBlank()) {
       su.passwordHash = passwordEncoder.encode(req.password);
     }
@@ -624,6 +824,15 @@ public class SuperAdminController {
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported role");
       }
       su.role = role;
+    }
+    if (req.hallId != null) {
+      Long nextHallId = normalizeHallId(req.hallId);
+      if (su.branchId == null) {
+        nextHallId = null;
+      } else if (nextHallId != null) {
+        validateHallScope(nextHallId, su.branchId);
+      }
+      su.hallId = nextHallId;
     }
     if (req.permissions != null) {
       try {
@@ -644,8 +853,21 @@ public class SuperAdminController {
     if (req.favoriteItems != null) su.favoriteItems = sanitizeFavoriteItems(req.favoriteItems);
     su = staffUserRepo.save(su);
     auditService.log(u, "UPDATE", "StaffUser", su.id, null);
+    String nextPerms = normalizePermsForAudit(su.permissions);
+    if (!Objects.equals(prevRole, su.role) || !Objects.equals(prevPerms, nextPerms)) {
+      Map<String, Object> details = new java.util.HashMap<>();
+      if (!Objects.equals(prevRole, su.role)) {
+        details.put("roleFrom", prevRole);
+        details.put("roleTo", su.role);
+      }
+      if (!Objects.equals(prevPerms, nextPerms)) {
+        details.put("permissionsFrom", prevPerms);
+        details.put("permissionsTo", nextPerms);
+      }
+      auditService.log(u, "ROLE_PERMISSIONS_CHANGE", "StaffUser", su.id, toJsonSafe(details));
+    }
     return new StaffUserDto(
-      su.id, su.branchId, su.username, su.role, su.permissions, su.isActive,
+      su.id, su.branchId, su.hallId, su.username, su.role, su.permissions, su.isActive,
       su.firstName, su.lastName, su.age, su.gender, su.photoUrl,
       su.rating, su.recommended, su.experienceYears, su.favoriteItems
     );
@@ -1165,6 +1387,15 @@ public class SuperAdminController {
     return out;
   }
 
+  private Set<String> effectivePermissions(StaffUser u) {
+    Set<Permission> base = RolePermissions.forRole(u.role);
+    Set<Permission> perms = base.isEmpty() ? EnumSet.noneOf(Permission.class) : EnumSet.copyOf(base);
+    if (u.permissions != null && !u.permissions.isBlank()) {
+      perms.addAll(PermissionUtils.parseLenient(u.permissions));
+    }
+    return perms.stream().map(Enum::name).collect(Collectors.toSet());
+  }
+
   private String sanitizePhotoUrl(String raw) {
     String url = trimOrNull(raw);
     if (url == null) return null;
@@ -1236,10 +1467,49 @@ public class SuperAdminController {
     return switch (t) { case "male", "female", "other" -> t; default -> null; };
   }
 
+  private static Long normalizeHallId(Long hallId) {
+    if (hallId == null) return null;
+    return hallId <= 0 ? null : hallId;
+  }
+
+  private void validateHallScope(Long hallId, Long branchId) {
+    if (hallId == null) return;
+    if (branchId == null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Hall scope requires branch");
+    }
+    BranchHall hall = hallRepo.findById(hallId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hall not found"));
+    if (!Objects.equals(hall.branchId, branchId)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Hall belongs to another branch");
+    }
+  }
+
+  private static String maskToken(String token) {
+    if (token == null || token.isBlank()) return null;
+    String v = token.trim();
+    if (v.length() <= 8) return "***";
+    return v.substring(0, 4) + "..." + v.substring(v.length() - 4);
+  }
+
   private static String trimTrailingSlash(String v) {
     if (v == null) return "";
     String s = v.trim();
     if (s.endsWith("/")) return s.substring(0, s.length() - 1);
     return s;
+  }
+
+  private static String normalizePermsForAudit(String v) {
+    if (v == null) return "";
+    String t = v.trim();
+    return t.isEmpty() ? "" : t;
+  }
+
+  private static String toJsonSafe(Object payload) {
+    if (payload == null) return null;
+    try {
+      return new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(payload);
+    } catch (Exception e) {
+      return null;
+    }
   }
 }

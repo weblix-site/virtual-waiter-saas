@@ -24,6 +24,12 @@ public class StaffDeviceToken {
   @Column(nullable = false)
   public String platform;
 
+  @Column(name = "device_id")
+  public String deviceId;
+
+  @Column(name = "device_name")
+  public String deviceName;
+
   @Column(nullable = false, unique = true)
   public String token;
 
@@ -32,4 +38,7 @@ public class StaffDeviceToken {
 
   @Column(name = "last_seen_at", nullable = false)
   public Instant lastSeenAt = Instant.now();
+
+  @Column(name = "revoked_at")
+  public Instant revokedAt;
 }
