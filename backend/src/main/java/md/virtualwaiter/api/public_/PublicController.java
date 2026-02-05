@@ -47,6 +47,7 @@ import md.virtualwaiter.repo.PaymentIntentRepo;
 import md.virtualwaiter.repo.PaymentTransactionRepo;
 import md.virtualwaiter.otp.OtpService;
 import md.virtualwaiter.service.BranchSettingsService;
+import md.virtualwaiter.service.GuestProfileService;
 import md.virtualwaiter.service.PartyService;
 import md.virtualwaiter.service.NotificationEventService;
 import md.virtualwaiter.service.RateLimitService;
@@ -121,6 +122,7 @@ public class PublicController {
   private final RateLimitService rateLimitService;
   private final InventoryService inventoryService;
   private final LoyaltyService loyaltyService;
+  private final GuestProfileService guestProfileService;
   private final int otpLimitMax;
   private final int otpLimitWindowSeconds;
   private final int otpVerifyLimitMax;
@@ -171,6 +173,7 @@ public class PublicController {
     RateLimitService rateLimitService,
     InventoryService inventoryService,
     LoyaltyService loyaltyService,
+    GuestProfileService guestProfileService,
     BillProperties billProperties,
     @Value("${app.rateLimit.otp.maxRequests:5}") int otpLimitMax,
     @Value("${app.rateLimit.otp.windowSeconds:300}") int otpLimitWindowSeconds,
@@ -220,6 +223,7 @@ public class PublicController {
     this.rateLimitService = rateLimitService;
     this.inventoryService = inventoryService;
     this.loyaltyService = loyaltyService;
+    this.guestProfileService = guestProfileService;
     this.otpLimitMax = otpLimitMax;
     this.otpLimitWindowSeconds = otpLimitWindowSeconds;
     this.otpVerifyLimitMax = otpVerifyLimitMax;
@@ -800,6 +804,7 @@ public class PublicController {
     Order o = new Order();
     o.tableId = table.id;
     o.guestSessionId = s.id;
+    o.guestPhone = s.verifiedPhone;
     o.status = "NEW";
     o.createdByIp = getClientIp(httpReq);
     o.createdByUa = getUserAgent(httpReq);
@@ -2097,6 +2102,116 @@ public class PublicController {
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
     LoyaltyService.LoyaltyProfile p = loyaltyService.getProfile(table.branchId, s.verifiedPhone);
     return new LoyaltyProfileResponse(p.phone(), p.pointsBalance(), p.favorites(), p.offers());
+  }
+
+  // --- Guest profile (phone-based) ---
+  public record GuestProfileResponse(
+    String phone,
+    String name,
+    String preferences,
+    String allergens,
+    int visitsCount,
+    String firstVisitAt,
+    String lastVisitAt
+  ) {}
+
+  public record GuestProfileUpdateRequest(
+    @NotNull Long guestSessionId,
+    String name,
+    String preferences,
+    String allergens
+  ) {}
+
+  public record GuestVisitOrder(
+    long orderId,
+    String status,
+    String createdAt,
+    int tableNumber,
+    long branchId
+  ) {}
+
+  @GetMapping("/guest/profile")
+  public GuestProfileResponse getGuestProfile(
+    @RequestParam("guestSessionId") long guestSessionId,
+    jakarta.servlet.http.HttpServletRequest httpReq
+  ) {
+    GuestSession s = sessionRepo.findById(guestSessionId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
+    requireSessionSecret(s, httpReq);
+    if (!s.isVerified || s.verifiedPhone == null || s.verifiedPhone.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Phone not verified");
+    }
+    GuestProfileService.Profile p = guestProfileService.getByPhone(s.verifiedPhone);
+    return new GuestProfileResponse(
+      p.phoneE164(),
+      p.name(),
+      p.preferences(),
+      p.allergens(),
+      p.visitsCount(),
+      p.firstVisitAt() == null ? null : p.firstVisitAt().toString(),
+      p.lastVisitAt() == null ? null : p.lastVisitAt().toString()
+    );
+  }
+
+  @PutMapping("/guest/profile")
+  public GuestProfileResponse updateGuestProfile(
+    @Valid @RequestBody GuestProfileUpdateRequest req,
+    jakarta.servlet.http.HttpServletRequest httpReq
+  ) {
+    GuestSession s = sessionRepo.findById(req.guestSessionId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
+    requireSessionSecret(s, httpReq);
+    if (!s.isVerified || s.verifiedPhone == null || s.verifiedPhone.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Phone not verified");
+    }
+    GuestProfileService.Profile p = guestProfileService.updateProfile(
+      s.verifiedPhone,
+      req.name,
+      req.preferences,
+      req.allergens
+    );
+    return new GuestProfileResponse(
+      p.phoneE164(),
+      p.name(),
+      p.preferences(),
+      p.allergens(),
+      p.visitsCount(),
+      p.firstVisitAt() == null ? null : p.firstVisitAt().toString(),
+      p.lastVisitAt() == null ? null : p.lastVisitAt().toString()
+    );
+  }
+
+  @GetMapping("/guest/visits")
+  public List<GuestVisitOrder> getGuestVisits(
+    @RequestParam("guestSessionId") long guestSessionId,
+    jakarta.servlet.http.HttpServletRequest httpReq
+  ) {
+    GuestSession s = sessionRepo.findById(guestSessionId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
+    requireSessionSecret(s, httpReq);
+    if (!s.isVerified || s.verifiedPhone == null || s.verifiedPhone.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Phone not verified");
+    }
+    List<GuestSession> sessions = guestSessionRepo.findTop200ByVerifiedPhoneOrderByIdDesc(s.verifiedPhone);
+    if (sessions.isEmpty()) return List.of();
+    List<Long> sessionIds = sessions.stream().map(gs -> gs.id).toList();
+    List<Order> orders = orderRepo.findTop200ByGuestSessionIdInOrderByCreatedAtDesc(sessionIds);
+    if (orders.isEmpty()) return List.of();
+    List<Long> tableIds = orders.stream().map(o -> o.tableId).distinct().toList();
+    Map<Long, CafeTable> tables = tableRepo.findByIdIn(tableIds).stream()
+      .collect(Collectors.toMap(t -> t.id, t -> t));
+    List<GuestVisitOrder> out = new ArrayList<>();
+    for (Order o : orders) {
+      CafeTable t = tables.get(o.tableId);
+      out.add(new GuestVisitOrder(
+        o.id,
+        o.status,
+        o.createdAt == null ? null : o.createdAt.toString(),
+        t == null ? 0 : t.number,
+        t == null ? 0 : t.branchId
+      ));
+    }
+    return out;
   }
 
   private static boolean resolveMenuItemActive(MenuItem it, BranchMenuItemOverride override) {

@@ -9,4 +9,5 @@ public interface GuestSessionRepo extends JpaRepository<GuestSession, Long> {
   List<GuestSession> findByPartyId(Long partyId);
   List<GuestSession> findByTableIdOrderByIdDesc(Long tableId);
   List<GuestSession> findByPartyIdIn(List<Long> partyIds);
+  List<GuestSession> findTop200ByVerifiedPhoneOrderByIdDesc(String verifiedPhone);
 }

@@ -6,6 +6,7 @@ import md.virtualwaiter.repo.CafeTableRepo;
 import md.virtualwaiter.repo.GuestSessionRepo;
 import md.virtualwaiter.repo.OtpChallengeRepo;
 import md.virtualwaiter.service.BranchSettingsService;
+import md.virtualwaiter.service.GuestProfileService;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -25,6 +26,7 @@ public class OtpService {
   private final GuestSessionRepo sessionRepo;
   private final CafeTableRepo tableRepo;
   private final BranchSettingsService settingsService;
+  private final GuestProfileService guestProfileService;
   private final SecureRandom rnd = new SecureRandom();
   private final BCryptPasswordEncoder enc = new BCryptPasswordEncoder();
 
@@ -34,7 +36,8 @@ public class OtpService {
     OtpChallengeRepo otpRepo,
     GuestSessionRepo sessionRepo,
     CafeTableRepo tableRepo,
-    BranchSettingsService settingsService
+    BranchSettingsService settingsService,
+    GuestProfileService guestProfileService
   ) {
     this.props = props;
     this.provider = provider;
@@ -42,6 +45,7 @@ public class OtpService {
     this.sessionRepo = sessionRepo;
     this.tableRepo = tableRepo;
     this.settingsService = settingsService;
+    this.guestProfileService = guestProfileService;
   }
 
   public record SendResult(long challengeId, int ttlSeconds, String devCode, String deliveryStatus, String deliveryError) {}
@@ -146,9 +150,13 @@ public class OtpService {
     c.status = "VERIFIED";
     otpRepo.save(c);
 
+    boolean wasVerified = s.isVerified;
     s.isVerified = true;
     s.verifiedPhone = c.phoneE164;
     sessionRepo.save(s);
+    if (!wasVerified) {
+      guestProfileService.onVerified(c.phoneE164);
+    }
   }
 
   private String generateCode(int length) {

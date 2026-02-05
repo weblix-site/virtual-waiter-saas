@@ -19,6 +19,7 @@ const dict: Record<string, Record<Lang, string>> = {
   logout: { ru: "Выйти", ro: "Ieși", en: "Logout" },
   sessionExpired: { ru: "Сессия истекла. Войдите снова.", ro: "Sesiunea a expirat. Autentificați‑vă din nou.", en: "Session expired. Please sign in again." },
   refresh: { ru: "Обновить", ro: "Reîmprospătează", en: "Refresh" },
+  saving: { ru: "Сохранение...", ro: "Se salvează...", en: "Saving..." },
   resetFilters: { ru: "Сбросить фильтры", ro: "Resetează filtrele", en: "Reset filters" },
   filtersActive: { ru: "Фильтров активно", ro: "Filtre active", en: "Filters active" },
   settings: { ru: "Настройки", ro: "Setări", en: "Settings" },
@@ -169,6 +170,7 @@ const dict: Record<string, Record<Lang, string>> = {
   signalAge: { ru: "Время", ro: "Timp", en: "Age" },
   stats: { ru: "Статистика", ro: "Statistici", en: "Stats" },
   orderStatus: { ru: "Статус заказа", ro: "Status comandă", en: "Order status" },
+  guestPhone: { ru: "Телефон гостя", ro: "Telefon oaspete", en: "Guest phone" },
   shiftFrom: { ru: "Смена с", ro: "Schimb de la", en: "Shift from" },
   shiftTo: { ru: "Смена по", ro: "Schimb până la", en: "Shift to" },
   avgCheck: { ru: "Средний чек", ro: "Bon mediu", en: "Average check" },
@@ -213,6 +215,19 @@ const dict: Record<string, Record<Lang, string>> = {
   loyaltyTitle: { ru: "Лояльность / CRM", ro: "Loialitate / CRM", en: "Loyalty / CRM" },
   loyaltyPhone: { ru: "Телефон гостя", ro: "Telefon oaspete", en: "Guest phone" },
   loyaltyLoad: { ru: "Загрузить", ro: "Încarcă", en: "Load" },
+  guestProfileTitle: { ru: "Профиль гостя", ro: "Profil oaspete", en: "Guest profile" },
+  guestProfilePhone: { ru: "Телефон", ro: "Telefon", en: "Phone" },
+  guestProfileLoad: { ru: "Загрузить профиль", ro: "Încarcă profil", en: "Load profile" },
+  guestProfileSave: { ru: "Сохранить профиль", ro: "Salvează profil", en: "Save profile" },
+  guestProfileSaved: { ru: "Профиль сохранён", ro: "Profil salvat", en: "Profile saved" },
+  guestProfileName: { ru: "Имя", ro: "Nume", en: "Name" },
+  guestProfilePreferences: { ru: "Предпочтения", ro: "Preferințe", en: "Preferences" },
+  guestProfileAllergens: { ru: "Аллергены", ro: "Alergeni", en: "Allergens" },
+  guestProfileVisits: { ru: "Посещений", ro: "Vizite", en: "Visits" },
+  guestProfileFirstVisit: { ru: "Первый визит", ro: "Prima vizită", en: "First visit" },
+  guestProfileLastVisit: { ru: "Последний визит", ro: "Ultima vizită", en: "Last visit" },
+  guestProfileHistory: { ru: "История визитов", ro: "Istoric vizite", en: "Visit history" },
+  guestProfileHistoryEmpty: { ru: "История пуста", ro: "Istoricul este gol", en: "No visits yet" },
   loyaltyPoints: { ru: "Баллы", ro: "Puncte", en: "Points" },
   loyaltyFavorites: { ru: "Любимые блюда", ro: "Feluri preferate", en: "Favorite items" },
   loyaltyOffers: { ru: "Персональные предложения", ro: "Oferte personale", en: "Personal offers" },
@@ -1315,6 +1330,24 @@ export default function AdminPage() {
     offers: { id: number; title: string; body?: string | null; discountCode?: string | null; startsAt?: string | null; endsAt?: string | null; isActive: boolean }[];
   } | null>(null);
   const [loyaltyLoading, setLoyaltyLoading] = useState(false);
+  const [guestProfilePhone, setGuestProfilePhone] = useState("");
+  const [guestProfile, setGuestProfile] = useState<{
+    phone: string;
+    name?: string | null;
+    preferences?: string | null;
+    allergens?: string | null;
+    visitsCount: number;
+    firstVisitAt?: string | null;
+    lastVisitAt?: string | null;
+    visits: { orderId: number; status: string; createdAt: string; tableNumber: number; branchId: number }[];
+  } | null>(null);
+  const [guestProfileLoading, setGuestProfileLoading] = useState(false);
+  const [guestProfileSaving, setGuestProfileSaving] = useState(false);
+  const [guestProfileSaved, setGuestProfileSaved] = useState(false);
+  const [guestProfileError, setGuestProfileError] = useState<string | null>(null);
+  const [guestProfileName, setGuestProfileName] = useState("");
+  const [guestProfilePreferences, setGuestProfilePreferences] = useState("");
+  const [guestProfileAllergens, setGuestProfileAllergens] = useState("");
   const [newOffer, setNewOffer] = useState({
     title: "",
     body: "",
@@ -1335,6 +1368,7 @@ export default function AdminPage() {
   const [statsHallPlans, setStatsHallPlans] = useState<HallPlanDto[]>([]);
   const [statsWaiterId, setStatsWaiterId] = useState<number | "">("");
   const [statsOrderStatus, setStatsOrderStatus] = useState("");
+  const [statsGuestPhone, setStatsGuestPhone] = useState("");
   const [statsShiftFrom, setStatsShiftFrom] = useState("");
   const [statsShiftTo, setStatsShiftTo] = useState("");
   const [statsLimit, setStatsLimit] = useState(10);
@@ -3335,6 +3369,51 @@ export default function AdminPage() {
     }
   }
 
+  async function loadGuestProfileAdmin() {
+    if (!guestProfilePhone.trim()) return;
+    setGuestProfileLoading(true);
+    setGuestProfileError(null);
+    try {
+      const qs = new URLSearchParams({ phone: guestProfilePhone.trim() });
+      const res = await api(`/api/admin/guest-profile?${qs.toString()}`);
+      const profile = await res.json();
+      setGuestProfile(profile);
+      setGuestProfileName(profile.name ?? "");
+      setGuestProfilePreferences(profile.preferences ?? "");
+      setGuestProfileAllergens(profile.allergens ?? "");
+    } catch (e: any) {
+      setGuestProfile(null);
+      setGuestProfileError(e?.message ?? "Failed to load guest profile");
+    } finally {
+      setGuestProfileLoading(false);
+    }
+  }
+
+  async function saveGuestProfileAdmin() {
+    if (!guestProfilePhone.trim()) return;
+    setGuestProfileSaving(true);
+    setGuestProfileSaved(false);
+    setGuestProfileError(null);
+    try {
+      const res = await api("/api/admin/guest-profile", {
+        method: "PUT",
+        body: JSON.stringify({
+          phone: guestProfilePhone.trim(),
+          name: guestProfileName,
+          preferences: guestProfilePreferences,
+          allergens: guestProfileAllergens,
+        }),
+      });
+      const profile = await res.json();
+      setGuestProfile(profile);
+      setGuestProfileSaved(true);
+    } catch (e: any) {
+      setGuestProfileError(e?.message ?? "Failed to save guest profile");
+    } finally {
+      setGuestProfileSaving(false);
+    }
+  }
+
   async function createInventoryItem() {
     if (!newInventoryNameRu.trim()) return;
     await api("/api/admin/inventory/items", {
@@ -3463,6 +3542,7 @@ export default function AdminPage() {
     if (statsHallPlanId !== "") qs.set("planId", String(statsHallPlanId));
     if (statsWaiterId !== "") qs.set("waiterId", String(statsWaiterId));
     if (statsOrderStatus) qs.set("status", statsOrderStatus);
+    if (statsGuestPhone) qs.set("guestPhone", statsGuestPhone.trim());
     if (statsShiftFrom) qs.set("shiftFrom", statsShiftFrom);
     if (statsShiftTo) qs.set("shiftTo", statsShiftTo);
     const res = await api(`/api/admin/stats/summary?${qs.toString()}`);
@@ -3490,6 +3570,7 @@ export default function AdminPage() {
         if (statsHallId !== "") params.set("hallId", String(statsHallId));
         if (statsHallPlanId !== "") params.set("planId", String(statsHallPlanId));
         if (statsOrderStatus) params.set("status", statsOrderStatus);
+        if (statsGuestPhone) params.set("guestPhone", statsGuestPhone.trim());
         if (statsShiftFrom) params.set("shiftFrom", statsShiftFrom);
         if (statsShiftTo) params.set("shiftTo", statsShiftTo);
       }
@@ -3555,6 +3636,7 @@ export default function AdminPage() {
     if (statsHallPlanId !== "") qs.set("planId", String(statsHallPlanId));
     if (statsWaiterId !== "") qs.set("waiterId", String(statsWaiterId));
     if (statsOrderStatus) qs.set("status", statsOrderStatus);
+    if (statsGuestPhone) qs.set("guestPhone", statsGuestPhone.trim());
     if (statsShiftFrom) qs.set("shiftFrom", statsShiftFrom);
     if (statsShiftTo) qs.set("shiftTo", statsShiftTo);
     const res = await api(`/api/admin/stats/daily.csv?${qs.toString()}`);
@@ -4414,6 +4496,57 @@ export default function AdminPage() {
       </section>
       )}
 
+      {showLoyalty && (
+      <section id="guest-profile-section" style={{ marginTop: 24 }}>
+        <h2>{t(lang, "guestProfileTitle")}</h2>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <label>{t(lang, "guestProfilePhone")}</label>
+          <input value={guestProfilePhone} onChange={(e) => setGuestProfilePhone(e.target.value)} placeholder="+373..." />
+          <button onClick={loadGuestProfileAdmin} disabled={guestProfileLoading}>
+            {guestProfileLoading ? t(lang, "loading") : t(lang, "guestProfileLoad")}
+          </button>
+        </div>
+        {guestProfile && (
+          <div style={{ marginTop: 12, border: "1px solid #eee", borderRadius: 10, padding: 12 }}>
+            <div style={{ display: "grid", gap: 8 }}>
+              <label>{t(lang, "guestProfileName")} <input value={guestProfileName} onChange={(e) => setGuestProfileName(e.target.value)} /></label>
+              <label>{t(lang, "guestProfilePreferences")} <textarea rows={3} value={guestProfilePreferences} onChange={(e) => setGuestProfilePreferences(e.target.value)} /></label>
+              <label>{t(lang, "guestProfileAllergens")} <textarea rows={3} value={guestProfileAllergens} onChange={(e) => setGuestProfileAllergens(e.target.value)} /></label>
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <button onClick={saveGuestProfileAdmin} disabled={guestProfileSaving}>
+                {guestProfileSaving ? t(lang, "saving") : t(lang, "guestProfileSave")}
+              </button>
+              {guestProfileSaved && <span style={{ color: "#059669", fontSize: 12 }}>{t(lang, "guestProfileSaved")}</span>}
+              {guestProfileError && <span style={{ color: "#b11e46", fontSize: 12 }}>{guestProfileError}</span>}
+            </div>
+            <div style={{ marginTop: 10, fontSize: 12, color: "#666", display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <span>{t(lang, "guestProfileVisits")}: {guestProfile.visitsCount}</span>
+              <span>{t(lang, "guestProfileFirstVisit")}: {guestProfile.firstVisitAt ?? "—"}</span>
+              <span>{t(lang, "guestProfileLastVisit")}: {guestProfile.lastVisitAt ?? "—"}</span>
+            </div>
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>{t(lang, "guestProfileHistory")}</div>
+              {guestProfile.visits.length === 0 ? (
+                <div style={{ fontSize: 12, color: "#666" }}>{t(lang, "guestProfileHistoryEmpty")}</div>
+              ) : (
+                <div style={{ display: "grid", gap: 6 }}>
+                  {guestProfile.visits.map((v) => (
+                    <div key={v.orderId} style={{ fontSize: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                      <span>#{v.orderId}</span>
+                      <span>{t(lang, "status")}: {v.status}</span>
+                      <span>{t(lang, "table")}: {v.tableNumber}</span>
+                      <span>{v.createdAt}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </section>
+      )}
+
       {showPayments && (
       {showReports && (
       <section style={{ marginTop: 24 }}>
@@ -4947,6 +5080,10 @@ export default function AdminPage() {
                 <option key={s} value={s}>{s}</option>
               ))}
             </select>
+          </label>
+          <label>
+            {t(lang, "guestPhone")}
+            <input value={statsGuestPhone} onChange={(e) => setStatsGuestPhone(e.target.value)} placeholder="+373..." />
           </label>
           <label>{t(lang, "shiftFrom")} <input type="date" value={statsShiftFrom} onChange={(e) => setStatsShiftFrom(e.target.value)} /></label>
           <label>{t(lang, "shiftTo")} <input type="date" value={statsShiftTo} onChange={(e) => setStatsShiftTo(e.target.value)} /></label>

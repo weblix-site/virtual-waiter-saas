@@ -67,6 +67,7 @@ import md.virtualwaiter.security.TotpService;
 import md.virtualwaiter.service.StatsService;
 import md.virtualwaiter.service.AuditService;
 import md.virtualwaiter.service.LoyaltyService;
+import md.virtualwaiter.service.GuestProfileService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -159,6 +160,7 @@ public class AdminController {
   private final MenuItemIngredientRepo ingredientRepo;
   private final CurrencyRepo currencyRepo;
   private final LoyaltyService loyaltyService;
+  private final GuestProfileService guestProfileService;
   private final int maxPhotoUrlLength;
   private final int maxPhotoUrlsCount;
   private final Set<String> allowedPhotoExts;
@@ -204,6 +206,7 @@ public class AdminController {
     MenuItemIngredientRepo ingredientRepo,
     CurrencyRepo currencyRepo,
     LoyaltyService loyaltyService,
+    GuestProfileService guestProfileService,
     @Value("${app.media.maxPhotoUrlLength:512}") int maxPhotoUrlLength,
     @Value("${app.media.maxPhotoUrlsCount:6}") int maxPhotoUrlsCount,
     @Value("${app.media.allowedPhotoExts:jpg,jpeg,png,webp,gif}") String allowedPhotoExts,
@@ -248,6 +251,7 @@ public class AdminController {
     this.ingredientRepo = ingredientRepo;
     this.currencyRepo = currencyRepo;
     this.loyaltyService = loyaltyService;
+    this.guestProfileService = guestProfileService;
     this.maxPhotoUrlLength = maxPhotoUrlLength;
     this.maxPhotoUrlsCount = maxPhotoUrlsCount;
     this.allowedPhotoExts = parseExts(allowedPhotoExts);
@@ -2212,6 +2216,124 @@ public class AdminController {
     return new LoyaltyProfileResponse(p.phone(), p.pointsBalance(), p.favorites(), p.offers());
   }
 
+  // --- Guest profile (phone-based) ---
+  public record GuestVisitDto(
+    long orderId,
+    String status,
+    String createdAt,
+    int tableNumber,
+    long branchId
+  ) {}
+
+  public record GuestProfileAdminResponse(
+    String phone,
+    String name,
+    String preferences,
+    String allergens,
+    int visitsCount,
+    String firstVisitAt,
+    String lastVisitAt,
+    List<GuestVisitDto> visits
+  ) {}
+
+  public record UpdateGuestProfileRequest(
+    @NotBlank String phone,
+    String name,
+    String preferences,
+    String allergens
+  ) {}
+
+  @GetMapping("/guest-profile")
+  public GuestProfileAdminResponse getGuestProfile(
+    @RequestParam("phone") String phone,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.LOYALTY_MANAGE);
+    long bid = resolveBranchId(u, branchId);
+    String p = phone == null ? "" : phone.trim();
+    if (p.isBlank()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "phone required");
+    GuestProfileService.Profile gp = guestProfileService.getByPhone(p);
+
+    List<GuestSession> sessions = guestSessionRepo.findTop200ByVerifiedPhoneOrderByIdDesc(p);
+    List<Long> sessionIds = sessions.stream().map(s -> s.id).toList();
+    List<Order> orders = sessionIds.isEmpty() ? List.of() : orderRepo.findTop200ByGuestSessionIdInOrderByCreatedAtDesc(sessionIds);
+    List<Long> tableIds = orders.stream().map(o -> o.tableId).distinct().toList();
+    Map<Long, CafeTable> tables = tableIds.isEmpty()
+      ? Map.of()
+      : tableRepo.findByIdIn(tableIds).stream().collect(Collectors.toMap(t -> t.id, t -> t));
+
+    List<GuestVisitDto> visits = new ArrayList<>();
+    for (Order o : orders) {
+      CafeTable t = tables.get(o.tableId);
+      if (t == null || t.branchId == null || t.branchId != bid) continue;
+      visits.add(new GuestVisitDto(
+        o.id,
+        o.status,
+        o.createdAt == null ? null : o.createdAt.toString(),
+        t.number,
+        t.branchId
+      ));
+    }
+
+    return new GuestProfileAdminResponse(
+      gp.phoneE164(),
+      gp.name(),
+      gp.preferences(),
+      gp.allergens(),
+      gp.visitsCount(),
+      gp.firstVisitAt() == null ? null : gp.firstVisitAt().toString(),
+      gp.lastVisitAt() == null ? null : gp.lastVisitAt().toString(),
+      visits
+    );
+  }
+
+  @PutMapping("/guest-profile")
+  public GuestProfileAdminResponse updateGuestProfile(
+    @Valid @RequestBody UpdateGuestProfileRequest req,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.LOYALTY_MANAGE);
+    long bid = resolveBranchId(u, branchId);
+    String p = req.phone.trim();
+    GuestProfileService.Profile gp = guestProfileService.updateProfile(p, req.name, req.preferences, req.allergens);
+
+    List<GuestSession> sessions = guestSessionRepo.findTop200ByVerifiedPhoneOrderByIdDesc(p);
+    List<Long> sessionIds = sessions.stream().map(s -> s.id).toList();
+    List<Order> orders = sessionIds.isEmpty() ? List.of() : orderRepo.findTop200ByGuestSessionIdInOrderByCreatedAtDesc(sessionIds);
+    List<Long> tableIds = orders.stream().map(o -> o.tableId).distinct().toList();
+    Map<Long, CafeTable> tables = tableIds.isEmpty()
+      ? Map.of()
+      : tableRepo.findByIdIn(tableIds).stream().collect(Collectors.toMap(t -> t.id, t -> t));
+
+    List<GuestVisitDto> visits = new ArrayList<>();
+    for (Order o : orders) {
+      CafeTable t = tables.get(o.tableId);
+      if (t == null || t.branchId == null || t.branchId != bid) continue;
+      visits.add(new GuestVisitDto(
+        o.id,
+        o.status,
+        o.createdAt == null ? null : o.createdAt.toString(),
+        t.number,
+        t.branchId
+      ));
+    }
+
+    return new GuestProfileAdminResponse(
+      gp.phoneE164(),
+      gp.name(),
+      gp.preferences(),
+      gp.allergens(),
+      gp.visitsCount(),
+      gp.firstVisitAt() == null ? null : gp.firstVisitAt().toString(),
+      gp.lastVisitAt() == null ? null : gp.lastVisitAt().toString(),
+      visits
+    );
+  }
+
   @GetMapping("/loyalty/offers")
   public List<OfferDto> listLoyaltyOffers(
     @RequestParam("phone") String phone,
@@ -4153,6 +4275,7 @@ public class AdminController {
     @RequestParam(value = "hallId", required = false) Long hallId,
     @RequestParam(value = "planId", required = false) Long planId,
     @RequestParam(value = "waiterId", required = false) Long waiterId,
+    @RequestParam(value = "guestPhone", required = false) String guestPhone,
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
@@ -4178,7 +4301,7 @@ public class AdminController {
     }
     Instant fromTs = parseInstantOrDate(from, true);
     Instant toTs = parseInstantOrDate(to, false);
-    List<StatsService.DailyRow> rows = statsService.dailyForBranchFiltered(bid, fromTs, toTs, tableId, waiterId, hallId);
+    List<StatsService.DailyRow> rows = statsService.dailyForBranchFiltered(bid, fromTs, toTs, tableId, waiterId, hallId, null, null, null, guestPhone);
     StringBuilder sb = new StringBuilder();
     sb.append("day,orders,calls,paid_bills,gross_cents,tips_cents\n");
     for (StatsService.DailyRow r : rows) {
@@ -4208,6 +4331,7 @@ public class AdminController {
     @RequestParam(value = "status", required = false) String orderStatus,
     @RequestParam(value = "shiftFrom", required = false) String shiftFrom,
     @RequestParam(value = "shiftTo", required = false) String shiftTo,
+    @RequestParam(value = "guestPhone", required = false) String guestPhone,
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
@@ -4244,7 +4368,8 @@ public class AdminController {
       hallId,
       orderStatus,
       shiftFromTs,
-      shiftToTs
+      shiftToTs,
+      guestPhone
     );
     List<BranchReview> reviews = branchReviewRepo.findByBranchIdOrderByIdDesc(bid);
     reviews = filterBranchReviews(reviews, tableId, hallId, fromTs, toTs);
@@ -4286,6 +4411,7 @@ public class AdminController {
     @RequestParam(value = "status", required = false) String orderStatus,
     @RequestParam(value = "shiftFrom", required = false) String shiftFrom,
     @RequestParam(value = "shiftTo", required = false) String shiftTo,
+    @RequestParam(value = "guestPhone", required = false) String guestPhone,
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
@@ -4322,7 +4448,8 @@ public class AdminController {
       hallId,
       orderStatus,
       shiftFromTs,
-      shiftToTs
+      shiftToTs,
+      guestPhone
     );
     List<StatsDailyRow> out = new ArrayList<>();
     for (StatsService.DailyRow r : rows) {
@@ -4341,6 +4468,7 @@ public class AdminController {
     @RequestParam(value = "status", required = false) String orderStatus,
     @RequestParam(value = "shiftFrom", required = false) String shiftFrom,
     @RequestParam(value = "shiftTo", required = false) String shiftTo,
+    @RequestParam(value = "guestPhone", required = false) String guestPhone,
     Authentication auth
   ) {
     StaffUser u = requireAdmin(auth);
@@ -4365,7 +4493,8 @@ public class AdminController {
       hallId,
       orderStatus,
       shiftFromTs,
-      shiftToTs
+      shiftToTs,
+      guestPhone
     );
     List<WaiterMotivationRow> out = new ArrayList<>();
     for (StatsService.WaiterMotivationRow r : rows) {
@@ -4395,6 +4524,7 @@ public class AdminController {
     @RequestParam(value = "status", required = false) String orderStatus,
     @RequestParam(value = "shiftFrom", required = false) String shiftFrom,
     @RequestParam(value = "shiftTo", required = false) String shiftTo,
+    @RequestParam(value = "guestPhone", required = false) String guestPhone,
     @RequestParam(value = "limit", required = false) Integer limit,
     Authentication auth
   ) {
@@ -4434,6 +4564,7 @@ public class AdminController {
       orderStatus,
       shiftFromTs,
       shiftToTs,
+      guestPhone,
       lim
     );
     List<TopItemRow> out = new ArrayList<>();
@@ -4455,6 +4586,7 @@ public class AdminController {
     @RequestParam(value = "status", required = false) String orderStatus,
     @RequestParam(value = "shiftFrom", required = false) String shiftFrom,
     @RequestParam(value = "shiftTo", required = false) String shiftTo,
+    @RequestParam(value = "guestPhone", required = false) String guestPhone,
     @RequestParam(value = "limit", required = false) Integer limit,
     Authentication auth
   ) {
@@ -4494,6 +4626,7 @@ public class AdminController {
       orderStatus,
       shiftFromTs,
       shiftToTs,
+      guestPhone,
       lim
     );
     List<TopCategoryRow> out = new ArrayList<>();

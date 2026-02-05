@@ -388,7 +388,7 @@ public class StaffController {
     hallId = enforceHallScope(u, hallId);
     Instant fromTs = parseInstantOrDate(from, true);
     Instant toTs = parseInstantOrDate(to, false);
-    List<StatsService.WaiterMotivationRow> rows = statsService.waiterMotivationForBranch(u.branchId, fromTs, toTs, hallId);
+    List<StatsService.WaiterMotivationRow> rows = statsService.waiterMotivationForBranch(u.branchId, fromTs, toTs, hallId, null, null, null, null);
     List<WaiterMotivationRow> out = new ArrayList<>();
     for (StatsService.WaiterMotivationRow r : rows) {
       out.add(new WaiterMotivationRow(

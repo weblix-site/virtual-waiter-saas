@@ -33,7 +33,7 @@ public class StatsService {
   }
 
   public Summary summaryForTenant(long tenantId, Instant from, Instant to) {
-    return summaryForTenantFiltered(tenantId, from, to, null, null, null, null, null);
+    return summaryForTenantFiltered(tenantId, from, to, null, null, null, null, null, null);
   }
 
   public record DailyRow(
@@ -50,7 +50,7 @@ public class StatsService {
   }
 
   public Summary summaryForBranchFiltered(long branchId, Instant from, Instant to, Long tableId, Long waiterId, Long hallId) {
-    return summaryForBranchFiltered(branchId, from, to, tableId, waiterId, hallId, null, null, null);
+    return summaryForBranchFiltered(branchId, from, to, tableId, waiterId, hallId, null, null, null, null);
   }
 
   public Summary summaryForBranchFiltered(
@@ -64,17 +64,33 @@ public class StatsService {
     Instant shiftFrom,
     Instant shiftTo
   ) {
+    return summaryForBranchFiltered(branchId, from, to, tableId, waiterId, hallId, orderStatus, shiftFrom, shiftTo, null);
+  }
+
+  public Summary summaryForBranchFiltered(
+    long branchId,
+    Instant from,
+    Instant to,
+    Long tableId,
+    Long waiterId,
+    Long hallId,
+    String orderStatus,
+    Instant shiftFrom,
+    Instant shiftTo,
+    String guestPhone
+  ) {
     Map<String, Object> params = baseParams(from, to);
     params.put("branchId", branchId);
     params.put("waiterId", waiterId);
     params.put("orderStatus", trimOrNull(orderStatus));
     putShiftParams(params, shiftFrom, shiftTo);
+    putGuestPhone(params, guestPhone);
     String tableFilter = buildTableFilter(params, tableId, hallId);
     return runSummary(tableFilter, params);
   }
 
   public java.util.List<DailyRow> dailyForBranchFiltered(long branchId, Instant from, Instant to, Long tableId, Long waiterId, Long hallId) {
-    return dailyForBranchFiltered(branchId, from, to, tableId, waiterId, hallId, null, null, null);
+    return dailyForBranchFiltered(branchId, from, to, tableId, waiterId, hallId, null, null, null, null);
   }
 
   public java.util.List<DailyRow> dailyForBranchFiltered(
@@ -88,11 +104,27 @@ public class StatsService {
     Instant shiftFrom,
     Instant shiftTo
   ) {
+    return dailyForBranchFiltered(branchId, from, to, tableId, waiterId, hallId, orderStatus, shiftFrom, shiftTo, null);
+  }
+
+  public java.util.List<DailyRow> dailyForBranchFiltered(
+    long branchId,
+    Instant from,
+    Instant to,
+    Long tableId,
+    Long waiterId,
+    Long hallId,
+    String orderStatus,
+    Instant shiftFrom,
+    Instant shiftTo,
+    String guestPhone
+  ) {
     Map<String, Object> params = baseParams(from, to);
     params.put("branchId", branchId);
     params.put("waiterId", waiterId);
     params.put("orderStatus", trimOrNull(orderStatus));
     putShiftParams(params, shiftFrom, shiftTo);
+    putGuestPhone(params, guestPhone);
     String tableFilter = buildTableFilter(params, tableId, hallId);
     return runDaily(tableFilter, params);
   }
@@ -101,7 +133,7 @@ public class StatsService {
   public record TopCategoryRow(long categoryId, String name, long qty, long grossCents) {}
 
   public java.util.List<TopItemRow> topItemsForBranch(long branchId, Instant from, Instant to, Long tableId, Long waiterId, Long hallId, int limit) {
-    return topItemsForBranch(branchId, from, to, tableId, waiterId, hallId, null, null, null, limit);
+    return topItemsForBranch(branchId, from, to, tableId, waiterId, hallId, null, null, null, null, limit);
   }
 
   public java.util.List<TopItemRow> topItemsForBranch(
@@ -114,6 +146,7 @@ public class StatsService {
     String orderStatus,
     Instant shiftFrom,
     Instant shiftTo,
+    String guestPhone,
     int limit
   ) {
     Map<String, Object> params = baseParams(from, to);
@@ -121,6 +154,7 @@ public class StatsService {
     params.put("waiterId", waiterId);
     params.put("orderStatus", trimOrNull(orderStatus));
     putShiftParams(params, shiftFrom, shiftTo);
+    putGuestPhone(params, guestPhone);
     params.put("limit", Math.max(1, Math.min(limit, 200)));
     String tableFilter = buildTableFilter(params, tableId, hallId);
     String sql =
@@ -136,6 +170,7 @@ public class StatsService {
       "JOIN tables t ON t.id = br.table_id\n" +
       "LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id\n" +
       "WHERE " + tableFilter + " AND br.status = 'PAID_CONFIRMED' AND br.confirmed_at BETWEEN :fromTs AND :toTs\n" +
+      "  AND (:guestPhone IS NULL OR o.guest_phone = :guestPhone)\n" +
       "  AND (:waiterId IS NULL OR o.handled_by_staff_id = :waiterId)\n" +
       "  AND (:orderStatus IS NULL OR o.status = :orderStatus)\n" +
       "  AND (:shiftFrom IS NULL OR su.shift_started_at >= :shiftFrom)\n" +
@@ -152,7 +187,7 @@ public class StatsService {
   }
 
   public java.util.List<TopCategoryRow> topCategoriesForBranch(long branchId, Instant from, Instant to, Long tableId, Long waiterId, Long hallId, int limit) {
-    return topCategoriesForBranch(branchId, from, to, tableId, waiterId, hallId, null, null, null, limit);
+    return topCategoriesForBranch(branchId, from, to, tableId, waiterId, hallId, null, null, null, null, limit);
   }
 
   public java.util.List<TopCategoryRow> topCategoriesForBranch(
@@ -165,6 +200,7 @@ public class StatsService {
     String orderStatus,
     Instant shiftFrom,
     Instant shiftTo,
+    String guestPhone,
     int limit
   ) {
     Map<String, Object> params = baseParams(from, to);
@@ -172,6 +208,7 @@ public class StatsService {
     params.put("waiterId", waiterId);
     params.put("orderStatus", trimOrNull(orderStatus));
     putShiftParams(params, shiftFrom, shiftTo);
+    putGuestPhone(params, guestPhone);
     params.put("limit", Math.max(1, Math.min(limit, 200)));
     String tableFilter = buildTableFilter(params, tableId, hallId);
     String sql =
@@ -188,6 +225,7 @@ public class StatsService {
       "LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id\n" +
       "LEFT JOIN menu_categories mc ON mc.id = mi.category_id\n" +
       "WHERE " + tableFilter + " AND br.status = 'PAID_CONFIRMED' AND br.confirmed_at BETWEEN :fromTs AND :toTs\n" +
+      "  AND (:guestPhone IS NULL OR o.guest_phone = :guestPhone)\n" +
       "  AND (:waiterId IS NULL OR o.handled_by_staff_id = :waiterId)\n" +
       "  AND (:orderStatus IS NULL OR o.status = :orderStatus)\n" +
       "  AND (:shiftFrom IS NULL OR su.shift_started_at >= :shiftFrom)\n" +
@@ -222,7 +260,7 @@ public class StatsService {
   ) {}
 
   public java.util.List<WaiterMotivationRow> waiterMotivationForBranch(long branchId, Instant from, Instant to, Long hallId) {
-    return waiterMotivationForBranch(branchId, from, to, hallId, null, null, null);
+    return waiterMotivationForBranch(branchId, from, to, hallId, null, null, null, null);
   }
 
   public java.util.List<WaiterMotivationRow> waiterMotivationForBranch(
@@ -232,13 +270,15 @@ public class StatsService {
     Long hallId,
     String orderStatus,
     Instant shiftFrom,
-    Instant shiftTo
+    Instant shiftTo,
+    String guestPhone
   ) {
     Map<String, Object> params = baseParams(from, to);
     params.put("branchId", branchId);
     params.put("hallId", hallId);
     params.put("orderStatus", trimOrNull(orderStatus));
     putShiftParams(params, shiftFrom, shiftTo);
+    putGuestPhone(params, guestPhone);
     String sql =
       "WITH tips AS (\n" +
       "  SELECT o.handled_by_staff_id AS staff_id, COALESCE(SUM(br.tips_amount_cents),0) AS tips_cents\n" +
@@ -250,6 +290,7 @@ public class StatsService {
       "  JOIN tables t ON t.id = br.table_id\n" +
       "  WHERE br.status = 'PAID_CONFIRMED' AND br.confirmed_at BETWEEN :fromTs AND :toTs\n" +
       "    AND (:hallId IS NULL OR t.hall_id = :hallId)\n" +
+      "    AND (:guestPhone IS NULL OR o.guest_phone = :guestPhone)\n" +
       "    AND (:orderStatus IS NULL OR o.status = :orderStatus)\n" +
       "    AND (:shiftFrom IS NULL OR su.shift_started_at >= :shiftFrom)\n" +
       "    AND (:shiftTo IS NULL OR su.shift_started_at <= :shiftTo)\n" +
@@ -257,12 +298,14 @@ public class StatsService {
       ")\n" +
       "SELECT su.id AS staff_id, su.username AS username,\n" +
       "  COALESCE(COUNT(o.id) FILTER (WHERE (:hallId IS NULL OR t.hall_id = :hallId)\n" +
+      "    AND (:guestPhone IS NULL OR o.guest_phone = :guestPhone)\n" +
       "    AND (:orderStatus IS NULL OR o.status = :orderStatus)\n" +
       "    AND (:shiftFrom IS NULL OR su.shift_started_at >= :shiftFrom)\n" +
       "    AND (:shiftTo IS NULL OR su.shift_started_at <= :shiftTo)),0) AS orders_count,\n" +
       "  COALESCE(tips.tips_cents,0) AS tips_cents,\n" +
       "  AVG(EXTRACT(EPOCH FROM (o.ready_at - o.created_at))/60.0)\n" +
       "    FILTER (WHERE o.ready_at IS NOT NULL AND (:hallId IS NULL OR t.hall_id = :hallId)\n" +
+      "      AND (:guestPhone IS NULL OR o.guest_phone = :guestPhone)\n" +
       "      AND (:orderStatus IS NULL OR o.status = :orderStatus)\n" +
       "      AND (:shiftFrom IS NULL OR su.shift_started_at >= :shiftFrom)\n" +
       "      AND (:shiftTo IS NULL OR su.shift_started_at <= :shiftTo))\n" +
@@ -284,7 +327,7 @@ public class StatsService {
   }
 
   public java.util.List<BranchSummaryRow> summaryByBranchForTenant(long tenantId, Instant from, Instant to) {
-    return summaryByBranchForTenant(tenantId, from, to, null, null, null, null);
+    return summaryByBranchForTenant(tenantId, from, to, null, null, null, null, null);
   }
 
   public java.util.List<BranchSummaryRow> summaryByBranchForTenant(
@@ -294,13 +337,15 @@ public class StatsService {
     Long branchId,
     String orderStatus,
     Instant shiftFrom,
-    Instant shiftTo
+    Instant shiftTo,
+    String guestPhone
   ) {
     Map<String, Object> params = baseParams(from, to);
     params.put("tenantId", tenantId);
     params.put("branchId", branchId);
     params.put("orderStatus", trimOrNull(orderStatus));
     putShiftParams(params, shiftFrom, shiftTo);
+    putGuestPhone(params, guestPhone);
     String sql =
       "SELECT b.id AS branch_id, b.name AS branch_name,\n" +
       "  COALESCE(o.cnt,0) AS orders_count,\n" +
@@ -315,6 +360,7 @@ public class StatsService {
       "  JOIN tables t ON t.id = o.table_id\n" +
       "  LEFT JOIN staff_users su ON su.id = o.handled_by_staff_id\n" +
       "  WHERE o.created_at BETWEEN :fromTs AND :toTs\n" +
+      "    AND (:guestPhone IS NULL OR o.guest_phone = :guestPhone)\n" +
       "    AND (:orderStatus IS NULL OR o.status = :orderStatus)\n" +
       "    AND (:shiftFrom IS NULL OR su.shift_started_at >= :shiftFrom)\n" +
       "    AND (:shiftTo IS NULL OR su.shift_started_at <= :shiftTo)\n" +
@@ -326,6 +372,7 @@ public class StatsService {
       "  JOIN tables t ON t.id = wc.table_id\n" +
       "  LEFT JOIN staff_users su ON su.id = t.assigned_waiter_id\n" +
       "  WHERE wc.created_at BETWEEN :fromTs AND :toTs\n" +
+      "    AND (:guestPhone IS NULL OR 1=0)\n" +
       "    AND (:shiftFrom IS NULL OR su.shift_started_at >= :shiftFrom)\n" +
       "    AND (:shiftTo IS NULL OR su.shift_started_at <= :shiftTo)\n" +
       "  GROUP BY t.branch_id\n" +
@@ -339,6 +386,7 @@ public class StatsService {
       "  JOIN orders o ON o.id = oi.order_id\n" +
       "  LEFT JOIN staff_users su ON su.id = o.handled_by_staff_id\n" +
       "  WHERE br.status = 'PAID_CONFIRMED' AND br.confirmed_at BETWEEN :fromTs AND :toTs\n" +
+      "    AND (:guestPhone IS NULL OR o.guest_phone = :guestPhone)\n" +
       "    AND (:orderStatus IS NULL OR o.status = :orderStatus)\n" +
       "    AND (:shiftFrom IS NULL OR su.shift_started_at >= :shiftFrom)\n" +
       "    AND (:shiftTo IS NULL OR su.shift_started_at <= :shiftTo)\n" +
@@ -370,6 +418,7 @@ public class StatsService {
       "  JOIN tables t ON t.id = o.table_id\n" +
       "  LEFT JOIN staff_users su ON su.id = o.handled_by_staff_id\n" +
       "  WHERE " + tableFilter + " AND o.created_at BETWEEN :fromTs AND :toTs\n" +
+      "    AND (:guestPhone IS NULL OR o.guest_phone = :guestPhone)\n" +
       "    AND (:waiterId IS NULL OR o.handled_by_staff_id = :waiterId)\n" +
       "    AND (:orderStatus IS NULL OR o.status = :orderStatus)\n" +
       "    AND (:shiftFrom IS NULL OR su.shift_started_at >= :shiftFrom)\n" +
@@ -382,6 +431,7 @@ public class StatsService {
       "  JOIN tables t ON t.id = wc.table_id\n" +
       "  LEFT JOIN staff_users su ON su.id = t.assigned_waiter_id\n" +
       "  WHERE " + tableFilter + " AND wc.created_at BETWEEN :fromTs AND :toTs\n" +
+      "    AND (:guestPhone IS NULL OR 1=0)\n" +
       "    AND (:waiterId IS NULL OR t.assigned_waiter_id = :waiterId)\n" +
       "    AND (:shiftFrom IS NULL OR su.shift_started_at >= :shiftFrom)\n" +
       "    AND (:shiftTo IS NULL OR su.shift_started_at <= :shiftTo)\n" +
@@ -400,6 +450,7 @@ public class StatsService {
       "  JOIN orders o ON o.id = oi.order_id\n" +
       "  LEFT JOIN staff_users su ON su.id = o.handled_by_staff_id\n" +
       "  WHERE " + tableFilter + " AND br.status = 'PAID_CONFIRMED' AND br.confirmed_at BETWEEN :fromTs AND :toTs\n" +
+      "    AND (:guestPhone IS NULL OR o.guest_phone = :guestPhone)\n" +
       "    AND (:waiterId IS NULL OR o.handled_by_staff_id = :waiterId)\n" +
       "    AND (:orderStatus IS NULL OR o.status = :orderStatus)\n" +
       "    AND (:shiftFrom IS NULL OR su.shift_started_at >= :shiftFrom)\n" +
@@ -454,6 +505,7 @@ public class StatsService {
         "JOIN tables t ON t.id = o.table_id " +
         "LEFT JOIN staff_users su ON su.id = o.handled_by_staff_id " +
         "WHERE " + tableFilter + " AND o.created_at BETWEEN :fromTs AND :toTs " +
+        "AND (:guestPhone IS NULL OR o.guest_phone = :guestPhone) " +
         "AND (:waiterId IS NULL OR o.handled_by_staff_id = :waiterId) " +
         "AND (:orderStatus IS NULL OR o.status = :orderStatus) " +
         "AND (:shiftFrom IS NULL OR su.shift_started_at >= :shiftFrom) " +
@@ -465,6 +517,7 @@ public class StatsService {
         "JOIN tables t ON t.id = wc.table_id " +
         "LEFT JOIN staff_users su ON su.id = t.assigned_waiter_id " +
         "WHERE " + tableFilter + " AND wc.created_at BETWEEN :fromTs AND :toTs " +
+        "AND (:guestPhone IS NULL OR 1=0) " +
         "AND (:waiterId IS NULL OR t.assigned_waiter_id = :waiterId) " +
         "AND (:shiftFrom IS NULL OR su.shift_started_at >= :shiftFrom) " +
         "AND (:shiftTo IS NULL OR su.shift_started_at <= :shiftTo)",
@@ -478,6 +531,7 @@ public class StatsService {
         "JOIN orders o ON o.id = oi.order_id " +
         "LEFT JOIN staff_users su ON su.id = o.handled_by_staff_id " +
         "WHERE " + tableFilter + " AND br.status = 'PAID_CONFIRMED' AND br.confirmed_at BETWEEN :fromTs AND :toTs " +
+        "AND (:guestPhone IS NULL OR o.guest_phone = :guestPhone) " +
         "AND (:waiterId IS NULL OR o.handled_by_staff_id = :waiterId) " +
         "AND (:orderStatus IS NULL OR o.status = :orderStatus) " +
         "AND (:shiftFrom IS NULL OR su.shift_started_at >= :shiftFrom) " +
@@ -494,6 +548,7 @@ public class StatsService {
         "JOIN orders o ON o.id = oi.order_id " +
         "LEFT JOIN staff_users su ON su.id = o.handled_by_staff_id " +
         "WHERE " + tableFilter + " AND br.status = 'PAID_CONFIRMED' AND br.confirmed_at BETWEEN :fromTs AND :toTs " +
+        "AND (:guestPhone IS NULL OR o.guest_phone = :guestPhone) " +
         "AND (:waiterId IS NULL OR o.handled_by_staff_id = :waiterId) " +
         "AND (:orderStatus IS NULL OR o.status = :orderStatus) " +
         "AND (:shiftFrom IS NULL OR su.shift_started_at >= :shiftFrom) " +
@@ -509,6 +564,7 @@ public class StatsService {
         "JOIN orders o ON o.id = oi.order_id " +
         "LEFT JOIN staff_users su ON su.id = o.handled_by_staff_id " +
         "WHERE " + tableFilter + " AND br.status = 'PAID_CONFIRMED' AND br.confirmed_at BETWEEN :fromTs AND :toTs " +
+        "AND (:guestPhone IS NULL OR o.guest_phone = :guestPhone) " +
         "AND (:waiterId IS NULL OR o.handled_by_staff_id = :waiterId) " +
         "AND (:orderStatus IS NULL OR o.status = :orderStatus) " +
         "AND (:shiftFrom IS NULL OR su.shift_started_at >= :shiftFrom) " +
@@ -520,6 +576,7 @@ public class StatsService {
         "JOIN tables t ON t.id = o.table_id " +
         "LEFT JOIN staff_users su ON su.id = o.handled_by_staff_id " +
         "WHERE " + tableFilter + " AND o.created_at BETWEEN :fromTs AND :toTs " +
+        "AND (:guestPhone IS NULL OR o.guest_phone = :guestPhone) " +
         "AND (:waiterId IS NULL OR o.handled_by_staff_id = :waiterId) " +
         "AND (:orderStatus IS NULL OR o.status = :orderStatus) " +
         "AND (:shiftFrom IS NULL OR su.shift_started_at >= :shiftFrom) " +
@@ -533,6 +590,7 @@ public class StatsService {
         "LEFT JOIN staff_users su ON su.id = o.handled_by_staff_id " +
         "WHERE " + tableFilter + " AND o.created_at BETWEEN :fromTs AND :toTs " +
         "AND o.ready_at IS NOT NULL " +
+        "AND (:guestPhone IS NULL OR o.guest_phone = :guestPhone) " +
         "AND (:waiterId IS NULL OR o.handled_by_staff_id = :waiterId) " +
         "AND (:orderStatus IS NULL OR o.status = :orderStatus) " +
         "AND (:shiftFrom IS NULL OR su.shift_started_at >= :shiftFrom) " +
@@ -575,12 +633,14 @@ public class StatsService {
     Long hallId,
     String orderStatus,
     Instant shiftFrom,
-    Instant shiftTo
+    Instant shiftTo,
+    String guestPhone
   ) {
     Map<String, Object> params = baseParams(from, to);
     params.put("tenantId", tenantId);
     params.put("orderStatus", trimOrNull(orderStatus));
     putShiftParams(params, shiftFrom, shiftTo);
+    putGuestPhone(params, guestPhone);
     String tableFilter = buildTenantTableFilter(params, branchId, hallId);
     return runSummary(tableFilter, params);
   }
@@ -594,12 +654,14 @@ public class StatsService {
     String orderStatus,
     Instant shiftFrom,
     Instant shiftTo,
+    String guestPhone,
     int limit
   ) {
     Map<String, Object> params = baseParams(from, to);
     params.put("tenantId", tenantId);
     params.put("orderStatus", trimOrNull(orderStatus));
     putShiftParams(params, shiftFrom, shiftTo);
+    putGuestPhone(params, guestPhone);
     params.put("limit", Math.max(1, Math.min(limit, 200)));
     String tableFilter = buildTenantTableFilter(params, branchId, hallId);
     String sql =
@@ -615,6 +677,7 @@ public class StatsService {
       "JOIN tables t ON t.id = br.table_id\n" +
       "LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id\n" +
       "WHERE " + tableFilter + " AND br.status = 'PAID_CONFIRMED' AND br.confirmed_at BETWEEN :fromTs AND :toTs\n" +
+      "  AND (:guestPhone IS NULL OR o.guest_phone = :guestPhone)\n" +
       "  AND (:orderStatus IS NULL OR o.status = :orderStatus)\n" +
       "  AND (:shiftFrom IS NULL OR su.shift_started_at >= :shiftFrom)\n" +
       "  AND (:shiftTo IS NULL OR su.shift_started_at <= :shiftTo)\n" +
@@ -637,12 +700,14 @@ public class StatsService {
     Long hallId,
     String orderStatus,
     Instant shiftFrom,
-    Instant shiftTo
+    Instant shiftTo,
+    String guestPhone
   ) {
     Map<String, Object> params = baseParams(from, to);
     params.put("tenantId", tenantId);
     params.put("orderStatus", trimOrNull(orderStatus));
     putShiftParams(params, shiftFrom, shiftTo);
+    putGuestPhone(params, guestPhone);
     String tableFilter = buildTenantTableFilter(params, branchId, hallId);
     String sql =
       "WITH tips AS (\n" +
@@ -654,18 +719,21 @@ public class StatsService {
       "  LEFT JOIN staff_users su ON su.id = o.handled_by_staff_id\n" +
       "  JOIN tables t ON t.id = br.table_id\n" +
       "  WHERE " + tableFilter + " AND br.status = 'PAID_CONFIRMED' AND br.confirmed_at BETWEEN :fromTs AND :toTs\n" +
+      "    AND (:guestPhone IS NULL OR o.guest_phone = :guestPhone)\n" +
       "    AND (:orderStatus IS NULL OR o.status = :orderStatus)\n" +
       "    AND (:shiftFrom IS NULL OR su.shift_started_at >= :shiftFrom)\n" +
       "    AND (:shiftTo IS NULL OR su.shift_started_at <= :shiftTo)\n" +
       "  GROUP BY o.handled_by_staff_id\n" +
       ")\n" +
       "SELECT su.id AS staff_id, su.username AS username,\n" +
-      "  COALESCE(COUNT(o.id) FILTER (WHERE (:orderStatus IS NULL OR o.status = :orderStatus)\n" +
+      "  COALESCE(COUNT(o.id) FILTER (WHERE (:guestPhone IS NULL OR o.guest_phone = :guestPhone)\n" +
+      "    AND (:orderStatus IS NULL OR o.status = :orderStatus)\n" +
       "    AND (:shiftFrom IS NULL OR su.shift_started_at >= :shiftFrom)\n" +
       "    AND (:shiftTo IS NULL OR su.shift_started_at <= :shiftTo)),0) AS orders_count,\n" +
       "  COALESCE(tips.tips_cents,0) AS tips_cents,\n" +
       "  AVG(EXTRACT(EPOCH FROM (o.ready_at - o.created_at))/60.0)\n" +
-      "    FILTER (WHERE o.ready_at IS NOT NULL AND (:orderStatus IS NULL OR o.status = :orderStatus)\n" +
+      "    FILTER (WHERE o.ready_at IS NOT NULL AND (:guestPhone IS NULL OR o.guest_phone = :guestPhone)\n" +
+      "      AND (:orderStatus IS NULL OR o.status = :orderStatus)\n" +
       "      AND (:shiftFrom IS NULL OR su.shift_started_at >= :shiftFrom)\n" +
       "      AND (:shiftTo IS NULL OR su.shift_started_at <= :shiftTo))\n" +
       "    AS avg_sla_minutes\n" +
@@ -696,5 +764,9 @@ public class StatsService {
   private void putShiftParams(Map<String, Object> params, Instant shiftFrom, Instant shiftTo) {
     params.put("shiftFrom", shiftFrom == null ? null : Timestamp.from(shiftFrom));
     params.put("shiftTo", shiftTo == null ? null : Timestamp.from(shiftTo));
+  }
+
+  private void putGuestPhone(Map<String, Object> params, String guestPhone) {
+    params.put("guestPhone", trimOrNull(guestPhone));
   }
 }

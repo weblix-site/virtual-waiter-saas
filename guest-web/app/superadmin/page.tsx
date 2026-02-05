@@ -197,6 +197,7 @@ const dict: Record<string, Record<Lang, string>> = {
   addZone: { ru: "Добавить зону", ro: "Adaugă zonă", en: "Add zone" },
   stats: { ru: "Статистика", ro: "Statistici", en: "Stats" },
   orderStatus: { ru: "Статус заказа", ro: "Status comandă", en: "Order status" },
+  guestPhone: { ru: "Телефон гостя", ro: "Telefon oaspete", en: "Guest phone" },
   shiftFrom: { ru: "Смена с", ro: "Schimb de la", en: "Shift from" },
   shiftTo: { ru: "Смена по", ro: "Schimb până la", en: "Shift to" },
   avgCheck: { ru: "Средний чек", ro: "Bon mediu", en: "Average check" },
@@ -705,6 +706,7 @@ export default function SuperAdminPage() {
   const [statsFrom, setStatsFrom] = useState("");
   const [statsTo, setStatsTo] = useState("");
   const [statsOrderStatus, setStatsOrderStatus] = useState("");
+  const [statsGuestPhone, setStatsGuestPhone] = useState("");
   const [statsShiftFrom, setStatsShiftFrom] = useState("");
   const [statsShiftTo, setStatsShiftTo] = useState("");
   const [stats, setStats] = useState<StatsSummary | null>(null);
@@ -1613,6 +1615,7 @@ export default function SuperAdminPage() {
     if (branchId) qs.set("branchId", String(branchId));
     if (branchId && hallId) qs.set("hallId", String(hallId));
     if (statsOrderStatus) qs.set("status", statsOrderStatus);
+    if (statsGuestPhone) qs.set("guestPhone", statsGuestPhone.trim());
     if (statsShiftFrom) qs.set("shiftFrom", statsShiftFrom);
     if (statsShiftTo) qs.set("shiftTo", statsShiftTo);
     const res = await api(`/api/super/stats/summary?${qs.toString()}`);
@@ -1635,6 +1638,7 @@ export default function SuperAdminPage() {
     if (branchId) qs.set("branchId", String(branchId));
     if (branchId && hallId) qs.set("hallId", String(hallId));
     if (statsOrderStatus) qs.set("status", statsOrderStatus);
+    if (statsGuestPhone) qs.set("guestPhone", statsGuestPhone.trim());
     if (statsShiftFrom) qs.set("shiftFrom", statsShiftFrom);
     if (statsShiftTo) qs.set("shiftTo", statsShiftTo);
     const res = await api(`/api/super/stats/summary.csv?${qs.toString()}`);
@@ -1657,6 +1661,7 @@ export default function SuperAdminPage() {
     if (statsTo) qs.set("to", statsTo);
     if (branchId) qs.set("branchId", String(branchId));
     if (statsOrderStatus) qs.set("status", statsOrderStatus);
+    if (statsGuestPhone) qs.set("guestPhone", statsGuestPhone.trim());
     if (statsShiftFrom) qs.set("shiftFrom", statsShiftFrom);
     if (statsShiftTo) qs.set("shiftTo", statsShiftTo);
     const res = await api(`/api/super/stats/branches.csv?${qs.toString()}`);
@@ -1680,6 +1685,7 @@ export default function SuperAdminPage() {
     if (branchId) qs.set("branchId", String(branchId));
     if (branchId && hallId) qs.set("hallId", String(hallId));
     if (statsOrderStatus) qs.set("status", statsOrderStatus);
+    if (statsGuestPhone) qs.set("guestPhone", statsGuestPhone.trim());
     if (statsShiftFrom) qs.set("shiftFrom", statsShiftFrom);
     if (statsShiftTo) qs.set("shiftTo", statsShiftTo);
     const res = await api(`/api/super/stats/top-items.csv?${qs.toString()}`);
@@ -1703,6 +1709,7 @@ export default function SuperAdminPage() {
     if (branchId) qs.set("branchId", String(branchId));
     if (branchId && hallId) qs.set("hallId", String(hallId));
     if (statsOrderStatus) qs.set("status", statsOrderStatus);
+    if (statsGuestPhone) qs.set("guestPhone", statsGuestPhone.trim());
     if (statsShiftFrom) qs.set("shiftFrom", statsShiftFrom);
     if (statsShiftTo) qs.set("shiftTo", statsShiftTo);
     const res = await api(`/api/super/stats/top-waiters.csv?${qs.toString()}`);
@@ -3570,6 +3577,10 @@ export default function SuperAdminPage() {
                 <option key={s} value={s}>{s}</option>
               ))}
             </select>
+          </label>
+          <label>
+            {t(lang, "guestPhone")}
+            <input value={statsGuestPhone} onChange={(e) => setStatsGuestPhone(e.target.value)} placeholder="+373..." />
           </label>
           <label>{t(lang, "shiftFrom")} <input type="date" value={statsShiftFrom} onChange={(e) => setStatsShiftFrom(e.target.value)} /></label>
           <label>{t(lang, "shiftTo")} <input type="date" value={statsShiftTo} onChange={(e) => setStatsShiftTo(e.target.value)} /></label>

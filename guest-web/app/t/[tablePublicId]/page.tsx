@@ -131,6 +131,16 @@ type LoyaltyProfileResponse = {
   offers: { id: number; title: string; body?: string | null; discountCode?: string | null; startsAt?: string | null; endsAt?: string | null; isActive?: boolean | null }[];
 };
 
+type GuestProfileResponse = {
+  phone: string;
+  name?: string | null;
+  preferences?: string | null;
+  allergens?: string | null;
+  visitsCount: number;
+  firstVisitAt?: string | null;
+  lastVisitAt?: string | null;
+};
+
 type ModOption = { id: number; name: string; priceCents: number };
 type ModGroup = { id: number; name: string; isRequired: boolean; minSelect?: number | null; maxSelect?: number | null; options: ModOption[] };
 type MenuItemModifiersResponse = { menuItemId: number; groups: ModGroup[] };
@@ -219,6 +229,16 @@ export default function TablePage({ params, searchParams }: any) {
   const [branchReviewError, setBranchReviewError] = useState<string | null>(null);
   const [loyaltyProfile, setLoyaltyProfile] = useState<LoyaltyProfileResponse | null>(null);
   const [loyaltyLoading, setLoyaltyLoading] = useState(false);
+  const [guestProfile, setGuestProfile] = useState<GuestProfileResponse | null>(null);
+  const [guestProfileLoading, setGuestProfileLoading] = useState(false);
+  const [guestProfileSaving, setGuestProfileSaving] = useState(false);
+  const [guestProfileSaved, setGuestProfileSaved] = useState(false);
+  const [guestProfileError, setGuestProfileError] = useState<string | null>(null);
+  const [guestVisits, setGuestVisits] = useState<{ orderId: number; status: string; createdAt: string; tableNumber: number; branchId: number }[]>([]);
+  const [guestVisitsLoading, setGuestVisitsLoading] = useState(false);
+  const [guestName, setGuestName] = useState("");
+  const [guestPreferences, setGuestPreferences] = useState("");
+  const [guestAllergens, setGuestAllergens] = useState("");
   const [revealedOffers, setRevealedOffers] = useState<Record<number, boolean>>({});
   const [offersFilter, setOffersFilter] = useState<"ALL" | "ACTIVE" | "EXPIRING">("ALL");
 
@@ -235,6 +255,19 @@ export default function TablePage({ params, searchParams }: any) {
   }, [menu]);
 
   const formatOfferDate = useCallback((iso?: string | null) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleString(lang === "ru" ? "ru-RU" : lang === "ro" ? "ro-RO" : "en-US", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }, [lang]);
+
+  const formatProfileDate = useCallback((iso?: string | null) => {
     if (!iso) return "";
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return "";
@@ -326,10 +359,95 @@ export default function TablePage({ params, searchParams }: any) {
     }
   }, [lang, session, sessionHeaders]);
 
+  const loadGuestProfile = useCallback(async () => {
+    if (!session) return;
+    if (!session.isVerified) {
+      setGuestProfile(null);
+      return;
+    }
+    setGuestProfileLoading(true);
+    setGuestProfileError(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/public/guest/profile?guestSessionId=${session.guestSessionId}`, {
+        headers: { ...sessionHeaders() },
+      });
+      if (!res.ok) throw new Error(await readApiError(res, t(lang, "guestProfileLoadFailed")));
+      const body: GuestProfileResponse = await res.json();
+      setGuestProfile(body);
+      setGuestName(body.name ?? "");
+      setGuestPreferences(body.preferences ?? "");
+      setGuestAllergens(body.allergens ?? "");
+    } catch (e: any) {
+      setGuestProfile(null);
+      setGuestProfileError(e?.message ?? t(lang, "guestProfileLoadFailed"));
+    } finally {
+      setGuestProfileLoading(false);
+    }
+  }, [lang, session, sessionHeaders]);
+
+  const loadGuestVisits = useCallback(async () => {
+    if (!session) return;
+    if (!session.isVerified) {
+      setGuestVisits([]);
+      return;
+    }
+    setGuestVisitsLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/public/guest/visits?guestSessionId=${session.guestSessionId}`, {
+        headers: { ...sessionHeaders() },
+      });
+      if (!res.ok) throw new Error(await readApiError(res, t(lang, "guestVisitsLoadFailed")));
+      const body = await res.json();
+      setGuestVisits(Array.isArray(body) ? body : []);
+    } catch {
+      setGuestVisits([]);
+    } finally {
+      setGuestVisitsLoading(false);
+    }
+  }, [lang, session, sessionHeaders]);
+
+  async function saveGuestProfile() {
+    if (!session) return;
+    if (!session.isVerified) return;
+    setGuestProfileSaving(true);
+    setGuestProfileSaved(false);
+    setGuestProfileError(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/public/guest/profile`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...sessionHeaders() },
+        body: JSON.stringify({
+          guestSessionId: session.guestSessionId,
+          name: guestName,
+          preferences: guestPreferences,
+          allergens: guestAllergens,
+        }),
+      });
+      if (!res.ok) throw new Error(await readApiError(res, t(lang, "guestProfileSaveFailed")));
+      const body: GuestProfileResponse = await res.json();
+      setGuestProfile(body);
+      setGuestProfileSaved(true);
+    } catch (e: any) {
+      setGuestProfileError(e?.message ?? t(lang, "guestProfileSaveFailed"));
+    } finally {
+      setGuestProfileSaving(false);
+    }
+  }
+
   useEffect(() => {
     if (!session) return;
     loadLoyaltyProfile();
   }, [session, loadLoyaltyProfile]);
+
+  useEffect(() => {
+    if (!session) return;
+    loadGuestProfile();
+  }, [session, loadGuestProfile]);
+
+  useEffect(() => {
+    if (!session) return;
+    loadGuestVisits();
+  }, [session, loadGuestVisits]);
 
   useEffect(() => {
     if (!session) return;
@@ -338,6 +456,10 @@ export default function TablePage({ params, searchParams }: any) {
     setOtpRetryCount(0);
     setOtpDeliveryStatus(null);
     setOtpDeliveryError(null);
+    setGuestProfile(null);
+    setGuestProfileError(null);
+    setGuestProfileSaved(false);
+    setGuestVisits([]);
   }, [session?.guestSessionId]);
 
   useEffect(() => {
@@ -768,6 +890,8 @@ export default function TablePage({ params, searchParams }: any) {
       });
       if (!res.ok) throw new Error(await readApiError(res, `${t(lang, "otpVerifyFailed")} (${res.status})`));
       setSession({ ...session, isVerified: true });
+      loadGuestProfile();
+      loadGuestVisits();
       alert(t(lang, "verified"));
     } catch (e: any) {
       alert(e?.message ?? t(lang, "otpVerifyFailed"));
@@ -1383,6 +1507,85 @@ export default function TablePage({ params, searchParams }: any) {
             </div>
           )}
         </div>
+      </section>
+
+      <section style={{ marginTop: 14, border: "1px solid #eee", borderRadius: 12, padding: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <strong>{t(lang, "guestProfileTitle")}</strong>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={loadGuestProfile} disabled={guestProfileLoading} style={{ padding: "6px 10px" }}>
+              {guestProfileLoading ? t(lang, "loading") : t(lang, "billRefresh")}
+            </button>
+            <button onClick={loadGuestVisits} disabled={guestVisitsLoading} style={{ padding: "6px 10px" }}>
+              {guestVisitsLoading ? t(lang, "loading") : t(lang, "guestVisitsRefresh")}
+            </button>
+          </div>
+        </div>
+        {!session?.isVerified ? (
+          <div style={{ marginTop: 8, color: "#666", fontSize: 12 }}>{t(lang, "guestProfileUnavailable")}</div>
+        ) : (
+          <div style={{ marginTop: 8, display: "grid", gap: 10 }}>
+            <div style={{ display: "grid", gap: 8 }}>
+              <label style={{ fontSize: 12 }}>
+                {t(lang, "guestName")}
+                <input
+                  value={guestName}
+                  onChange={(e) => setGuestName(e.target.value)}
+                  style={{ width: "100%", marginTop: 4 }}
+                />
+              </label>
+              <label style={{ fontSize: 12 }}>
+                {t(lang, "guestPreferences")}
+                <textarea
+                  rows={3}
+                  value={guestPreferences}
+                  onChange={(e) => setGuestPreferences(e.target.value)}
+                  style={{ width: "100%", marginTop: 4 }}
+                />
+              </label>
+              <label style={{ fontSize: 12 }}>
+                {t(lang, "guestAllergens")}
+                <textarea
+                  rows={3}
+                  value={guestAllergens}
+                  onChange={(e) => setGuestAllergens(e.target.value)}
+                  style={{ width: "100%", marginTop: 4 }}
+                />
+              </label>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <button onClick={saveGuestProfile} disabled={guestProfileSaving} style={{ padding: "6px 10px" }}>
+                {guestProfileSaving ? t(lang, "saving") : t(lang, "guestProfileSave")}
+              </button>
+              {guestProfileSaved && <span style={{ color: "#059669", fontSize: 12 }}>{t(lang, "guestProfileSaved")}</span>}
+              {guestProfileError && <span style={{ color: "#dc2626", fontSize: 12 }}>{guestProfileError}</span>}
+            </div>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 12, color: "#666" }}>
+              <span>{t(lang, "guestVisits")}: {guestProfile?.visitsCount ?? 0}</span>
+              <span>{t(lang, "guestFirstVisit")}: {formatProfileDate(guestProfile?.firstVisitAt) || "—"}</span>
+              <span>{t(lang, "guestLastVisit")}: {formatProfileDate(guestProfile?.lastVisitAt) || "—"}</span>
+            </div>
+            <div style={{ marginTop: 6 }}>
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>{t(lang, "guestVisitsHistory")}</div>
+              {guestVisitsLoading ? (
+                <div style={{ fontSize: 12, color: "#666" }}>{t(lang, "loading")}</div>
+              ) : guestVisits.length === 0 ? (
+                <div style={{ fontSize: 12, color: "#666" }}>{t(lang, "guestVisitsEmpty")}</div>
+              ) : (
+                <div style={{ display: "grid", gap: 6 }}>
+                  {guestVisits.map((v) => (
+                    <div key={v.orderId} style={{ display: "flex", gap: 10, flexWrap: "wrap", fontSize: 12 }}>
+                      <span>#{v.orderId}</span>
+                      <span>{t(lang, "status")}: {v.status}</span>
+                      <span>{t(lang, "table")}: {v.tableNumber}</span>
+                      <span>{formatProfileDate(v.createdAt)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </section>
 
       <section style={{ marginTop: 14, border: "1px solid #eee", borderRadius: 12, padding: 12 }}>

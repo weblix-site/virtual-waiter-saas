@@ -21,6 +21,9 @@ public class Order {
   @Column(name = "guest_session_id", nullable = false)
   public Long guestSessionId;
 
+  @Column(name = "guest_phone")
+  public String guestPhone;
+
   @Column(name = "handled_by_staff_id")
   public Long handledByStaffId;
 

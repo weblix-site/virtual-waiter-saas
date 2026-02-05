@@ -17,6 +17,7 @@ public interface OrderRepo extends JpaRepository<Order, Long> {
   List<Order> findByGuestSessionIdAndCreatedAtBetweenOrderByCreatedAtDesc(Long guestSessionId, Instant from, Instant to);
   List<Order> findByTableIdOrderByCreatedAtDesc(Long tableId);
   List<Order> findByGuestSessionIdOrderByCreatedAtDesc(Long guestSessionId);
+  List<Order> findTop200ByGuestSessionIdInOrderByCreatedAtDesc(List<Long> guestSessionIds);
   List<Order> findByIdIn(List<Long> ids);
   List<Order> findByStatusInAndCreatedAtAfter(List<String> statuses, Instant createdAt);
 }

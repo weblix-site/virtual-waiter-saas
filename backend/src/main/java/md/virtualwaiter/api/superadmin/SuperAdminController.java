@@ -961,6 +961,7 @@ public class SuperAdminController {
     @RequestParam(value = "status", required = false) String orderStatus,
     @RequestParam(value = "shiftFrom", required = false) String shiftFrom,
     @RequestParam(value = "shiftTo", required = false) String shiftTo,
+    @RequestParam(value = "guestPhone", required = false) String guestPhone,
     Authentication auth
   ) {
     requireSuper(auth);
@@ -976,7 +977,8 @@ public class SuperAdminController {
       hallId,
       orderStatus,
       shiftFromTs,
-      shiftToTs
+      shiftToTs,
+      guestPhone
     );
     BranchReviewAgg reviewsAgg = branchReviewAggForTenant(tenantId, fromTs, toTs, branchId);
     long avgCheckCents = s.paidBillsCount() == 0 ? 0L : (s.grossCents() / s.paidBillsCount());
@@ -1025,6 +1027,7 @@ public class SuperAdminController {
     @RequestParam(value = "status", required = false) String orderStatus,
     @RequestParam(value = "shiftFrom", required = false) String shiftFrom,
     @RequestParam(value = "shiftTo", required = false) String shiftTo,
+    @RequestParam(value = "guestPhone", required = false) String guestPhone,
     Authentication auth
   ) {
     requireSuper(auth);
@@ -1039,7 +1042,8 @@ public class SuperAdminController {
       branchId,
       orderStatus,
       shiftFromTs,
-      shiftToTs
+      shiftToTs,
+      guestPhone
     );
     List<Long> branchIds = rows.stream().map(StatsService.BranchSummaryRow::branchId).toList();
     Map<Long, Branch> branchMap = branchRepo.findAllById(branchIds).stream()
@@ -1081,6 +1085,7 @@ public class SuperAdminController {
     @RequestParam(value = "status", required = false) String orderStatus,
     @RequestParam(value = "shiftFrom", required = false) String shiftFrom,
     @RequestParam(value = "shiftTo", required = false) String shiftTo,
+    @RequestParam(value = "guestPhone", required = false) String guestPhone,
     @RequestParam(value = "limit", required = false) Integer limit,
     Authentication auth
   ) {
@@ -1099,6 +1104,7 @@ public class SuperAdminController {
       orderStatus,
       shiftFromTs,
       shiftToTs,
+      guestPhone,
       lim
     );
     List<TopItemRow> out = new ArrayList<>();
@@ -1118,6 +1124,7 @@ public class SuperAdminController {
     @RequestParam(value = "status", required = false) String orderStatus,
     @RequestParam(value = "shiftFrom", required = false) String shiftFrom,
     @RequestParam(value = "shiftTo", required = false) String shiftTo,
+    @RequestParam(value = "guestPhone", required = false) String guestPhone,
     @RequestParam(value = "limit", required = false) Integer limit,
     Authentication auth
   ) {
@@ -1136,6 +1143,7 @@ public class SuperAdminController {
       orderStatus,
       shiftFromTs,
       shiftToTs,
+      guestPhone,
       lim
     );
     StringBuilder sb = new StringBuilder();
@@ -1163,6 +1171,7 @@ public class SuperAdminController {
     @RequestParam(value = "status", required = false) String orderStatus,
     @RequestParam(value = "shiftFrom", required = false) String shiftFrom,
     @RequestParam(value = "shiftTo", required = false) String shiftTo,
+    @RequestParam(value = "guestPhone", required = false) String guestPhone,
     Authentication auth
   ) {
     requireSuper(auth);
@@ -1178,7 +1187,8 @@ public class SuperAdminController {
       hallId,
       orderStatus,
       shiftFromTs,
-      shiftToTs
+      shiftToTs,
+      guestPhone
     );
     List<WaiterMotivationRow> out = new ArrayList<>();
     for (StatsService.WaiterMotivationRow r : rows) {
@@ -1203,6 +1213,7 @@ public class SuperAdminController {
     @RequestParam(value = "status", required = false) String orderStatus,
     @RequestParam(value = "shiftFrom", required = false) String shiftFrom,
     @RequestParam(value = "shiftTo", required = false) String shiftTo,
+    @RequestParam(value = "guestPhone", required = false) String guestPhone,
     Authentication auth
   ) {
     requireSuper(auth);
@@ -1218,7 +1229,8 @@ public class SuperAdminController {
       hallId,
       orderStatus,
       shiftFromTs,
-      shiftToTs
+      shiftToTs,
+      guestPhone
     );
     StringBuilder sb = new StringBuilder();
     sb.append("staff_user_id,username,orders_count,tips_cents,avg_sla_minutes\n");
@@ -1246,6 +1258,7 @@ public class SuperAdminController {
     @RequestParam(value = "status", required = false) String orderStatus,
     @RequestParam(value = "shiftFrom", required = false) String shiftFrom,
     @RequestParam(value = "shiftTo", required = false) String shiftTo,
+    @RequestParam(value = "guestPhone", required = false) String guestPhone,
     Authentication auth
   ) {
     requireSuper(auth);
@@ -1261,7 +1274,8 @@ public class SuperAdminController {
       hallId,
       orderStatus,
       shiftFromTs,
-      shiftToTs
+      shiftToTs,
+      guestPhone
     );
     BranchReviewAgg reviewsAgg = branchReviewAggForTenant(tenantId, fromTs, toTs, branchId);
     long avgCheckCents = s.paidBillsCount() == 0 ? 0L : (s.grossCents() / s.paidBillsCount());
@@ -1295,6 +1309,7 @@ public class SuperAdminController {
     @RequestParam(value = "status", required = false) String orderStatus,
     @RequestParam(value = "shiftFrom", required = false) String shiftFrom,
     @RequestParam(value = "shiftTo", required = false) String shiftTo,
+    @RequestParam(value = "guestPhone", required = false) String guestPhone,
     Authentication auth
   ) {
     requireSuper(auth);
@@ -1309,7 +1324,8 @@ public class SuperAdminController {
       branchId,
       orderStatus,
       shiftFromTs,
-      shiftToTs
+      shiftToTs,
+      guestPhone
     );
     List<Long> branchIds = rows.stream().map(StatsService.BranchSummaryRow::branchId).toList();
     Map<Long, Branch> branchMap = branchRepo.findAllById(branchIds).stream()
