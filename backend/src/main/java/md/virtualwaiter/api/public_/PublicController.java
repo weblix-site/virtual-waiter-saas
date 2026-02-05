@@ -46,7 +46,10 @@ import md.virtualwaiter.repo.StaffReviewRepo;
 import md.virtualwaiter.repo.PaymentIntentRepo;
 import md.virtualwaiter.repo.PaymentTransactionRepo;
 import md.virtualwaiter.otp.OtpService;
+import md.virtualwaiter.service.AuditService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import md.virtualwaiter.service.BranchSettingsService;
+import md.virtualwaiter.service.GuestConsentService;
 import md.virtualwaiter.service.GuestProfileService;
 import md.virtualwaiter.service.PartyService;
 import md.virtualwaiter.service.NotificationEventService;
@@ -123,6 +126,9 @@ public class PublicController {
   private final InventoryService inventoryService;
   private final LoyaltyService loyaltyService;
   private final GuestProfileService guestProfileService;
+  private final GuestConsentService guestConsentService;
+  private final AuditService auditService;
+  private static final ObjectMapper MAPPER = new ObjectMapper();
   private final int otpLimitMax;
   private final int otpLimitWindowSeconds;
   private final int otpVerifyLimitMax;
@@ -174,6 +180,8 @@ public class PublicController {
     InventoryService inventoryService,
     LoyaltyService loyaltyService,
     GuestProfileService guestProfileService,
+    GuestConsentService guestConsentService,
+    AuditService auditService,
     BillProperties billProperties,
     @Value("${app.rateLimit.otp.maxRequests:5}") int otpLimitMax,
     @Value("${app.rateLimit.otp.windowSeconds:300}") int otpLimitWindowSeconds,
@@ -224,6 +232,8 @@ public class PublicController {
     this.inventoryService = inventoryService;
     this.loyaltyService = loyaltyService;
     this.guestProfileService = guestProfileService;
+    this.guestConsentService = guestConsentService;
+    this.auditService = auditService;
     this.otpLimitMax = otpLimitMax;
     this.otpLimitWindowSeconds = otpLimitWindowSeconds;
     this.otpVerifyLimitMax = otpVerifyLimitMax;
@@ -1033,13 +1043,52 @@ public class PublicController {
     requireSessionSecret(s, httpReq);
     String clientIp = getClientIp(httpReq);
     if (!rateLimitService.allow("otp:" + clientIp, otpLimitMax, otpLimitWindowSeconds)) {
+      auditService.log(null, "OTP_SEND_BLOCKED", "GuestSession", s.id, otpAuditDetails(
+        req.phoneE164,
+        req.channel,
+        clientIp,
+        getUserAgent(httpReq),
+        "RATE_LIMIT",
+        null,
+        null
+      ));
       throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Too many OTP requests from IP");
     }
-    var r = otpService.sendOtp(req.guestSessionId, req.phoneE164, normalizeLocale(req.locale), req.channel);
-    return new SendOtpResponse(r.challengeId(), r.ttlSeconds(), r.devCode(), r.deliveryStatus(), r.deliveryError());
+    try {
+      var r = otpService.sendOtp(req.guestSessionId, req.phoneE164, normalizeLocale(req.locale), req.channel);
+      auditService.log(null, "OTP_SEND", "GuestSession", s.id, otpAuditDetails(
+        req.phoneE164,
+        req.channel,
+        clientIp,
+        getUserAgent(httpReq),
+        r.deliveryStatus(),
+        r.deliveryError(),
+        r.challengeId()
+      ));
+      return new SendOtpResponse(r.challengeId(), r.ttlSeconds(), r.devCode(), r.deliveryStatus(), r.deliveryError());
+    } catch (ResponseStatusException e) {
+      auditService.log(null, "OTP_SEND_FAILED", "GuestSession", s.id, otpAuditDetails(
+        req.phoneE164,
+        req.channel,
+        clientIp,
+        getUserAgent(httpReq),
+        e.getStatusCode().toString(),
+        e.getReason(),
+        null
+      ));
+      throw e;
+    }
   }
 
-  public record VerifyOtpRequest(@NotNull Long guestSessionId, @NotNull Long challengeId, @NotBlank String code) {}
+  public record VerifyOtpRequest(
+    @NotNull Long guestSessionId,
+    @NotNull Long challengeId,
+    @NotBlank String code,
+    Boolean privacyAccepted,
+    Boolean marketingAccepted,
+    String privacyVersion,
+    String marketingVersion
+  ) {}
   public record VerifyOtpResponse(boolean verified) {}
 
   @PostMapping("/otp/verify")
@@ -1047,12 +1096,91 @@ public class PublicController {
     GuestSession s = sessionRepo.findById(req.guestSessionId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
     requireSessionSecret(s, httpReq);
+    if (req.privacyAccepted == null || !req.privacyAccepted) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Privacy consent required");
+    }
     String clientIp = getClientIp(httpReq);
     if (!rateLimitService.allow("otpVerify:" + clientIp, otpVerifyLimitMax, otpVerifyLimitWindowSeconds)) {
+      auditService.log(null, "OTP_VERIFY_BLOCKED", "GuestSession", s.id, otpVerifyAuditDetails(
+        req.challengeId,
+        clientIp,
+        getUserAgent(httpReq),
+        "RATE_LIMIT",
+        null
+      ));
       throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Too many OTP verify attempts from IP");
     }
-    otpService.verifyOtp(req.guestSessionId, req.challengeId, req.code);
+    try {
+      otpService.verifyOtp(req.guestSessionId, req.challengeId, req.code);
+      auditService.log(null, "OTP_VERIFY", "GuestSession", s.id, otpVerifyAuditDetails(
+        req.challengeId,
+        clientIp,
+        getUserAgent(httpReq),
+        "OK",
+        null
+      ));
+    } catch (ResponseStatusException e) {
+      auditService.log(null, "OTP_VERIFY_FAILED", "GuestSession", s.id, otpVerifyAuditDetails(
+        req.challengeId,
+        clientIp,
+        getUserAgent(httpReq),
+        e.getStatusCode().toString(),
+        e.getReason()
+      ));
+      throw e;
+    }
+    GuestSession verified = sessionRepo.findById(req.guestSessionId).orElse(null);
+    if (verified != null && verified.verifiedPhone != null) {
+      guestConsentService.logConsents(
+        verified.id,
+        verified.verifiedPhone,
+        true,
+        req.privacyVersion,
+        req.marketingAccepted != null && req.marketingAccepted,
+        req.marketingVersion,
+        clientIp,
+        getUserAgent(httpReq)
+      );
+    }
     return new VerifyOtpResponse(true);
+  }
+
+  private String otpAuditDetails(String phoneE164, String channel, String ip, String ua, String status, String error, Long challengeId) {
+    Map<String, Object> payload = new HashMap<>();
+    payload.put("phone", maskPhone(phoneE164));
+    payload.put("channel", channel);
+    payload.put("ip", ip);
+    payload.put("ua", ua);
+    payload.put("status", status);
+    payload.put("error", error);
+    payload.put("challengeId", challengeId);
+    return toJson(payload);
+  }
+
+  private String otpVerifyAuditDetails(Long challengeId, String ip, String ua, String status, String error) {
+    Map<String, Object> payload = new HashMap<>();
+    payload.put("challengeId", challengeId);
+    payload.put("ip", ip);
+    payload.put("ua", ua);
+    payload.put("status", status);
+    payload.put("error", error);
+    payload.put("codeProvided", true);
+    return toJson(payload);
+  }
+
+  private static String maskPhone(String phone) {
+    if (phone == null) return null;
+    String p = phone.trim();
+    if (p.length() <= 4) return "****";
+    return "***" + p.substring(p.length() - 4);
+  }
+
+  private static String toJson(Map<String, Object> payload) {
+    try {
+      return MAPPER.writeValueAsString(payload);
+    } catch (Exception e) {
+      return null;
+    }
   }
 
 
@@ -2130,6 +2258,19 @@ public class PublicController {
     long branchId
   ) {}
 
+  public record GuestLastOrderItem(
+    long menuItemId,
+    String name,
+    int qty
+  ) {}
+
+  public record GuestLastOrder(
+    long orderId,
+    String status,
+    String createdAt,
+    List<GuestLastOrderItem> items
+  ) {}
+
   @GetMapping("/guest/profile")
   public GuestProfileResponse getGuestProfile(
     @RequestParam("guestSessionId") long guestSessionId,
@@ -2209,6 +2350,49 @@ public class PublicController {
         o.createdAt == null ? null : o.createdAt.toString(),
         t == null ? 0 : t.number,
         t == null ? 0 : t.branchId
+      ));
+    }
+    return out;
+  }
+
+  @GetMapping("/guest/last-orders")
+  public List<GuestLastOrder> getGuestLastOrdersByPhone(
+    @RequestParam("guestSessionId") long guestSessionId,
+    @RequestParam(value = "limit", required = false) Integer limit,
+    jakarta.servlet.http.HttpServletRequest httpReq
+  ) {
+    GuestSession s = sessionRepo.findById(guestSessionId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
+    requireSessionSecret(s, httpReq);
+    if (!s.isVerified || s.verifiedPhone == null || s.verifiedPhone.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Phone not verified");
+    }
+    int lim = limit == null ? 5 : Math.max(1, Math.min(limit, 20));
+    List<GuestSession> sessions = guestSessionRepo.findTop200ByVerifiedPhoneOrderByIdDesc(s.verifiedPhone);
+    if (sessions.isEmpty()) return List.of();
+    List<Long> sessionIds = sessions.stream().map(gs -> gs.id).toList();
+    List<Order> orders = orderRepo.findTop200ByGuestSessionIdInOrderByCreatedAtDesc(sessionIds);
+    if (orders.isEmpty()) return List.of();
+    List<Order> limited = orders.size() <= lim ? orders : orders.subList(0, lim);
+    List<Long> orderIds = limited.stream().map(o -> o.id).toList();
+    List<OrderItem> items = orderItemRepo.findByOrderIdIn(orderIds);
+    Map<Long, List<OrderItem>> itemsByOrder = items.stream().collect(Collectors.groupingBy(oi -> oi.orderId));
+    List<GuestLastOrder> out = new ArrayList<>();
+    for (Order o : limited) {
+      List<OrderItem> oi = itemsByOrder.getOrDefault(o.id, List.of());
+      List<GuestLastOrderItem> its = new ArrayList<>();
+      for (OrderItem it : oi) {
+        its.add(new GuestLastOrderItem(
+          it.menuItemId,
+          it.nameSnapshot,
+          it.qty
+        ));
+      }
+      out.add(new GuestLastOrder(
+        o.id,
+        o.status,
+        o.createdAt == null ? null : o.createdAt.toString(),
+        its
       ));
     }
     return out;

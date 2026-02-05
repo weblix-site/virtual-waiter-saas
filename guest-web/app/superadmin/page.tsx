@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
+import GuestConsentLogs from "../components/GuestConsentLogs";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8080";
 
@@ -46,6 +47,7 @@ const dict: Record<string, Record<Lang, string>> = {
   permPaymentsManage: { ru: "Оплаты", ro: "Plăți", en: "Payments manage" },
   permInventoryManage: { ru: "Склад", ro: "Inventar", en: "Inventory manage" },
   permLoyaltyManage: { ru: "Лояльность", ro: "Loialitate", en: "Loyalty manage" },
+  permGuestFlagsManage: { ru: "Флаги гостей", ro: "Flaguri oaspeți", en: "Guest flags manage" },
   permMediaManage: { ru: "Медиа", ro: "Media", en: "Media manage" },
   permHallPlanManage: { ru: "Планы зала", ro: "Plan sală", en: "Hall plan manage" },
   deviceSessions: { ru: "Сессии устройств", ro: "Sesiuni dispozitive", en: "Device sessions" },
@@ -198,6 +200,26 @@ const dict: Record<string, Record<Lang, string>> = {
   stats: { ru: "Статистика", ro: "Statistici", en: "Stats" },
   orderStatus: { ru: "Статус заказа", ro: "Status comandă", en: "Order status" },
   guestPhone: { ru: "Телефон гостя", ro: "Telefon oaspete", en: "Guest phone" },
+  guestConsentTitle: { ru: "Согласия гостя", ro: "Consimțăminte oaspete", en: "Guest consents" },
+  guestConsentEmpty: { ru: "Логов согласий нет", ro: "Nu există loguri", en: "No consent logs" },
+  guestConsentType: { ru: "Тип", ro: "Tip", en: "Type" },
+  guestConsentAccepted: { ru: "Принято", ro: "Acceptat", en: "Accepted" },
+  guestConsentVersion: { ru: "Версия", ro: "Versiune", en: "Version" },
+  guestConsentIp: { ru: "IP", ro: "IP", en: "IP" },
+  guestConsentUa: { ru: "User‑Agent", ro: "User‑Agent", en: "User‑Agent" },
+  guestConsentAt: { ru: "Дата", ro: "Data", en: "Date" },
+  yes: { ru: "Да", ro: "Da", en: "Yes" },
+  no: { ru: "Нет", ro: "Nu", en: "No" },
+  guestFlagsTitle: { ru: "Флаги гостя", ro: "Flaguri oaspete", en: "Guest flags" },
+  guestFlagVip: { ru: "VIP", ro: "VIP", en: "VIP" },
+  guestFlagNoShow: { ru: "No‑show", ro: "No‑show", en: "No‑show" },
+  guestFlagConflict: { ru: "Конфликтный", ro: "Conflictual", en: "Conflict" },
+  guestFlagsSave: { ru: "Сохранить флаги", ro: "Salvează flaguri", en: "Save flags" },
+  guestFlagsSaved: { ru: "Флаги сохранены", ro: "Flaguri salvate", en: "Flags saved" },
+  guestFlagsHistory: { ru: "История изменений", ro: "Istoric modificări", en: "Change history" },
+  guestFlagsBulkTitle: { ru: "Массовое применение", ro: "Aplicare în masă", en: "Bulk apply" },
+  guestFlagsBulkPhones: { ru: "Телефоны (по одному в строке)", ro: "Telefoane (câte unul pe linie)", en: "Phones (one per line)" },
+  guestFlagsBulkApply: { ru: "Применить", ro: "Aplică", en: "Apply" },
   shiftFrom: { ru: "Смена с", ro: "Schimb de la", en: "Shift from" },
   shiftTo: { ru: "Смена по", ro: "Schimb până la", en: "Shift to" },
   avgCheck: { ru: "Средний чек", ro: "Bon mediu", en: "Average check" },
@@ -392,6 +414,15 @@ type WaiterMotivationRow = {
   avgSlaMinutes?: number | null;
 };
 
+type ConsentLog = {
+  consentType: string;
+  accepted: boolean;
+  textVersion: string | null;
+  ip: string | null;
+  userAgent: string | null;
+  createdAt: string | null;
+};
+
 function parseIpList(v?: string | null) {
   if (!v) return [];
   return v.split(/[,;\s]+/).map((s) => s.trim()).filter(Boolean);
@@ -566,6 +597,7 @@ export default function SuperAdminPage() {
     PAYMENTS_MANAGE: "permPaymentsManage",
     INVENTORY_MANAGE: "permInventoryManage",
     LOYALTY_MANAGE: "permLoyaltyManage",
+    GUEST_FLAGS_MANAGE: "permGuestFlagsManage",
     MEDIA_MANAGE: "permMediaManage",
     HALL_PLAN_MANAGE: "permHallPlanManage",
   };
@@ -583,6 +615,7 @@ export default function SuperAdminPage() {
     "PAYMENTS_MANAGE",
     "INVENTORY_MANAGE",
     "LOYALTY_MANAGE",
+    "GUEST_FLAGS_MANAGE",
     "MEDIA_MANAGE",
     "HALL_PLAN_MANAGE",
   ];
@@ -601,6 +634,7 @@ export default function SuperAdminPage() {
       "PAYMENTS_MANAGE",
       "INVENTORY_MANAGE",
       "LOYALTY_MANAGE",
+      "GUEST_FLAGS_MANAGE",
       "MEDIA_MANAGE",
       "HALL_PLAN_MANAGE",
     ],
@@ -616,6 +650,7 @@ export default function SuperAdminPage() {
       "PAYMENTS_MANAGE",
       "INVENTORY_MANAGE",
       "LOYALTY_MANAGE",
+      "GUEST_FLAGS_MANAGE",
       "MEDIA_MANAGE",
       "HALL_PLAN_MANAGE",
     ],
@@ -631,6 +666,7 @@ export default function SuperAdminPage() {
       "PAYMENTS_MANAGE",
       "INVENTORY_MANAGE",
       "LOYALTY_MANAGE",
+      "GUEST_FLAGS_MANAGE",
       "MEDIA_MANAGE",
       "HALL_PLAN_MANAGE",
     ],
@@ -646,6 +682,7 @@ export default function SuperAdminPage() {
       "PAYMENTS_MANAGE",
       "INVENTORY_MANAGE",
       "LOYALTY_MANAGE",
+      "GUEST_FLAGS_MANAGE",
       "MEDIA_MANAGE",
       "HALL_PLAN_MANAGE",
     ],
@@ -709,6 +746,32 @@ export default function SuperAdminPage() {
   const [statsGuestPhone, setStatsGuestPhone] = useState("");
   const [statsShiftFrom, setStatsShiftFrom] = useState("");
   const [statsShiftTo, setStatsShiftTo] = useState("");
+  const [guestConsentPhone, setGuestConsentPhone] = useState("");
+  const [guestConsentType, setGuestConsentType] = useState<"" | "PRIVACY" | "MARKETING">("");
+  const [guestConsentAccepted, setGuestConsentAccepted] = useState<"" | "true" | "false">("");
+  const [guestConsentLimit, setGuestConsentLimit] = useState(200);
+  const [guestConsentPage, setGuestConsentPage] = useState(0);
+  const [guestConsentLogs, setGuestConsentLogs] = useState<ConsentLog[]>([]);
+  const [guestConsentLoading, setGuestConsentLoading] = useState(false);
+  const [guestConsentError, setGuestConsentError] = useState<string | null>(null);
+  const [guestFlagVip, setGuestFlagVip] = useState(false);
+  const [guestFlagNoShow, setGuestFlagNoShow] = useState(false);
+  const [guestFlagConflict, setGuestFlagConflict] = useState(false);
+  const [guestFlagsSaving, setGuestFlagsSaving] = useState(false);
+  const [guestFlagsSaved, setGuestFlagsSaved] = useState(false);
+  const [guestFlagsError, setGuestFlagsError] = useState<string | null>(null);
+  const [guestFlagHistory, setGuestFlagHistory] = useState<{
+    flagType: string;
+    oldActive?: boolean | null;
+    newActive: boolean;
+    changedByStaffId?: number | null;
+    changedAt?: string | null;
+  }[]>([]);
+  const [guestFlagBulkType, setGuestFlagBulkType] = useState<"" | "VIP" | "NO_SHOW" | "CONFLICT">("");
+  const [guestFlagBulkActive, setGuestFlagBulkActive] = useState(true);
+  const [guestFlagBulkPhones, setGuestFlagBulkPhones] = useState("");
+  const [guestFlagBulkRunning, setGuestFlagBulkRunning] = useState(false);
+  const [guestFlagBulkMessage, setGuestFlagBulkMessage] = useState<string | null>(null);
   const [stats, setStats] = useState<StatsSummary | null>(null);
   const [branchStats, setBranchStats] = useState<BranchSummaryRow[]>([]);
   const [topItems, setTopItems] = useState<TopItemRow[]>([]);
@@ -1627,6 +1690,129 @@ export default function SuperAdminPage() {
     setTopItems(await resTopItems.json());
     const resTopWaiters = await api(`/api/super/stats/top-waiters?${qs.toString()}`);
     setTopWaiters(await resTopWaiters.json());
+  }
+
+  async function loadGuestConsents() {
+    const phone = guestConsentPhone.trim();
+    if (!phone) {
+      setGuestConsentError(t(lang, "guestConsentEmpty"));
+      setGuestConsentLogs([]);
+      return;
+    }
+    setGuestConsentLoading(true);
+    setGuestConsentError(null);
+    try {
+      const qs = new URLSearchParams();
+      qs.set("phone", phone);
+      if (branchId) qs.set("branchId", String(branchId));
+      if (guestConsentType) qs.set("consentType", guestConsentType);
+      if (guestConsentAccepted) qs.set("accepted", guestConsentAccepted);
+      if (guestConsentLimit) qs.set("limit", String(guestConsentLimit));
+      if (guestConsentPage) qs.set("page", String(guestConsentPage));
+      const res = await api(`/api/super/guest-consents?${qs.toString()}`);
+      if (!res.ok) throw new Error(await res.text());
+      setGuestConsentLogs(await res.json());
+    } catch (err: any) {
+      setGuestConsentError(err?.message ?? "Failed to load");
+      setGuestConsentLogs([]);
+    } finally {
+      setGuestConsentLoading(false);
+    }
+  }
+
+  async function loadGuestFlagsSuper() {
+    const phone = guestConsentPhone.trim();
+    if (!phone) return;
+    setGuestFlagsError(null);
+    try {
+      const qs = new URLSearchParams();
+      qs.set("phone", phone);
+      if (branchId) qs.set("branchId", String(branchId));
+      const res = await api(`/api/super/guest-flags?${qs.toString()}`);
+      if (!res.ok) throw new Error(await res.text());
+      const body = await res.json();
+      setGuestFlagVip(!!body.vip);
+      setGuestFlagNoShow(!!body.noShow);
+      setGuestFlagConflict(!!body.conflict);
+      await loadGuestFlagHistorySuper();
+    } catch (err: any) {
+      setGuestFlagsError(err?.message ?? "Failed to load guest flags");
+    }
+  }
+
+  async function saveGuestFlagsSuper() {
+    const phone = guestConsentPhone.trim();
+    if (!phone) return;
+    setGuestFlagsSaving(true);
+    setGuestFlagsSaved(false);
+    setGuestFlagsError(null);
+    try {
+      const res = await api("/api/super/guest-flags", {
+        method: "POST",
+        body: JSON.stringify({
+          phone,
+          branchId: branchId || null,
+          vip: guestFlagVip,
+          noShow: guestFlagNoShow,
+          conflict: guestFlagConflict,
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const body = await res.json();
+      setGuestFlagVip(!!body.vip);
+      setGuestFlagNoShow(!!body.noShow);
+      setGuestFlagConflict(!!body.conflict);
+      setGuestFlagsSaved(true);
+    } catch (err: any) {
+      setGuestFlagsError(err?.message ?? "Failed to save guest flags");
+    } finally {
+      setGuestFlagsSaving(false);
+    }
+  }
+
+  async function loadGuestFlagHistorySuper() {
+    const phone = guestConsentPhone.trim();
+    if (!phone) return;
+    try {
+      const qs = new URLSearchParams();
+      qs.set("phone", phone);
+      if (branchId) qs.set("branchId", String(branchId));
+      const res = await api(`/api/super/guest-flags/history?${qs.toString()}`);
+      if (!res.ok) throw new Error(await res.text());
+      setGuestFlagHistory(await res.json());
+    } catch (_) {
+      setGuestFlagHistory([]);
+    }
+  }
+
+  async function applyGuestFlagsBulkSuper() {
+    const phones = guestFlagBulkPhones
+      .split(/\r?\n/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (phones.length === 0 || !guestFlagBulkType) {
+      setGuestFlagBulkMessage("Заполните список телефонов и тип флага");
+      return;
+    }
+    setGuestFlagBulkRunning(true);
+    setGuestFlagBulkMessage(null);
+    try {
+      const res = await api("/api/super/guest-flags/bulk", {
+        method: "POST",
+        body: JSON.stringify({
+          phones,
+          branchId: branchId || null,
+          flagType: guestFlagBulkType,
+          active: guestFlagBulkActive,
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      setGuestFlagBulkMessage("Готово");
+    } catch (e: any) {
+      setGuestFlagBulkMessage(e?.message ?? "Ошибка");
+    } finally {
+      setGuestFlagBulkRunning(false);
+    }
   }
 
   async function downloadSummaryCsv() {
@@ -3701,6 +3887,116 @@ export default function SuperAdminPage() {
             </div>
           </div>
         )}
+      </section>
+
+      <section style={{ marginTop: 24 }}>
+        <h2>{t(lang, "guestConsentTitle")}</h2>
+        <GuestConsentLogs
+          lang={lang}
+          t={t}
+          phone={guestConsentPhone}
+          onPhoneChange={setGuestConsentPhone}
+          consentType={guestConsentType}
+          onConsentTypeChange={setGuestConsentType}
+          accepted={guestConsentAccepted}
+          onAcceptedChange={setGuestConsentAccepted}
+          limit={guestConsentLimit}
+          onLimitChange={setGuestConsentLimit}
+          page={guestConsentPage}
+          onPageChange={setGuestConsentPage}
+          onLoad={loadGuestConsents}
+          loading={guestConsentLoading}
+          error={guestConsentError}
+          logs={guestConsentLogs}
+          extraFilters={(
+            <label>
+              {t(lang, "branch")}
+              <select
+                value={branchId}
+                onChange={(e) => {
+                  const next = e.target.value ? Number(e.target.value) : "";
+                  setBranchId(next);
+                  if (!next) setHallId("");
+                }}
+              >
+                <option value="">{t(lang, "all")}</option>
+                {branches
+                  .filter((b) => !tenantId || b.tenantId === Number(tenantId))
+                  .map((b) => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+              </select>
+            </label>
+          )}
+        />
+        <div style={{ marginTop: 10 }}>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>{t(lang, "guestFlagsTitle")}</div>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+            <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12 }}>
+              <input type="checkbox" checked={guestFlagVip} onChange={(e) => setGuestFlagVip(e.target.checked)} />
+              {t(lang, "guestFlagVip")}
+            </label>
+            <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12 }}>
+              <input type="checkbox" checked={guestFlagNoShow} onChange={(e) => setGuestFlagNoShow(e.target.checked)} />
+              {t(lang, "guestFlagNoShow")}
+            </label>
+            <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12 }}>
+              <input type="checkbox" checked={guestFlagConflict} onChange={(e) => setGuestFlagConflict(e.target.checked)} />
+              {t(lang, "guestFlagConflict")}
+            </label>
+            <button onClick={loadGuestFlagsSuper} style={{ padding: "6px 10px" }}>
+              {t(lang, "load")}
+            </button>
+            <button onClick={saveGuestFlagsSuper} disabled={guestFlagsSaving} style={{ padding: "6px 10px" }}>
+              {guestFlagsSaving ? t(lang, "saving") : t(lang, "guestFlagsSave")}
+            </button>
+            {guestFlagsSaved && <span style={{ color: "#059669", fontSize: 12 }}>{t(lang, "guestFlagsSaved")}</span>}
+            {guestFlagsError && <span style={{ color: "#b11e46", fontSize: 12 }}>{guestFlagsError}</span>}
+          </div>
+          <div style={{ marginTop: 10 }}>
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>{t(lang, "guestFlagsHistory")}</div>
+            {guestFlagHistory.length === 0 ? (
+              <div style={{ fontSize: 12, color: "#666" }}>—</div>
+            ) : (
+              <div style={{ display: "grid", gap: 6 }}>
+                {guestFlagHistory.map((h, idx) => (
+                  <div key={`${h.flagType}-${h.changedAt ?? idx}`} style={{ fontSize: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <span>{t(lang, "guestConsentType")}: {h.flagType}</span>
+                    <span>old: {h.oldActive == null ? "—" : h.oldActive ? t(lang, "yes") : t(lang, "no")}</span>
+                    <span>new: {h.newActive ? t(lang, "yes") : t(lang, "no")}</span>
+                    <span>by: {h.changedByStaffId ?? "—"}</span>
+                    <span>{h.changedAt ?? "—"}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div style={{ marginTop: 10 }}>
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>{t(lang, "guestFlagsBulkTitle")}</div>
+            <div style={{ display: "grid", gap: 6 }}>
+              <label>
+                {t(lang, "guestFlagsBulkPhones")}
+                <textarea rows={3} value={guestFlagBulkPhones} onChange={(e) => setGuestFlagBulkPhones(e.target.value)} />
+              </label>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <select value={guestFlagBulkType} onChange={(e) => setGuestFlagBulkType(e.target.value as any)}>
+                  <option value="">{t(lang, "guestConsentType")}</option>
+                  <option value="VIP">VIP</option>
+                  <option value="NO_SHOW">NO_SHOW</option>
+                  <option value="CONFLICT">CONFLICT</option>
+                </select>
+                <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12 }}>
+                  <input type="checkbox" checked={guestFlagBulkActive} onChange={(e) => setGuestFlagBulkActive(e.target.checked)} />
+                  {t(lang, "guestConsentAccepted")}
+                </label>
+                <button onClick={applyGuestFlagsBulkSuper} disabled={guestFlagBulkRunning}>
+                  {guestFlagBulkRunning ? t(lang, "saving") : t(lang, "guestFlagsBulkApply")}
+                </button>
+                {guestFlagBulkMessage && <span style={{ fontSize: 12, color: "#6b7280" }}>{guestFlagBulkMessage}</span>}
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
 
       <section style={{ marginTop: 24 }}>

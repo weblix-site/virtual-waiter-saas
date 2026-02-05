@@ -67,6 +67,8 @@ import md.virtualwaiter.security.TotpService;
 import md.virtualwaiter.service.StatsService;
 import md.virtualwaiter.service.AuditService;
 import md.virtualwaiter.service.LoyaltyService;
+import md.virtualwaiter.service.GuestConsentService;
+import md.virtualwaiter.service.GuestFlagService;
 import md.virtualwaiter.service.GuestProfileService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -161,6 +163,8 @@ public class AdminController {
   private final CurrencyRepo currencyRepo;
   private final LoyaltyService loyaltyService;
   private final GuestProfileService guestProfileService;
+  private final GuestConsentService guestConsentService;
+  private final GuestFlagService guestFlagService;
   private final int maxPhotoUrlLength;
   private final int maxPhotoUrlsCount;
   private final Set<String> allowedPhotoExts;
@@ -207,6 +211,8 @@ public class AdminController {
     CurrencyRepo currencyRepo,
     LoyaltyService loyaltyService,
     GuestProfileService guestProfileService,
+    GuestConsentService guestConsentService,
+    GuestFlagService guestFlagService,
     @Value("${app.media.maxPhotoUrlLength:512}") int maxPhotoUrlLength,
     @Value("${app.media.maxPhotoUrlsCount:6}") int maxPhotoUrlsCount,
     @Value("${app.media.allowedPhotoExts:jpg,jpeg,png,webp,gif}") String allowedPhotoExts,
@@ -252,6 +258,8 @@ public class AdminController {
     this.currencyRepo = currencyRepo;
     this.loyaltyService = loyaltyService;
     this.guestProfileService = guestProfileService;
+    this.guestConsentService = guestConsentService;
+    this.guestFlagService = guestFlagService;
     this.maxPhotoUrlLength = maxPhotoUrlLength;
     this.maxPhotoUrlsCount = maxPhotoUrlsCount;
     this.allowedPhotoExts = parseExts(allowedPhotoExts);
@@ -2236,6 +2244,44 @@ public class AdminController {
     List<GuestVisitDto> visits
   ) {}
 
+  public record ConsentLogDto(
+    String consentType,
+    boolean accepted,
+    String textVersion,
+    String ip,
+    String userAgent,
+    String createdAt
+  ) {}
+
+  public record GuestFlagsResponse(
+    boolean vip,
+    boolean noShow,
+    boolean conflict
+  ) {}
+
+  public record UpdateGuestFlagsRequest(
+    @NotBlank String phone,
+    Long branchId,
+    boolean vip,
+    boolean noShow,
+    boolean conflict
+  ) {}
+
+  public record GuestFlagAuditDto(
+    String flagType,
+    Boolean oldActive,
+    boolean newActive,
+    Long changedByStaffId,
+    String changedAt
+  ) {}
+
+  public record BulkGuestFlagRequest(
+    List<String> phones,
+    Long branchId,
+    @NotBlank String flagType,
+    boolean active
+  ) {}
+
   public record UpdateGuestProfileRequest(
     @NotBlank String phone,
     String name,
@@ -2332,6 +2378,112 @@ public class AdminController {
       gp.lastVisitAt() == null ? null : gp.lastVisitAt().toString(),
       visits
     );
+  }
+
+  @GetMapping("/guest-consents")
+  public List<ConsentLogDto> getGuestConsents(
+    @RequestParam("phone") String phone,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @RequestParam(value = "consentType", required = false) String consentType,
+    @RequestParam(value = "accepted", required = false) Boolean accepted,
+    @RequestParam(value = "limit", required = false) Integer limit,
+    @RequestParam(value = "page", required = false) Integer page,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.LOYALTY_MANAGE);
+    long bid = resolveBranchId(u, branchId);
+    String p = phone == null ? "" : phone.trim();
+    if (p.isBlank()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "phone required");
+    int lim = limit == null ? 200 : limit;
+    int pg = page == null ? 0 : page;
+    List<GuestConsentService.ConsentRecord> rows = guestConsentService.listByPhone(p, bid, consentType, accepted, lim, pg);
+    List<ConsentLogDto> out = new ArrayList<>();
+    for (GuestConsentService.ConsentRecord r : rows) {
+      out.add(new ConsentLogDto(
+        r.consentType(),
+        r.accepted(),
+        r.textVersion(),
+        r.ip(),
+        r.userAgent(),
+        r.createdAt() == null ? null : r.createdAt().toString()
+      ));
+    }
+    return out;
+  }
+
+  @GetMapping("/guest-flags")
+  public GuestFlagsResponse getGuestFlags(
+    @RequestParam("phone") String phone,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.GUEST_FLAGS_MANAGE);
+    long bid = resolveBranchId(u, branchId);
+    String p = phone == null ? "" : phone.trim();
+    if (p.isBlank()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "phone required");
+    GuestFlagService.GuestFlags flags = guestFlagService.getFlags(p, bid);
+    return new GuestFlagsResponse(flags.vip(), flags.noShow(), flags.conflict());
+  }
+
+  @PostMapping("/guest-flags")
+  public GuestFlagsResponse updateGuestFlags(
+    @Valid @RequestBody UpdateGuestFlagsRequest req,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.GUEST_FLAGS_MANAGE);
+    long bid = resolveBranchId(u, req.branchId);
+    String p = req.phone == null ? "" : req.phone.trim();
+    if (p.isBlank()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "phone required");
+    guestFlagService.setFlags(p, bid, GuestFlagService.toMap(req.vip, req.noShow, req.conflict), u.id);
+    auditService.log(u, "UPDATE", "GuestFlags", bid, p);
+    GuestFlagService.GuestFlags flags = guestFlagService.getFlags(p, bid);
+    return new GuestFlagsResponse(flags.vip(), flags.noShow(), flags.conflict());
+  }
+
+  @GetMapping("/guest-flags/history")
+  public List<GuestFlagAuditDto> getGuestFlagsHistory(
+    @RequestParam("phone") String phone,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.GUEST_FLAGS_MANAGE);
+    long bid = resolveBranchId(u, branchId);
+    String p = phone == null ? "" : phone.trim();
+    if (p.isBlank()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "phone required");
+    return guestFlagService.history(p, bid).stream()
+      .map(r -> new GuestFlagAuditDto(
+        r.flagType,
+        r.oldActive,
+        r.newActive,
+        r.changedByStaffId,
+        r.changedAt == null ? null : r.changedAt.toString()
+      ))
+      .toList();
+  }
+
+  @PostMapping("/guest-flags/bulk")
+  public void bulkGuestFlags(@Valid @RequestBody BulkGuestFlagRequest req, Authentication auth) {
+    StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.GUEST_FLAGS_MANAGE);
+    long bid = resolveBranchId(u, req.branchId);
+    if (req.phones == null || req.phones.isEmpty()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "phones required");
+    }
+    String flagType = req.flagType == null ? "" : req.flagType.trim().toUpperCase(Locale.ROOT);
+    if (flagType.isBlank()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "flagType required");
+    for (String raw : req.phones) {
+      if (raw == null) continue;
+      String p = raw.trim();
+      if (p.isBlank()) continue;
+      Map<String, Boolean> map = new java.util.HashMap<>();
+      map.put(flagType, req.active);
+      guestFlagService.setFlags(p, bid, map, u.id);
+      auditService.log(u, "UPDATE", "GuestFlagsBulk", bid, p);
+    }
   }
 
   @GetMapping("/loyalty/offers")

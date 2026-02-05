@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import Image from "next/image";
 import QRCode from "qrcode";
+import GuestConsentLogs from "../components/GuestConsentLogs";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8080";
 
@@ -61,6 +62,7 @@ const dict: Record<string, Record<Lang, string>> = {
   permPaymentsManage: { ru: "Оплаты", ro: "Plăți", en: "Payments manage" },
   permInventoryManage: { ru: "Склад", ro: "Inventar", en: "Inventory manage" },
   permLoyaltyManage: { ru: "Лояльность", ro: "Loialitate", en: "Loyalty manage" },
+  permGuestFlagsManage: { ru: "Флаги гостей", ro: "Flaguri oaspeți", en: "Guest flags manage" },
   permMediaManage: { ru: "Медиа", ro: "Media", en: "Media manage" },
   permHallPlanManage: { ru: "Планы зала", ro: "Plan sală", en: "Hall plan manage" },
   deviceSessions: { ru: "Сессии устройств", ro: "Sesiuni dispozitive", en: "Device sessions" },
@@ -178,6 +180,8 @@ const dict: Record<string, Record<Lang, string>> = {
   audit: { ru: "Аудит", ro: "Audit", en: "Audit" },
   add: { ru: "Добавить", ro: "Adaugă", en: "Add" },
   edit: { ru: "Редактировать", ro: "Editează", en: "Edit" },
+  yes: { ru: "Да", ro: "Da", en: "Yes" },
+  no: { ru: "Нет", ro: "Nu", en: "No" },
   delete: { ru: "Удалить", ro: "Șterge", en: "Delete" },
   enable: { ru: "Включить", ro: "Activează", en: "Enable" },
   disable: { ru: "Выключить", ro: "Dezactivează", en: "Disable" },
@@ -228,6 +232,24 @@ const dict: Record<string, Record<Lang, string>> = {
   guestProfileLastVisit: { ru: "Последний визит", ro: "Ultima vizită", en: "Last visit" },
   guestProfileHistory: { ru: "История визитов", ro: "Istoric vizite", en: "Visit history" },
   guestProfileHistoryEmpty: { ru: "История пуста", ro: "Istoricul este gol", en: "No visits yet" },
+  guestConsentTitle: { ru: "Согласия", ro: "Consimțământ", en: "Consents" },
+  guestConsentEmpty: { ru: "Логов согласий нет", ro: "Nu există loguri", en: "No consent logs" },
+  guestConsentType: { ru: "Тип", ro: "Tip", en: "Type" },
+  guestConsentAccepted: { ru: "Принято", ro: "Acceptat", en: "Accepted" },
+  guestConsentVersion: { ru: "Версия", ro: "Versiune", en: "Version" },
+  guestConsentIp: { ru: "IP", ro: "IP", en: "IP" },
+  guestConsentUa: { ru: "User‑Agent", ro: "User‑Agent", en: "User‑Agent" },
+  guestConsentAt: { ru: "Дата", ro: "Data", en: "Date" },
+  guestFlagsTitle: { ru: "Флаги гостя", ro: "Flaguri oaspete", en: "Guest flags" },
+  guestFlagVip: { ru: "VIP", ro: "VIP", en: "VIP" },
+  guestFlagNoShow: { ru: "No‑show", ro: "No‑show", en: "No‑show" },
+  guestFlagConflict: { ru: "Конфликтный", ro: "Conflictual", en: "Conflict" },
+  guestFlagsSave: { ru: "Сохранить флаги", ro: "Salvează flaguri", en: "Save flags" },
+  guestFlagsSaved: { ru: "Флаги сохранены", ro: "Flaguri salvate", en: "Flags saved" },
+  guestFlagsHistory: { ru: "История изменений", ro: "Istoric modificări", en: "Change history" },
+  guestFlagsBulkTitle: { ru: "Массовое применение", ro: "Aplicare în masă", en: "Bulk apply" },
+  guestFlagsBulkPhones: { ru: "Телефоны (по одному в строке)", ro: "Telefoane (câte unul pe linie)", en: "Phones (one per line)" },
+  guestFlagsBulkApply: { ru: "Применить", ro: "Aplică", en: "Apply" },
   loyaltyPoints: { ru: "Баллы", ro: "Puncte", en: "Points" },
   loyaltyFavorites: { ru: "Любимые блюда", ro: "Feluri preferate", en: "Favorite items" },
   loyaltyOffers: { ru: "Персональные предложения", ro: "Oferte personale", en: "Personal offers" },
@@ -1101,6 +1123,7 @@ export default function AdminPage() {
     PAYMENTS_MANAGE: "permPaymentsManage",
     INVENTORY_MANAGE: "permInventoryManage",
     LOYALTY_MANAGE: "permLoyaltyManage",
+    GUEST_FLAGS_MANAGE: "permGuestFlagsManage",
     MEDIA_MANAGE: "permMediaManage",
     HALL_PLAN_MANAGE: "permHallPlanManage",
   };
@@ -1118,6 +1141,7 @@ export default function AdminPage() {
     "PAYMENTS_MANAGE",
     "INVENTORY_MANAGE",
     "LOYALTY_MANAGE",
+    "GUEST_FLAGS_MANAGE",
     "MEDIA_MANAGE",
     "HALL_PLAN_MANAGE",
   ];
@@ -1136,6 +1160,7 @@ export default function AdminPage() {
       "PAYMENTS_MANAGE",
       "INVENTORY_MANAGE",
       "LOYALTY_MANAGE",
+      "GUEST_FLAGS_MANAGE",
       "MEDIA_MANAGE",
       "HALL_PLAN_MANAGE",
     ],
@@ -1151,6 +1176,7 @@ export default function AdminPage() {
       "PAYMENTS_MANAGE",
       "INVENTORY_MANAGE",
       "LOYALTY_MANAGE",
+      "GUEST_FLAGS_MANAGE",
       "MEDIA_MANAGE",
       "HALL_PLAN_MANAGE",
     ],
@@ -1166,6 +1192,7 @@ export default function AdminPage() {
       "PAYMENTS_MANAGE",
       "INVENTORY_MANAGE",
       "LOYALTY_MANAGE",
+      "GUEST_FLAGS_MANAGE",
       "MEDIA_MANAGE",
       "HALL_PLAN_MANAGE",
     ],
@@ -1181,6 +1208,7 @@ export default function AdminPage() {
       "PAYMENTS_MANAGE",
       "INVENTORY_MANAGE",
       "LOYALTY_MANAGE",
+      "GUEST_FLAGS_MANAGE",
       "MEDIA_MANAGE",
       "HALL_PLAN_MANAGE",
     ],
@@ -1341,6 +1369,38 @@ export default function AdminPage() {
     lastVisitAt?: string | null;
     visits: { orderId: number; status: string; createdAt: string; tableNumber: number; branchId: number }[];
   } | null>(null);
+  const [guestConsentLogs, setGuestConsentLogs] = useState<{
+    consentType: string;
+    accepted: boolean;
+    textVersion?: string | null;
+    ip?: string | null;
+    userAgent?: string | null;
+    createdAt?: string | null;
+  }[]>([]);
+  const [guestConsentType, setGuestConsentType] = useState<"" | "PRIVACY" | "MARKETING">("");
+  const [guestConsentAccepted, setGuestConsentAccepted] = useState<"" | "true" | "false">("");
+  const [guestConsentLimit, setGuestConsentLimit] = useState(200);
+  const [guestConsentPage, setGuestConsentPage] = useState(0);
+  const [guestConsentLoading, setGuestConsentLoading] = useState(false);
+  const [guestConsentError, setGuestConsentError] = useState<string | null>(null);
+  const [guestFlagVip, setGuestFlagVip] = useState(false);
+  const [guestFlagNoShow, setGuestFlagNoShow] = useState(false);
+  const [guestFlagConflict, setGuestFlagConflict] = useState(false);
+  const [guestFlagsSaving, setGuestFlagsSaving] = useState(false);
+  const [guestFlagsSaved, setGuestFlagsSaved] = useState(false);
+  const [guestFlagsError, setGuestFlagsError] = useState<string | null>(null);
+  const [guestFlagHistory, setGuestFlagHistory] = useState<{
+    flagType: string;
+    oldActive?: boolean | null;
+    newActive: boolean;
+    changedByStaffId?: number | null;
+    changedAt?: string | null;
+  }[]>([]);
+  const [guestFlagBulkType, setGuestFlagBulkType] = useState<"" | "VIP" | "NO_SHOW" | "CONFLICT">("");
+  const [guestFlagBulkActive, setGuestFlagBulkActive] = useState(true);
+  const [guestFlagBulkPhones, setGuestFlagBulkPhones] = useState("");
+  const [guestFlagBulkRunning, setGuestFlagBulkRunning] = useState(false);
+  const [guestFlagBulkMessage, setGuestFlagBulkMessage] = useState<string | null>(null);
   const [guestProfileLoading, setGuestProfileLoading] = useState(false);
   const [guestProfileSaving, setGuestProfileSaving] = useState(false);
   const [guestProfileSaved, setGuestProfileSaved] = useState(false);
@@ -1612,11 +1672,13 @@ export default function AdminPage() {
   const canPayments = hasPerm("PAYMENTS_MANAGE");
   const canInventory = hasPerm("INVENTORY_MANAGE");
   const canLoyalty = hasPerm("LOYALTY_MANAGE");
+  const canGuestFlags = hasPerm("GUEST_FLAGS_MANAGE");
   const canHallPlan = hasPerm("HALL_PLAN_MANAGE");
 
   const showOnboarding = canInventory || canReports;
   const showSettings = canSettings;
   const showLoyalty = canLoyalty;
+  const showGuestProfile = canLoyalty || canGuestFlags;
   const showPayments = canPayments;
   const showMenu = canMenuView;
   const showHall = canHallPlan;
@@ -3381,11 +3443,131 @@ export default function AdminPage() {
       setGuestProfileName(profile.name ?? "");
       setGuestProfilePreferences(profile.preferences ?? "");
       setGuestProfileAllergens(profile.allergens ?? "");
+      await loadGuestConsentsAdmin();
+      if (canGuestFlags) {
+        await loadGuestFlagsAdmin();
+      }
     } catch (e: any) {
       setGuestProfile(null);
+      setGuestConsentLogs([]);
       setGuestProfileError(e?.message ?? "Failed to load guest profile");
     } finally {
       setGuestProfileLoading(false);
+    }
+  }
+
+  async function loadGuestConsentsAdmin() {
+    const phone = guestProfilePhone.trim();
+    if (!phone) {
+      setGuestConsentError(t(lang, "guestConsentEmpty"));
+      setGuestConsentLogs([]);
+      return;
+    }
+    setGuestConsentLoading(true);
+    setGuestConsentError(null);
+    try {
+      const qs = new URLSearchParams({ phone });
+      if (guestConsentType) qs.set("consentType", guestConsentType);
+      if (guestConsentAccepted) qs.set("accepted", guestConsentAccepted);
+      if (guestConsentLimit) qs.set("limit", String(guestConsentLimit));
+      if (guestConsentPage) qs.set("page", String(guestConsentPage));
+      const res = await api(`/api/admin/guest-consents?${qs.toString()}`);
+      if (!res.ok) throw new Error(await res.text());
+      setGuestConsentLogs(await res.json());
+    } catch (e: any) {
+      setGuestConsentLogs([]);
+      setGuestConsentError(e?.message ?? "Failed to load guest consents");
+    } finally {
+      setGuestConsentLoading(false);
+    }
+  }
+
+  async function loadGuestFlagsAdmin() {
+    const phone = guestProfilePhone.trim();
+    if (!phone) return;
+    setGuestFlagsError(null);
+    try {
+      const qs = new URLSearchParams({ phone });
+      const res = await api(`/api/admin/guest-flags?${qs.toString()}`);
+      if (!res.ok) throw new Error(await res.text());
+      const body = await res.json();
+      setGuestFlagVip(!!body.vip);
+      setGuestFlagNoShow(!!body.noShow);
+      setGuestFlagConflict(!!body.conflict);
+      await loadGuestFlagHistoryAdmin();
+    } catch (e: any) {
+      setGuestFlagsError(e?.message ?? "Failed to load guest flags");
+    }
+  }
+
+  async function saveGuestFlagsAdmin() {
+    const phone = guestProfilePhone.trim();
+    if (!phone) return;
+    setGuestFlagsSaving(true);
+    setGuestFlagsSaved(false);
+    setGuestFlagsError(null);
+    try {
+      const res = await api("/api/admin/guest-flags", {
+        method: "POST",
+        body: JSON.stringify({
+          phone,
+          vip: guestFlagVip,
+          noShow: guestFlagNoShow,
+          conflict: guestFlagConflict,
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const body = await res.json();
+      setGuestFlagVip(!!body.vip);
+      setGuestFlagNoShow(!!body.noShow);
+      setGuestFlagConflict(!!body.conflict);
+      setGuestFlagsSaved(true);
+    } catch (e: any) {
+      setGuestFlagsError(e?.message ?? "Failed to save guest flags");
+    } finally {
+      setGuestFlagsSaving(false);
+    }
+  }
+
+  async function loadGuestFlagHistoryAdmin() {
+    const phone = guestProfilePhone.trim();
+    if (!phone) return;
+    try {
+      const qs = new URLSearchParams({ phone });
+      const res = await api(`/api/admin/guest-flags/history?${qs.toString()}`);
+      if (!res.ok) throw new Error(await res.text());
+      setGuestFlagHistory(await res.json());
+    } catch (_) {
+      setGuestFlagHistory([]);
+    }
+  }
+
+  async function applyGuestFlagsBulkAdmin() {
+    const phones = guestFlagBulkPhones
+      .split(/\r?\n/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (phones.length === 0 || !guestFlagBulkType) {
+      setGuestFlagBulkMessage("Заполните список телефонов и тип флага");
+      return;
+    }
+    setGuestFlagBulkRunning(true);
+    setGuestFlagBulkMessage(null);
+    try {
+      const res = await api("/api/admin/guest-flags/bulk", {
+        method: "POST",
+        body: JSON.stringify({
+          phones,
+          flagType: guestFlagBulkType,
+          active: guestFlagBulkActive,
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      setGuestFlagBulkMessage("Готово");
+    } catch (e: any) {
+      setGuestFlagBulkMessage(e?.message ?? "Ошибка");
+    } finally {
+      setGuestFlagBulkRunning(false);
     }
   }
 
@@ -4496,7 +4678,7 @@ export default function AdminPage() {
       </section>
       )}
 
-      {showLoyalty && (
+      {showGuestProfile && (
       <section id="guest-profile-section" style={{ marginTop: 24 }}>
         <h2>{t(lang, "guestProfileTitle")}</h2>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -4541,6 +4723,94 @@ export default function AdminPage() {
                   ))}
                 </div>
               )}
+            </div>
+            {canGuestFlags && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ fontWeight: 600, marginBottom: 6 }}>{t(lang, "guestFlagsTitle")}</div>
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+                  <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12 }}>
+                    <input type="checkbox" checked={guestFlagVip} onChange={(e) => setGuestFlagVip(e.target.checked)} />
+                    {t(lang, "guestFlagVip")}
+                  </label>
+                  <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12 }}>
+                    <input type="checkbox" checked={guestFlagNoShow} onChange={(e) => setGuestFlagNoShow(e.target.checked)} />
+                    {t(lang, "guestFlagNoShow")}
+                  </label>
+                  <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12 }}>
+                    <input type="checkbox" checked={guestFlagConflict} onChange={(e) => setGuestFlagConflict(e.target.checked)} />
+                    {t(lang, "guestFlagConflict")}
+                  </label>
+                  <button onClick={saveGuestFlagsAdmin} disabled={guestFlagsSaving}>
+                    {guestFlagsSaving ? t(lang, "saving") : t(lang, "guestFlagsSave")}
+                  </button>
+                  {guestFlagsSaved && <span style={{ color: "#059669", fontSize: 12 }}>{t(lang, "guestFlagsSaved")}</span>}
+                  {guestFlagsError && <span style={{ color: "#b11e46", fontSize: 12 }}>{guestFlagsError}</span>}
+                </div>
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ fontWeight: 600, marginBottom: 6 }}>{t(lang, "guestFlagsHistory")}</div>
+                  {guestFlagHistory.length === 0 ? (
+                    <div style={{ fontSize: 12, color: "#666" }}>—</div>
+                  ) : (
+                    <div style={{ display: "grid", gap: 6 }}>
+                      {guestFlagHistory.map((h, idx) => (
+                        <div key={`${h.flagType}-${h.changedAt ?? idx}`} style={{ fontSize: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                          <span>{t(lang, "guestConsentType")}: {h.flagType}</span>
+                          <span>old: {h.oldActive == null ? "—" : h.oldActive ? t(lang, "yes") : t(lang, "no")}</span>
+                          <span>new: {h.newActive ? t(lang, "yes") : t(lang, "no")}</span>
+                          <span>by: {h.changedByStaffId ?? "—"}</span>
+                          <span>{h.changedAt ?? "—"}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ fontWeight: 600, marginBottom: 6 }}>{t(lang, "guestFlagsBulkTitle")}</div>
+                  <div style={{ display: "grid", gap: 6 }}>
+                    <label>
+                      {t(lang, "guestFlagsBulkPhones")}
+                      <textarea rows={3} value={guestFlagBulkPhones} onChange={(e) => setGuestFlagBulkPhones(e.target.value)} />
+                    </label>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                      <select value={guestFlagBulkType} onChange={(e) => setGuestFlagBulkType(e.target.value as any)}>
+                        <option value="">{t(lang, "guestConsentType")}</option>
+                        <option value="VIP">VIP</option>
+                        <option value="NO_SHOW">NO_SHOW</option>
+                        <option value="CONFLICT">CONFLICT</option>
+                      </select>
+                      <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12 }}>
+                        <input type="checkbox" checked={guestFlagBulkActive} onChange={(e) => setGuestFlagBulkActive(e.target.checked)} />
+                        {t(lang, "guestConsentAccepted")}
+                      </label>
+                      <button onClick={applyGuestFlagsBulkAdmin} disabled={guestFlagBulkRunning}>
+                        {guestFlagBulkRunning ? t(lang, "saving") : t(lang, "guestFlagsBulkApply")}
+                      </button>
+                      {guestFlagBulkMessage && <span style={{ fontSize: 12, color: "#6b7280" }}>{guestFlagBulkMessage}</span>}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            <div style={{ marginTop: 12 }}>
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>{t(lang, "guestConsentTitle")}</div>
+              <GuestConsentLogs
+                lang={lang}
+                t={t}
+                phone={guestProfilePhone}
+                onPhoneChange={setGuestProfilePhone}
+                consentType={guestConsentType}
+                onConsentTypeChange={setGuestConsentType}
+                accepted={guestConsentAccepted}
+                onAcceptedChange={setGuestConsentAccepted}
+                limit={guestConsentLimit}
+                onLimitChange={setGuestConsentLimit}
+                page={guestConsentPage}
+                onPageChange={setGuestConsentPage}
+                onLoad={loadGuestConsentsAdmin}
+                loading={guestConsentLoading}
+                error={guestConsentError}
+                logs={guestConsentLogs}
+              />
             </div>
           </div>
         )}

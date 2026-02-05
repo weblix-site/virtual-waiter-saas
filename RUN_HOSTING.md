@@ -120,6 +120,23 @@ APP_AUTH_COOKIE_SECURE=true
 APP_MEDIA_PUBLIC_BASE_URL=https://YOUR_DOMAIN
 ```
 
+### Retention (хранение/удаление гостевых данных)
+```env
+# включить/выключить фоновые чистки
+APP_RETENTION_ENABLED=true
+# когда удалять гостевые сессии
+APP_RETENTION_GUEST_SESSIONS_DAYS=90
+# когда удалять логи согласий
+APP_RETENTION_GUEST_CONSENTS_DAYS=365
+# когда удалять профили гостей (по last_visit_at)
+APP_RETENTION_GUEST_PROFILES_DAYS=365
+# когда обезличивать телефон в заказах
+APP_RETENTION_ORDER_GUEST_PHONE_DAYS=365
+# расписание (cron) — по умолчанию каждый день 03:00
+APP_RETENTION_CRON=0 0 3 * * *
+```
+По умолчанию включено: удаляются старые гостевые сессии/логи согласий/профили, а в старых заказах **очищается guest_phone**.
+
 ---
 
 ## 5) Запуск контейнеров

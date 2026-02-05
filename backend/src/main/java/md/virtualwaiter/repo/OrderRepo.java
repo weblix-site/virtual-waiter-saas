@@ -2,6 +2,9 @@ package md.virtualwaiter.repo;
 
 import md.virtualwaiter.domain.Order;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
 import java.util.List;
@@ -20,4 +23,8 @@ public interface OrderRepo extends JpaRepository<Order, Long> {
   List<Order> findTop200ByGuestSessionIdInOrderByCreatedAtDesc(List<Long> guestSessionIds);
   List<Order> findByIdIn(List<Long> ids);
   List<Order> findByStatusInAndCreatedAtAfter(List<String> statuses, Instant createdAt);
+
+  @Modifying
+  @Query("update Order o set o.guestPhone = null where o.createdAt < :cutoff and o.guestPhone is not null")
+  int clearGuestPhoneBefore(@Param("cutoff") Instant cutoff);
 }

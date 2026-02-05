@@ -173,6 +173,18 @@ $env:APP_AUTH_COOKIE_SECRET="CHANGE_ME_AUTH_SECRET"
 ./gradlew bootRun
 ```
 
+### 7.1.2 Retention (хранение/удаление гостевых данных)
+Переменные окружения:
+```
+$env:APP_RETENTION_ENABLED="true"
+$env:APP_RETENTION_GUEST_SESSIONS_DAYS="90"
+$env:APP_RETENTION_GUEST_CONSENTS_DAYS="365"
+$env:APP_RETENTION_GUEST_PROFILES_DAYS="365"
+$env:APP_RETENTION_ORDER_GUEST_PHONE_DAYS="365"
+$env:APP_RETENTION_CRON="0 0 3 * * *"
+```
+По умолчанию включено: удаляются старые гостевые сессии/логи согласий/профили, а в старых заказах очищается `guest_phone`.
+
 ### 7.2 OTP (SMS / WhatsApp / Telegram)
 Вход гостя поддерживает выбор канала OTP: **SMS / WhatsApp / Telegram**.
 

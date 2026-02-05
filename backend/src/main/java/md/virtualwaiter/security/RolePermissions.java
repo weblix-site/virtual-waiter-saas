@@ -18,6 +18,7 @@ public final class RolePermissions {
     Permission.PAYMENTS_MANAGE,
     Permission.INVENTORY_MANAGE,
     Permission.LOYALTY_MANAGE,
+    Permission.GUEST_FLAGS_MANAGE,
     Permission.MEDIA_MANAGE,
     Permission.HALL_PLAN_MANAGE
   );
@@ -35,6 +36,7 @@ public final class RolePermissions {
     Permission.PAYMENTS_MANAGE,
     Permission.INVENTORY_MANAGE,
     Permission.LOYALTY_MANAGE,
+    Permission.GUEST_FLAGS_MANAGE,
     Permission.MEDIA_MANAGE,
     Permission.HALL_PLAN_MANAGE
   );

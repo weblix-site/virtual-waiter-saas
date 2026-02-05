@@ -207,6 +207,8 @@ export default function TablePage({ params, searchParams }: any) {
   const [otpSendCount, setOtpSendCount] = useState(0);
   const [otpCooldownUntil, setOtpCooldownUntil] = useState<number | null>(null);
   const [otpNowTick, setOtpNowTick] = useState(Date.now());
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
+  const [marketingAccepted, setMarketingAccepted] = useState(false);
   const [billRefreshLoading, setBillRefreshLoading] = useState(false);
   const [ordersHistory, setOrdersHistory] = useState<any[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
@@ -236,6 +238,9 @@ export default function TablePage({ params, searchParams }: any) {
   const [guestProfileError, setGuestProfileError] = useState<string | null>(null);
   const [guestVisits, setGuestVisits] = useState<{ orderId: number; status: string; createdAt: string; tableNumber: number; branchId: number }[]>([]);
   const [guestVisitsLoading, setGuestVisitsLoading] = useState(false);
+  const [lastOrders, setLastOrders] = useState<{ orderId: number; status: string; createdAt: string | null; items: { menuItemId: number; name: string; qty: number }[]; }[]>([]);
+  const [lastOrdersLoading, setLastOrdersLoading] = useState(false);
+  const [lastOrdersError, setLastOrdersError] = useState<string | null>(null);
   const [guestName, setGuestName] = useState("");
   const [guestPreferences, setGuestPreferences] = useState("");
   const [guestAllergens, setGuestAllergens] = useState("");
@@ -405,6 +410,41 @@ export default function TablePage({ params, searchParams }: any) {
       setGuestVisitsLoading(false);
     }
   }, [lang, session, sessionHeaders]);
+
+  const loadLastOrders = useCallback(async () => {
+    if (!session) return;
+    if (!session.isVerified) {
+      setLastOrders([]);
+      return;
+    }
+    setLastOrdersLoading(true);
+    setLastOrdersError(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/public/guest/last-orders?guestSessionId=${session.guestSessionId}`, {
+        headers: { ...sessionHeaders() },
+      });
+      if (!res.ok) throw new Error(await readApiError(res, t(lang, "guestLastOrdersLoadFailed")));
+      const body = await res.json();
+      setLastOrders(Array.isArray(body) ? body : []);
+    } catch (e: any) {
+      setLastOrders([]);
+      setLastOrdersError(e?.message ?? t(lang, "guestLastOrdersLoadFailed"));
+    } finally {
+      setLastOrdersLoading(false);
+    }
+  }, [lang, session, sessionHeaders]);
+
+  const repeatLastOrder = useCallback(async (orderId: number) => {
+    const order = lastOrders.find((o) => o.orderId === orderId);
+    if (!order) return;
+    for (const it of order.items) {
+      const menuItem = menuItemById.get(it.menuItemId);
+      if (!menuItem) continue;
+      for (let i = 0; i < it.qty; i++) {
+        await addToCart(menuItem);
+      }
+    }
+  }, [lastOrders, menuItemById]);
 
   async function saveGuestProfile() {
     if (!session) return;
@@ -881,12 +921,24 @@ export default function TablePage({ params, searchParams }: any) {
       alert(t(lang, "enterCode"));
       return;
     }
+    if (!privacyAccepted) {
+      alert(t(lang, "consentRequired"));
+      return;
+    }
     setOtpVerifying(true);
     try {
       const res = await fetch(`${API_BASE}/api/public/otp/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...sessionHeaders() },
-        body: JSON.stringify({ guestSessionId: session.guestSessionId, challengeId: otpChallengeId, code: otpCode.trim() }),
+        body: JSON.stringify({
+          guestSessionId: session.guestSessionId,
+          challengeId: otpChallengeId,
+          code: otpCode.trim(),
+          privacyAccepted: true,
+          marketingAccepted,
+          privacyVersion: "v1",
+          marketingVersion: "v1",
+        }),
       });
       if (!res.ok) throw new Error(await readApiError(res, `${t(lang, "otpVerifyFailed")} (${res.status})`));
       setSession({ ...session, isVerified: true });
@@ -1584,6 +1636,40 @@ export default function TablePage({ params, searchParams }: any) {
                 </div>
               )}
             </div>
+            <div style={{ marginTop: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                <div style={{ fontWeight: 600 }}>{t(lang, "guestLastOrders")}</div>
+                <button onClick={loadLastOrders} disabled={lastOrdersLoading} style={{ padding: "6px 10px" }}>
+                  {lastOrdersLoading ? t(lang, "loading") : t(lang, "guestLastOrdersLoad")}
+                </button>
+              </div>
+              {lastOrdersError && <div style={{ fontSize: 12, color: "#dc2626", marginTop: 6 }}>{lastOrdersError}</div>}
+              {lastOrders.length === 0 ? (
+                <div style={{ fontSize: 12, color: "#666", marginTop: 6 }}>{t(lang, "guestLastOrdersEmpty")}</div>
+              ) : (
+                <div style={{ display: "grid", gap: 8, marginTop: 6 }}>
+                  {lastOrders.map((o) => (
+                    <div key={o.orderId} style={{ border: "1px solid #eee", borderRadius: 8, padding: 8 }}>
+                      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", fontSize: 12, color: "#666" }}>
+                        <span>#{o.orderId}</span>
+                        <span>{t(lang, "status")}: {o.status}</span>
+                        <span>{formatProfileDate(o.createdAt) || "—"}</span>
+                      </div>
+                      <div style={{ marginTop: 6, display: "grid", gap: 4 }}>
+                        {o.items.map((it, idx) => (
+                          <div key={`${o.orderId}-${it.menuItemId}-${idx}`} style={{ fontSize: 12 }}>
+                            {it.name} × {it.qty}
+                          </div>
+                        ))}
+                      </div>
+                      <button onClick={() => repeatLastOrder(o.orderId)} style={{ marginTop: 6, padding: "6px 10px" }}>
+                        {t(lang, "guestLastOrdersRepeat")}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </section>
@@ -1841,6 +1927,14 @@ export default function TablePage({ params, searchParams }: any) {
               placeholder={t(lang, "otpCodePlaceholder")}
               style={{ padding: "10px 12px", width: 120, border: "1px solid #ddd", borderRadius: 8 }}
             />
+            <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12 }}>
+              <input type="checkbox" checked={privacyAccepted} onChange={(e) => setPrivacyAccepted(e.target.checked)} />
+              {t(lang, "consentPrivacy")}
+            </label>
+            <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12 }}>
+              <input type="checkbox" checked={marketingAccepted} onChange={(e) => setMarketingAccepted(e.target.checked)} />
+              {t(lang, "consentMarketing")}
+            </label>
             <button disabled={otpVerifying} onClick={verifyOtp} style={{ padding: "10px 14px" }}>
               {otpVerifying ? t(lang, "verifying") : t(lang, "verify")}
             </button>

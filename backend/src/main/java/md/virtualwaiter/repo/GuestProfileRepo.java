@@ -7,4 +7,5 @@ import java.util.Optional;
 
 public interface GuestProfileRepo extends JpaRepository<GuestProfile, Long> {
   Optional<GuestProfile> findByPhoneE164(String phoneE164);
+  long deleteByLastVisitAtBefore(java.time.Instant lastVisitAt);
 }
