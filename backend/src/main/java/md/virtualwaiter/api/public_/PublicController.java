@@ -68,6 +68,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -89,6 +90,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import org.springframework.beans.factory.annotation.Value;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/public")
@@ -2333,7 +2335,7 @@ public class PublicController {
     if (!s.isVerified || s.verifiedPhone == null || s.verifiedPhone.isBlank()) {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Phone not verified");
     }
-    List<GuestSession> sessions = guestSessionRepo.findTop200ByVerifiedPhoneOrderByIdDesc(s.verifiedPhone);
+    List<GuestSession> sessions = sessionRepo.findTop200ByVerifiedPhoneOrderByIdDesc(s.verifiedPhone);
     if (sessions.isEmpty()) return List.of();
     List<Long> sessionIds = sessions.stream().map(gs -> gs.id).toList();
     List<Order> orders = orderRepo.findTop200ByGuestSessionIdInOrderByCreatedAtDesc(sessionIds);
@@ -2368,7 +2370,7 @@ public class PublicController {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Phone not verified");
     }
     int lim = limit == null ? 5 : Math.max(1, Math.min(limit, 20));
-    List<GuestSession> sessions = guestSessionRepo.findTop200ByVerifiedPhoneOrderByIdDesc(s.verifiedPhone);
+    List<GuestSession> sessions = sessionRepo.findTop200ByVerifiedPhoneOrderByIdDesc(s.verifiedPhone);
     if (sessions.isEmpty()) return List.of();
     List<Long> sessionIds = sessions.stream().map(gs -> gs.id).toList();
     List<Order> orders = orderRepo.findTop200ByGuestSessionIdInOrderByCreatedAtDesc(sessionIds);

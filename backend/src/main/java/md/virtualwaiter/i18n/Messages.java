@@ -56,6 +56,8 @@ public final class Messages {
     put("No active call", "error.no_active_call");
     put("guestSessionId required", "error.guest_session_id_required");
     put("Invalid guestSessionId", "error.invalid_guest_session_id");
+    put("Phone not verified", "error.phone_not_verified");
+    put("Privacy consent required", "error.privacy_consent_required");
 
     // Rate limits
     put("Too many session starts from IP", "error.too_many_session_starts");
@@ -146,6 +148,9 @@ public final class Messages {
     put("Waiter not found", "error.waiter_not_found");
     put("Hall not found", "error.hall_not_found");
     put("Hall does not belong to branch", "error.hall_wrong_branch");
+    put("Hall belongs to another branch", "error.hall_wrong_branch");
+    put("Hall scope requires branch", "error.hall_scope_requires_branch");
+    put("Wrong hall", "error.wrong_hall");
     put("Hall has tables assigned", "error.hall_has_tables");
     put("Body required", "error.body_required");
     put("Template not found", "error.template_not_found");
@@ -173,9 +178,17 @@ public final class Messages {
     put("token/platform required", "error.token_platform_required");
     put("token required", "error.token_required");
     put("Waiter not assigned", "error.waiter_not_assigned");
+    put("Device session not found", "error.device_session_not_found");
+    put("Shift not started", "error.shift_not_started");
 
     // OTP
     put("OTP resend cooldown", "error.otp_resend_cooldown");
+    put("OTP resend limit reached", "error.otp_resend_limit_reached");
+    put("Invalid code", "error.invalid_code");
+    put("Invalid TOTP", "error.invalid_totp");
+    put("TOTP required", "error.totp_required");
+    put("2FA is not initialized", "error.2fa_not_initialized");
+    put("2FA is only for admin roles", "error.2fa_admin_only");
     put("Challenge not found", "error.challenge_not_found");
     put("Challenge does not belong to session", "error.challenge_not_belong_session");
     put("Challenge not active", "error.challenge_not_active");
@@ -213,6 +226,10 @@ public final class Messages {
 
     // Misc
     put("phone required", "error.phone_required");
+    put("Unsupported permission", "error.unsupported_permission");
+    put("flagType required", "error.flag_type_required");
+    put("phones required", "error.phones_required");
+    put("staffUserId belongs to another branch", "error.staff_user_wrong_branch");
   }
 
   private Messages() {}

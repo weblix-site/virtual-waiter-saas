@@ -1372,10 +1372,10 @@ export default function AdminPage() {
   const [guestConsentLogs, setGuestConsentLogs] = useState<{
     consentType: string;
     accepted: boolean;
-    textVersion?: string | null;
-    ip?: string | null;
-    userAgent?: string | null;
-    createdAt?: string | null;
+    textVersion: string | null;
+    ip: string | null;
+    userAgent: string | null;
+    createdAt: string | null;
   }[]>([]);
   const [guestConsentType, setGuestConsentType] = useState<"" | "PRIVACY" | "MARKETING">("");
   const [guestConsentAccepted, setGuestConsentAccepted] = useState<"" | "true" | "false">("");
@@ -3473,7 +3473,16 @@ export default function AdminPage() {
       if (guestConsentPage) qs.set("page", String(guestConsentPage));
       const res = await api(`/api/admin/guest-consents?${qs.toString()}`);
       if (!res.ok) throw new Error(await res.text());
-      setGuestConsentLogs(await res.json());
+      const body = await res.json();
+      const normalized = (Array.isArray(body) ? body : []).map((log: any) => ({
+        consentType: String(log?.consentType ?? ""),
+        accepted: !!log?.accepted,
+        textVersion: log?.textVersion ?? null,
+        ip: log?.ip ?? null,
+        userAgent: log?.userAgent ?? null,
+        createdAt: log?.createdAt ?? null,
+      }));
+      setGuestConsentLogs(normalized);
     } catch (e: any) {
       setGuestConsentLogs([]);
       setGuestConsentError(e?.message ?? "Failed to load guest consents");
@@ -4232,8 +4241,7 @@ export default function AdminPage() {
       {error && <div style={{ color: "#b11e46", marginTop: 8 }}>{error}</div>}
 
       {showOnboarding && (
-      {showMenu && (
-      <section style={{ marginTop: 24 }}>
+        <section style={{ marginTop: 24 }}>
         <h2>{t(lang, "onboardingTitle")}</h2>
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           {onboardingStatus && (
@@ -4391,8 +4399,7 @@ export default function AdminPage() {
             </div>
           </div>
         )}
-      </section>
-      )}
+        </section>
       )}
 
       {showSettings && (
@@ -4818,8 +4825,7 @@ export default function AdminPage() {
       )}
 
       {showPayments && (
-      {showReports && (
-      <section style={{ marginTop: 24 }}>
+        <section style={{ marginTop: 24 }}>
         <h2>{t(lang, "discounts")}</h2>
         {discountError && <div style={{ color: "#b11e46", marginBottom: 8 }}>{discountError}</div>}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
@@ -5122,12 +5128,11 @@ export default function AdminPage() {
             </table>
           </div>
         )}
-      </section>
-      )}
+        </section>
       )}
 
       {showAudit && (
-      <section style={{ marginTop: 24 }}>
+        <section style={{ marginTop: 24 }}>
         <h2>{t(lang, "parties")}</h2>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <label>

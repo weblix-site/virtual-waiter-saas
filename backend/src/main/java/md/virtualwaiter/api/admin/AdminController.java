@@ -1390,7 +1390,9 @@ public class AdminController {
       r.commissionMonthlyFixedCents(),
       r.commissionMonthlyPercent(),
       r.commissionOrderPercent(),
-      r.commissionOrderFixedCents()
+      r.commissionOrderFixedCents(),
+      r.adminIpAllowlist(),
+      r.adminIpDenylist()
     );
   }
 

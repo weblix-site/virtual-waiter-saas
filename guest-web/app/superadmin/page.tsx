@@ -1711,7 +1711,16 @@ export default function SuperAdminPage() {
       if (guestConsentPage) qs.set("page", String(guestConsentPage));
       const res = await api(`/api/super/guest-consents?${qs.toString()}`);
       if (!res.ok) throw new Error(await res.text());
-      setGuestConsentLogs(await res.json());
+      const body = await res.json();
+      const normalized = (Array.isArray(body) ? body : []).map((log: any) => ({
+        consentType: String(log?.consentType ?? ""),
+        accepted: !!log?.accepted,
+        textVersion: log?.textVersion ?? null,
+        ip: log?.ip ?? null,
+        userAgent: log?.userAgent ?? null,
+        createdAt: log?.createdAt ?? null,
+      }));
+      setGuestConsentLogs(normalized);
     } catch (err: any) {
       setGuestConsentError(err?.message ?? "Failed to load");
       setGuestConsentLogs([]);

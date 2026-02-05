@@ -340,10 +340,10 @@ public class StaffController {
     Authentication auth
   ) {
     StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
-    hallId = enforceHallScope(u, hallId);
+    Long hallIdScoped = enforceHallScope(u, hallId);
     List<CafeTable> tables = tableRepo.findByBranchId(u.branchId);
-    if (hallId != null) {
-      tables = tables.stream().filter(t -> Objects.equals(t.hallId, hallId)).toList();
+    if (hallIdScoped != null) {
+      tables = tables.stream().filter(t -> Objects.equals(t.hallId, hallIdScoped)).toList();
     }
     List<StaffTableDto> out = new ArrayList<>();
     for (CafeTable t : tables) {
@@ -768,10 +768,10 @@ public class StaffController {
     Authentication auth
   ) {
     StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
-    hallId = enforceHallScope(u, hallId);
+    Long hallIdScoped = enforceHallScope(u, hallId);
     List<CafeTable> tables = tableRepo.findByBranchId(u.branchId);
-    if (hallId != null) {
-      tables = tables.stream().filter(t -> Objects.equals(t.hallId, hallId)).toList();
+    if (hallIdScoped != null) {
+      tables = tables.stream().filter(t -> Objects.equals(t.hallId, hallIdScoped)).toList();
     }
     List<Long> tableIds = tables.stream().map(t -> t.id).toList();
     if (tableIds.isEmpty()) return List.of();
@@ -829,7 +829,7 @@ public class StaffController {
     Authentication auth
   ) {
     StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
-    hallId = enforceHallScope(u, hallId);
+    Long hallIdScoped = enforceHallScope(u, hallId);
     Instant sinceTs;
     try {
       sinceTs = Instant.parse(since);
@@ -837,8 +837,8 @@ public class StaffController {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid since");
     }
     List<CafeTable> tables = tableRepo.findByBranchId(u.branchId);
-    if (hallId != null) {
-      tables = tables.stream().filter(t -> Objects.equals(t.hallId, hallId)).toList();
+    if (hallIdScoped != null) {
+      tables = tables.stream().filter(t -> Objects.equals(t.hallId, hallIdScoped)).toList();
     }
     List<Long> tableIds = tables.stream().map(t -> t.id).toList();
     if (tableIds.isEmpty()) return List.of();
@@ -895,7 +895,7 @@ public class StaffController {
     Authentication auth
   ) {
     StaffUser u = requireRole(auth, "WAITER", "KITCHEN", "ADMIN");
-    hallId = enforceHallScope(u, hallId);
+    Long hallIdScoped = enforceHallScope(u, hallId);
     if (ids == null || ids.isBlank()) return List.of();
     List<Long> orderIds = new ArrayList<>();
     for (String part : ids.split(",")) {
@@ -909,8 +909,8 @@ public class StaffController {
     if (orderIds.isEmpty()) return List.of();
 
     List<CafeTable> tables = tableRepo.findByBranchId(u.branchId);
-    if (hallId != null) {
-      tables = tables.stream().filter(t -> Objects.equals(t.hallId, hallId)).toList();
+    if (hallIdScoped != null) {
+      tables = tables.stream().filter(t -> Objects.equals(t.hallId, hallIdScoped)).toList();
     }
     Set<Long> tableIds = new HashSet<>();
     for (CafeTable t : tables) tableIds.add(t.id);
@@ -932,10 +932,10 @@ public class StaffController {
     Authentication auth
   ) {
     StaffUser u = requireRole(auth, "KITCHEN", "ADMIN");
-    hallId = enforceHallScope(u, hallId);
+    Long hallIdScoped = enforceHallScope(u, hallId);
     List<CafeTable> tables = tableRepo.findByBranchId(u.branchId);
-    if (hallId != null) {
-      tables = tables.stream().filter(t -> Objects.equals(t.hallId, hallId)).toList();
+    if (hallIdScoped != null) {
+      tables = tables.stream().filter(t -> Objects.equals(t.hallId, hallIdScoped)).toList();
     }
     List<Long> tableIds = tables.stream().map(t -> t.id).toList();
     if (tableIds.isEmpty()) return List.of();
@@ -1086,10 +1086,10 @@ public class StaffController {
   @GetMapping("/waiter-calls/active")
   public List<StaffWaiterCallDto> activeCalls(@RequestParam(value = "hallId", required = false) Long hallId, Authentication auth) {
     StaffUser u = requireRole(auth, "WAITER", "ADMIN");
-    hallId = enforceHallScope(u, hallId);
+    Long hallIdScoped = enforceHallScope(u, hallId);
     List<CafeTable> tables = tableRepo.findByBranchId(u.branchId);
-    if (hallId != null) {
-      tables = tables.stream().filter(t -> Objects.equals(t.hallId, hallId)).toList();
+    if (hallIdScoped != null) {
+      tables = tables.stream().filter(t -> Objects.equals(t.hallId, hallIdScoped)).toList();
     }
     List<Long> tableIds = tables.stream().map(t -> t.id).toList();
     if (tableIds.isEmpty()) return List.of();

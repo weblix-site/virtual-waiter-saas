@@ -1916,7 +1916,7 @@ export default function TablePage({ params, searchParams }: any) {
                 <option value="TELEGRAM">{t(lang, "otpChannelTelegram")}</option>
               </select>
             </label>
-            <button disabled={otpSending} onClick={sendOtp} style={{ padding: "10px 14px" }}>
+            <button disabled={otpSending} onClick={() => sendOtp()} style={{ padding: "10px 14px" }}>
               {otpSending ? t(lang, "sendCodeProgress") : t(lang, "sendCode")}
             </button>
           </div>
