@@ -2815,14 +2815,6 @@ export default function AdminPage() {
   }, [staffFilterText, staffFilterRole, staffFilterActive]);
 
   useEffect(() => {
-    if (!branchRecTemplateId) {
-      setBranchRecTemplateItems([]);
-      return;
-    }
-    loadBranchRecTemplateItems(Number(branchRecTemplateId));
-  }, [branchRecTemplateId, loadBranchRecTemplateItems]);
-
-  useEffect(() => {
     if (auditLimit > 0) {
       localStorage.setItem("admin_audit_limit", String(auditLimit));
     }
@@ -3256,6 +3248,14 @@ export default function AdminPage() {
       setBranchRecTemplateItemsLoading(false);
     }
   }, [api, lang]);
+
+  useEffect(() => {
+    if (!branchRecTemplateId) {
+      setBranchRecTemplateItems([]);
+      return;
+    }
+    loadBranchRecTemplateItems(Number(branchRecTemplateId));
+  }, [branchRecTemplateId, loadBranchRecTemplateItems]);
 
   async function saveBranchRecTemplateItems() {
     if (!branchRecTemplateId) return;
