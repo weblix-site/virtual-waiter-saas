@@ -1128,7 +1128,7 @@ export default function AdminPage() {
     HALL_PLAN_MANAGE: "permHallPlanManage",
   };
 
-  const permissionOrder = [
+  const permissionOrder = useMemo(() => ([
     "ADMIN_ACCESS",
     "SUPERADMIN_ACCESS",
     "STAFF_VIEW",
@@ -1144,9 +1144,9 @@ export default function AdminPage() {
     "GUEST_FLAGS_MANAGE",
     "MEDIA_MANAGE",
     "HALL_PLAN_MANAGE",
-  ];
+  ]), []);
 
-  const roleDefaultPermissions: Record<string, string[]> = {
+  const roleDefaultPermissions = useMemo<Record<string, string[]>>(() => ({
     SUPER_ADMIN: [
       "SUPERADMIN_ACCESS",
       "ADMIN_ACCESS",
@@ -1216,21 +1216,24 @@ export default function AdminPage() {
     MARKETER: ["ADMIN_ACCESS", "REPORTS_VIEW", "LOYALTY_MANAGE", "MENU_VIEW"],
     ACCOUNTANT: ["ADMIN_ACCESS", "REPORTS_VIEW", "PAYMENTS_MANAGE", "AUDIT_VIEW"],
     SUPPORT: ["ADMIN_ACCESS", "AUDIT_VIEW", "REPORTS_VIEW"],
-  };
+  }), []);
 
-  const normalizePermList = (list: string[]) => {
+  const normalizePermList = useCallback((list: string[]) => {
     const set = new Set(
       list
         .map((s) => s.trim().toUpperCase())
         .filter((s) => s.length > 0)
     );
     return permissionOrder.filter((p) => set.has(p));
-  };
+  }, [permissionOrder]);
 
-  const parsePermissionsCsv = (raw?: string | null) => normalizePermList((raw ?? "").split(/[,\s]+/));
+  const parsePermissionsCsv = useCallback((raw?: string | null) => {
+    return normalizePermList((raw ?? "").split(/[,\s]+/));
+  }, [normalizePermList]);
 
-  const defaultPermsForRole = (role?: string | null) =>
-    normalizePermList(roleDefaultPermissions[(role ?? "").toUpperCase()] ?? []);
+  const defaultPermsForRole = useCallback((role?: string | null) => {
+    return normalizePermList(roleDefaultPermissions[(role ?? "").toUpperCase()] ?? []);
+  }, [normalizePermList, roleDefaultPermissions]);
 
   const formatPermList = (list: string[]) =>
     list.length ? list.map((p) => t(lang, permissionLabels[p] ?? p)).join(", ") : "—";
@@ -1661,7 +1664,7 @@ export default function AdminPage() {
     setPermissionsOverride(override);
     setPermissionsSelected(override ? parsePermissionsCsv(su.permissions) : defaultPermsForRole(su.role));
     setPermissionsMessage(null);
-  }, [permissionsStaffId, staff]);
+  }, [permissionsStaffId, staff, parsePermissionsCsv, defaultPermsForRole]);
 
   const hasPerm = (p: string) => myPerms.includes(p);
   const canMenuView = hasPerm("MENU_VIEW") || hasPerm("MENU_MANAGE");
@@ -4206,7 +4209,7 @@ export default function AdminPage() {
           {totpSecret && (
             <div style={{ marginTop: 8, fontSize: 13, color: "#475569", display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
               {totpQrDataUrl && (
-                <img src={totpQrDataUrl} alt="TOTP QR" width={160} height={160} style={{ border: "1px solid #e2e8f0", borderRadius: 8, background: "#fff" }} />
+                <Image src={totpQrDataUrl} alt="TOTP QR" width={160} height={160} style={{ border: "1px solid #e2e8f0", borderRadius: 8, background: "#fff" }} />
               )}
               <div style={{ minWidth: 240 }}>
                 <div>{t(lang, "totpSecret")}: <code>{totpSecret}</code></div>

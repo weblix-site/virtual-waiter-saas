@@ -434,18 +434,6 @@ export default function TablePage({ params, searchParams }: any) {
     }
   }, [lang, session, sessionHeaders]);
 
-  const repeatLastOrder = useCallback(async (orderId: number) => {
-    const order = lastOrders.find((o) => o.orderId === orderId);
-    if (!order) return;
-    for (const it of order.items) {
-      const menuItem = menuItemById.get(it.menuItemId);
-      if (!menuItem) continue;
-      for (let i = 0; i < it.qty; i++) {
-        await addToCart(menuItem);
-      }
-    }
-  }, [lastOrders, menuItemById]);
-
   async function saveGuestProfile() {
     if (!session) return;
     if (!session.isVerified) return;
@@ -500,7 +488,7 @@ export default function TablePage({ params, searchParams }: any) {
     setGuestProfileError(null);
     setGuestProfileSaved(false);
     setGuestVisits([]);
-  }, [session?.guestSessionId]);
+  }, [session]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -523,7 +511,18 @@ export default function TablePage({ params, searchParams }: any) {
     window.localStorage.setItem("vw_offers_filter", offersFilter);
   }, [offersFilter]);
 
-  async function addToCart(item: MenuItem) {
+  const ensureModifiersLoaded = useCallback(async (itemId: number) => {
+    if (modifiersByItem[itemId]) return modifiersByItem[itemId];
+    const res = await fetch(`${API_BASE}/api/public/menu-item/${itemId}/modifiers?tablePublicId=${encodeURIComponent(tablePublicId)}&sig=${encodeURIComponent(sig)}&ts=${encodeURIComponent(ts)}&locale=${lang}`);
+    if (res.ok) {
+      const body: MenuItemModifiersResponse = await res.json();
+      setModifiersByItem((prev) => ({ ...prev, [itemId]: body }));
+      return body;
+    }
+    return null;
+  }, [lang, modifiersByItem, sig, tablePublicId, ts]);
+
+  const addToCart = useCallback(async (item: MenuItem) => {
     setOrderId(null);
     const loaded = await ensureModifiersLoaded(item.id);
     const mods = loaded ?? modifiersByItem[item.id];
@@ -543,7 +542,19 @@ export default function TablePage({ params, searchParams }: any) {
     if (hasRequired) {
       setModOpenByItem((prev) => ({ ...prev, [item.id]: true }));
     }
-  }
+  }, [ensureModifiersLoaded, modifiersByItem]);
+
+  const repeatLastOrder = useCallback(async (orderId: number) => {
+    const order = lastOrders.find((o) => o.orderId === orderId);
+    if (!order) return;
+    for (const it of order.items) {
+      const menuItem = menuItemById.get(it.menuItemId);
+      if (!menuItem) continue;
+      for (let i = 0; i < it.qty; i++) {
+        await addToCart(menuItem);
+      }
+    }
+  }, [lastOrders, menuItemById, addToCart]);
 
   function dec(itemId: number) {
     setCart((prev) => {
@@ -555,17 +566,6 @@ export default function TablePage({ params, searchParams }: any) {
       else next[idx] = { ...next[idx], qty: q };
       return next;
     });
-  }
-
-  async function ensureModifiersLoaded(itemId: number) {
-    if (modifiersByItem[itemId]) return modifiersByItem[itemId];
-    const res = await fetch(`${API_BASE}/api/public/menu-item/${itemId}/modifiers?tablePublicId=${encodeURIComponent(tablePublicId)}&sig=${encodeURIComponent(sig)}&ts=${encodeURIComponent(ts)}&locale=${lang}`);
-    if (res.ok) {
-      const body: MenuItemModifiersResponse = await res.json();
-      setModifiersByItem((prev) => ({ ...prev, [itemId]: body }));
-      return body;
-    }
-    return null;
   }
 
   function validateModifiers(itemId: number, selectedIds: number[]) {
