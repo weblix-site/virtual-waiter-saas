@@ -57,14 +57,17 @@ flutter pub get
 flutter run --dart-define=API_BASE=http://localhost:8080
 ```
 
-Если `flutter` не найден, установите Flutter SDK и добавьте в PATH (пример для Linux):
+Если `flutter` не найден, установите Flutter SDK и добавьте в PATH на постоянной основе (пример для Linux):
 ```bash
 sudo mkdir -p /opt
 sudo git clone https://github.com/flutter/flutter.git -b stable --depth 1 /opt/flutter
 echo 'export PATH=/opt/flutter/bin:$PATH' >> ~/.profile
-source ~/.profile
+echo 'export PATH=/opt/flutter/bin:$PATH' >> ~/.bashrc
+source ~/.profile || true
+source ~/.bashrc || true
 flutter --version
 ```
+Если `flutter` всё ещё не найден — перезапустите терминал/сессию.
 
 ---
 

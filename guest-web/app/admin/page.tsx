@@ -26,6 +26,13 @@ const dict: Record<string, Record<Lang, string>> = {
   settings: { ru: "Настройки", ro: "Setări", en: "Settings" },
   saveSettings: { ru: "Сохранить настройки", ro: "Salvează setările", en: "Save settings" },
   menu: { ru: "Меню", ro: "Meniu", en: "Menu" },
+  menuTimeSlots: { ru: "Расписание меню", ro: "Program meniu", en: "Menu schedule" },
+  timeSlotName: { ru: "Название слота", ro: "Nume slot", en: "Slot name" },
+  timeSlotDays: { ru: "Дни", ro: "Zile", en: "Days" },
+  timeSlotStart: { ru: "Начало", ro: "Start", en: "Start" },
+  timeSlotEnd: { ru: "Конец", ro: "Sfârșit", en: "End" },
+  timeSlotAssign: { ru: "Доступно по времени", ro: "Disponibil în timp", en: "Time availability" },
+  timeSlotNone: { ru: "Без ограничений", ro: "Fără restricții", en: "No restrictions" },
   categories: { ru: "Категории", ro: "Categorii", en: "Categories" },
   items: { ru: "Блюда", ro: "Produse", en: "Items" },
   staff: { ru: "Персонал", ro: "Personal", en: "Staff" },
@@ -95,6 +102,16 @@ const dict: Record<string, Record<Lang, string>> = {
   menuTemplateApplied: { ru: "Шаблон применен", ro: "Șablon aplicat", en: "Template applied" },
   menuTemplateError: { ru: "Ошибка шаблона меню", ro: "Eroare șablon meniu", en: "Menu template error" },
   menuTemplateAppliedLabel: { ru: "Шаблон меню", ro: "Șablon meniu", en: "Menu template" },
+  menuTagsTitle: { ru: "Теги и аллергены", ro: "Etichete și alergeni", en: "Tags & allergens" },
+  menuTagName: { ru: "Название тега", ro: "Nume etichetă", en: "Tag name" },
+  menuTagSlug: { ru: "Slug (авто)", ro: "Slug (auto)", en: "Slug (auto)" },
+  menuTagAllergen: { ru: "Аллерген", ro: "Alergen", en: "Allergen" },
+  menuTagActive: { ru: "Активен", ro: "Activ", en: "Active" },
+  menuTagCreate: { ru: "Добавить тег", ro: "Adaugă etichetă", en: "Add tag" },
+  menuTagUpdate: { ru: "Сохранить тег", ro: "Salvează eticheta", en: "Save tag" },
+  menuTagDelete: { ru: "Удалить тег", ro: "Șterge eticheta", en: "Delete tag" },
+  menuItemTagsLabel: { ru: "Теги (справочник)", ro: "Etichete (catalog)", en: "Tags (catalog)" },
+  menuItemTagsNone: { ru: "Нет доступных тегов", ro: "Nu există etichete", en: "No tags available" },
   discountScope: { ru: "Тип", ro: "Tip", en: "Scope" },
   discountScopeCoupon: { ru: "Промокод", ro: "Cod promo", en: "Coupon" },
   discountScopeHappyHour: { ru: "Happy‑hour", ro: "Happy‑hour", en: "Happy hour" },
@@ -322,6 +339,7 @@ const dict: Record<string, Record<Lang, string>> = {
     en: "Currency list is managed in Super Admin.",
   },
   defaultLanguage: { ru: "Язык по умолчанию (гость)", ro: "Limba implicită (oaspete)", en: "Default language (guest)" },
+  timeZone: { ru: "Часовой пояс", ro: "Fus orar", en: "Time zone" },
   langRu: { ru: "Русский", ro: "Rusă", en: "Russian" },
   langRo: { ru: "Румынский", ro: "Română", en: "Romanian" },
   langEn: { ru: "Английский", ro: "Engleză", en: "English" },
@@ -623,6 +641,29 @@ const dict: Record<string, Record<Lang, string>> = {
 const t = (lang: Lang, key: string) => dict[key]?.[lang] ?? key;
 
 const ORDER_STATUS_OPTIONS = ["NEW", "ACCEPTED", "IN_PROGRESS", "READY", "SERVED", "CLOSED", "CANCELLED"];
+const DAY_BITS = [1, 2, 4, 8, 16, 32, 64];
+const DAY_LABELS: Record<Lang, string[]> = {
+  ru: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"],
+  ro: ["Lu", "Ma", "Mi", "Jo", "Vi", "Sa", "Du"],
+  en: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+};
+const TIME_ZONE_OPTIONS = [
+  "UTC",
+  "Europe/Chisinau",
+  "Europe/Kiev",
+  "Europe/Bucharest",
+  "Europe/Warsaw",
+  "Europe/London",
+  "Europe/Berlin",
+  "Europe/Paris",
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Los_Angeles",
+  "Asia/Dubai",
+  "Asia/Tbilisi",
+  "Asia/Yerevan",
+];
 
 const toLocalInput = (iso?: string | null) => {
   if (!iso) return "";
@@ -670,6 +711,24 @@ type MenuItem = {
   currency: string;
   isActive: boolean;
   isStopList: boolean;
+};
+
+type MenuTimeSlot = {
+  id: number;
+  branchId: number;
+  name: string;
+  daysMask: number;
+  startTime: string;
+  endTime: string;
+  isActive: boolean;
+};
+
+type MenuTag = {
+  id: number;
+  name: string;
+  slug: string;
+  isAllergen: boolean;
+  isActive: boolean;
 };
 
 type TableDto = {
@@ -874,6 +933,7 @@ type BranchSettings = {
   payTerminalEnabled: boolean;
   currencyCode?: string;
   defaultLang?: string;
+  timeZone?: string;
   commissionModel?: string;
   commissionMonthlyFixedCents?: number;
   commissionMonthlyPercent?: number;
@@ -1238,6 +1298,16 @@ export default function AdminPage() {
   const formatPermList = (list: string[]) =>
     list.length ? list.map((p) => t(lang, permissionLabels[p] ?? p)).join(", ") : "—";
 
+  const slugifyTag = useCallback((value: string) => {
+    return value
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+  }, []);
+
   const rolesMatrix = [
     "SUPER_ADMIN",
     "OWNER",
@@ -1255,6 +1325,7 @@ export default function AdminPage() {
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<MenuItem[]>([]);
+  const [menuTags, setMenuTags] = useState<MenuTag[]>([]);
   const [menuTemplates, setMenuTemplates] = useState<MenuTemplateDto[]>([]);
   const [menuTemplateName, setMenuTemplateName] = useState("");
   const [menuTemplateScope, setMenuTemplateScope] = useState<"TENANT" | "RESTAURANT">("TENANT");
@@ -1547,6 +1618,7 @@ export default function AdminPage() {
   const [newItemAllergens, setNewItemAllergens] = useState("");
   const [newItemWeight, setNewItemWeight] = useState("");
   const [newItemTags, setNewItemTags] = useState("");
+  const [newItemTagIds, setNewItemTagIds] = useState<number[]>([]);
   const [newItemPhotos, setNewItemPhotos] = useState("");
   const [newItemKcal, setNewItemKcal] = useState(0);
   const [newItemProtein, setNewItemProtein] = useState(0);
@@ -1560,6 +1632,19 @@ export default function AdminPage() {
   const [menuFilterCategoryId, setMenuFilterCategoryId] = useState<number | "">("");
   const [menuFilterActive, setMenuFilterActive] = useState<string | "">("");
   const [menuFilterStopList, setMenuFilterStopList] = useState<string | "">("");
+  const [timeSlots, setTimeSlots] = useState<MenuTimeSlot[]>([]);
+  const [timeSlotsLoading, setTimeSlotsLoading] = useState(false);
+  const [timeSlotsError, setTimeSlotsError] = useState<string | null>(null);
+  const [newTimeSlotName, setNewTimeSlotName] = useState("");
+  const [newTimeSlotStart, setNewTimeSlotStart] = useState("08:00");
+  const [newTimeSlotEnd, setNewTimeSlotEnd] = useState("12:00");
+  const [newTimeSlotDaysMask, setNewTimeSlotDaysMask] = useState(127);
+  const [newTimeSlotActive, setNewTimeSlotActive] = useState(true);
+  const [editingTimeSlotId, setEditingTimeSlotId] = useState<number | null>(null);
+  const [editTimeSlot, setEditTimeSlot] = useState<Partial<MenuTimeSlot>>({});
+  const [editItemTimeSlotIds, setEditItemTimeSlotIds] = useState<number[]>([]);
+  const [editItemTimeSlotsLoading, setEditItemTimeSlotsLoading] = useState(false);
+  const [editItemTimeSlotsSaving, setEditItemTimeSlotsSaving] = useState(false);
 
   const [editingCategoryId, setEditingCategoryId] = useState<number | null>(null);
   const [editCatNameRu, setEditCatNameRu] = useState("");
@@ -1570,6 +1655,16 @@ export default function AdminPage() {
 
   const [editingItemId, setEditingItemId] = useState<number | null>(null);
   const [editItem, setEditItem] = useState<Partial<MenuItem>>({});
+  const [editItemTagIds, setEditItemTagIds] = useState<number[]>([]);
+  const [editItemTagsLoading, setEditItemTagsLoading] = useState(false);
+  const [editItemTagsSaving, setEditItemTagsSaving] = useState(false);
+
+  const [newMenuTagName, setNewMenuTagName] = useState("");
+  const [newMenuTagSlug, setNewMenuTagSlug] = useState("");
+  const [newMenuTagAllergen, setNewMenuTagAllergen] = useState(false);
+  const [newMenuTagActive, setNewMenuTagActive] = useState(true);
+  const [editingMenuTagId, setEditingMenuTagId] = useState<number | null>(null);
+  const [editMenuTag, setEditMenuTag] = useState<Partial<MenuTag>>({});
 
   const [newTableNumber, setNewTableNumber] = useState(1);
   const [newTablePublicId, setNewTablePublicId] = useState("");
@@ -1690,6 +1785,15 @@ export default function AdminPage() {
   const showAudit = canAudit;
   const showInventory = canInventory;
 
+  const formatDaysMask = (mask: number) => {
+    const labels = DAY_LABELS[lang].filter((_, idx) => (mask & DAY_BITS[idx]) !== 0);
+    return labels.length > 0 ? labels.join(", ") : "-";
+  };
+
+  const toggleDaysMask = (mask: number, idx: number) => {
+    return mask ^ DAY_BITS[idx];
+  };
+
   const needHalls = showHall || showReports || showStaff;
   const needTables = showHall || showReports || canMenuView;
 
@@ -1699,7 +1803,7 @@ export default function AdminPage() {
     }
   }, [multiSelectMode]);
 
-  async function api(path: string, init?: RequestInit) {
+  const api = useCallback(async (path: string, init?: RequestInit) => {
     const res = await fetch(`${API_BASE}${path}`, {
       ...init,
       credentials: "include",
@@ -1722,7 +1826,7 @@ export default function AdminPage() {
       throw new Error(body?.message ?? `Request failed (${res.status})`);
     }
     return res;
-  }
+  }, []);
 
   async function uploadMediaFile(file: File, type: string) {
     const form = new FormData();
@@ -2067,9 +2171,9 @@ export default function AdminPage() {
         setPlanTemplates([]);
       }
     })();
-  }, [authReady, hallId]);
+  }, [api, authReady, hallId]);
 
-  async function loadDeviceSessions() {
+  const loadDeviceSessions = useCallback(async () => {
     if (!authReady) return;
     setDeviceLoading(true);
     setDeviceError(null);
@@ -2085,7 +2189,7 @@ export default function AdminPage() {
     } finally {
       setDeviceLoading(false);
     }
-  }
+  }, [authReady, deviceIncludeRevoked, deviceStaffFilterId, api]);
 
   async function revokeDeviceSession(id: number) {
     if (!confirm(t(lang, "deviceSessionRevokeConfirm"))) return;
@@ -2123,15 +2227,17 @@ export default function AdminPage() {
     }
   }
 
-  async function loadAll() {
+  const loadAll = useCallback(async () => {
     if (!authReady) return;
     setError(null);
     try {
-      const [branchRes, catsRes, itemsRes, templatesRes, tablesRes, staffRes, settingsRes, modGroupsRes, partiesRes, hallsRes, currenciesRes, discountsRes, inventoryRes, inventoryLowRes, onboardingRes, onboardingAuditRes, myIpRes] = await Promise.all([
+      const [branchRes, catsRes, itemsRes, tagsRes, templatesRes, timeSlotsRes, tablesRes, staffRes, settingsRes, modGroupsRes, partiesRes, hallsRes, currenciesRes, discountsRes, inventoryRes, inventoryLowRes, onboardingRes, onboardingAuditRes, myIpRes] = await Promise.all([
         api("/api/admin/branch"),
         canMenuView ? api("/api/admin/menu/categories") : Promise.resolve(null),
         canMenuView ? api("/api/admin/menu/items") : Promise.resolve(null),
+        canMenuView ? api("/api/admin/menu/tags") : Promise.resolve(null),
         canMenuView ? api("/api/admin/menu-templates?includeInactive=true") : Promise.resolve(null),
+        canMenuView ? api("/api/admin/menu/time-slots") : Promise.resolve(null),
         needTables ? api("/api/admin/tables") : Promise.resolve(null),
         canStaffView ? api("/api/admin/staff") : Promise.resolve(null),
         canSettings ? api("/api/admin/branch-settings") : Promise.resolve(null),
@@ -2149,7 +2255,9 @@ export default function AdminPage() {
       setBranchInfo(await branchRes.json());
       setCategories(catsRes ? await catsRes.json() : []);
       setItems(itemsRes ? await itemsRes.json() : []);
+      setMenuTags(tagsRes ? await tagsRes.json() : []);
       setMenuTemplates(templatesRes ? await templatesRes.json() : []);
+      setTimeSlots(timeSlotsRes ? await timeSlotsRes.json() : []);
       setTables(tablesRes ? await tablesRes.json() : []);
       setStaff(staffRes ? await staffRes.json() : []);
       const settingsBody = settingsRes ? await settingsRes.json() : null;
@@ -2182,7 +2290,23 @@ export default function AdminPage() {
     } catch (e: any) {
       setError(e?.message ?? "Load error");
     }
-  }
+  }, [
+    authReady,
+    api,
+    canMenuView,
+    needTables,
+    canStaffView,
+    canSettings,
+    partyStatusFilter,
+    needHalls,
+    canPayments,
+    canInventory,
+    showOnboarding,
+    canAudit,
+    hallId,
+    newItemCurrency,
+    loadDeviceSessions,
+  ]);
 
   async function refreshOnboarding() {
     if (!authReady) return;
@@ -2447,8 +2571,7 @@ export default function AdminPage() {
         setError(e?.message ?? "Hall load error");
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hallId, authReady]);
+  }, [api, authReady, hallId]);
 
   useEffect(() => {
     if (!hallPlanId) return;
@@ -2552,13 +2675,6 @@ export default function AdminPage() {
   ]);
 
   useEffect(() => {
-    if (!authReady) return;
-    loadMe();
-    loadTotpStatus();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authReady]);
-
-  useEffect(() => {
     let cancelled = false;
     async function buildQr() {
       if (!totpOtpauth) {
@@ -2578,11 +2694,6 @@ export default function AdminPage() {
     };
   }, [totpOtpauth]);
 
-  useEffect(() => {
-    if (!authReady || !permsLoaded) return;
-    loadAll();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authReady, permsLoaded, partyStatusFilter]);
 
   async function login() {
     setError(null);
@@ -2623,7 +2734,22 @@ export default function AdminPage() {
     }
   }
 
-  async function loadMe(force = false) {
+  const loadTotpStatus = useCallback(async (force = false) => {
+    if (!authReady && !force) return;
+    try {
+      const res = await api("/api/admin/2fa/status");
+      if (!res.ok) {
+        setTotpStatus(null);
+        return;
+      }
+      const body = await res.json();
+      setTotpStatus(body);
+    } catch {
+      setTotpStatus(null);
+    }
+  }, [authReady, api]);
+
+  const loadMe = useCallback(async (force = false) => {
     if (!authReady && !force) return;
     try {
       const res = await api("/api/admin/me");
@@ -2638,22 +2764,18 @@ export default function AdminPage() {
     } finally {
       setPermsLoaded(true);
     }
-  }
+  }, [authReady, api, loadTotpStatus]);
 
-  async function loadTotpStatus(force = false) {
-    if (!authReady && !force) return;
-    try {
-      const res = await api("/api/admin/2fa/status");
-      if (!res.ok) {
-        setTotpStatus(null);
-        return;
-      }
-      const body = await res.json();
-      setTotpStatus(body);
-    } catch {
-      setTotpStatus(null);
-    }
-  }
+  useEffect(() => {
+    if (!authReady) return;
+    loadMe();
+    loadTotpStatus();
+  }, [authReady, loadMe, loadTotpStatus]);
+
+  useEffect(() => {
+    if (!authReady || !permsLoaded) return;
+    loadAll();
+  }, [authReady, permsLoaded, loadAll]);
 
   async function setupTotp() {
     setTotpError(null);
@@ -2716,9 +2838,54 @@ export default function AdminPage() {
     loadAll();
   }
 
+  async function createMenuTag() {
+    const name = newMenuTagName.trim();
+    if (!name) return;
+    await api("/api/admin/menu/tags", {
+      method: "POST",
+      body: JSON.stringify({
+        name,
+        isAllergen: newMenuTagAllergen,
+        isActive: newMenuTagActive,
+      }),
+    });
+    setNewMenuTagName("");
+    setNewMenuTagSlug("");
+    setNewMenuTagAllergen(false);
+    setNewMenuTagActive(true);
+    loadAll();
+  }
+
+  function startEditMenuTag(tag: MenuTag) {
+    setEditingMenuTagId(tag.id);
+    setEditMenuTag({ ...tag });
+  }
+
+  async function saveMenuTag() {
+    if (!editingMenuTagId) return;
+    const name = (editMenuTag.name ?? "").trim();
+    if (!name) return;
+    await api(`/api/admin/menu/tags/${editingMenuTagId}`, {
+      method: "PUT",
+      body: JSON.stringify({
+        name,
+        isAllergen: editMenuTag.isAllergen ?? false,
+        isActive: editMenuTag.isActive ?? true,
+      }),
+    });
+    setEditingMenuTagId(null);
+    setEditMenuTag({});
+    loadAll();
+  }
+
+  async function deleteMenuTag(id: number) {
+    await api(`/api/admin/menu/tags/${id}`, { method: "DELETE" });
+    loadAll();
+  }
+
   async function createItem() {
     if (!newItemCatId) return;
-    await api("/api/admin/menu/items", {
+    const res = await api("/api/admin/menu/items", {
       method: "POST",
       body: JSON.stringify({
         categoryId: newItemCatId,
@@ -2745,6 +2912,13 @@ export default function AdminPage() {
         isStopList: newItemStopList,
       }),
     });
+    const created = await res.json().catch(() => null);
+    if (created?.id && newItemTagIds.length > 0) {
+      await api(`/api/admin/menu/items/${created.id}/tags`, {
+        method: "PUT",
+        body: JSON.stringify({ tagIds: newItemTagIds }),
+      });
+    }
     setNewItemCatId("");
     setNewItemNameRu("");
     setNewItemNameRo("");
@@ -2758,6 +2932,7 @@ export default function AdminPage() {
     setNewItemAllergens("");
     setNewItemWeight("");
     setNewItemTags("");
+    setNewItemTagIds([]);
     setNewItemPhotos("");
     setNewItemKcal(0);
     setNewItemProtein(0);
@@ -2823,9 +2998,141 @@ export default function AdminPage() {
     loadAll();
   }
 
+  async function loadTimeSlots() {
+    if (!canMenuView) return;
+    setTimeSlotsLoading(true);
+    setTimeSlotsError(null);
+    try {
+      const res = await api("/api/admin/menu/time-slots");
+      setTimeSlots(await res.json());
+    } catch (e: any) {
+      setTimeSlotsError(e?.message ?? "Load error");
+    } finally {
+      setTimeSlotsLoading(false);
+    }
+  }
+
+  async function createTimeSlot() {
+    if (!newTimeSlotName.trim()) return;
+    try {
+      await api("/api/admin/menu/time-slots", {
+        method: "POST",
+        body: JSON.stringify({
+          name: newTimeSlotName.trim(),
+          daysMask: newTimeSlotDaysMask,
+          startTime: newTimeSlotStart,
+          endTime: newTimeSlotEnd,
+          isActive: newTimeSlotActive,
+        }),
+      });
+      setNewTimeSlotName("");
+      setNewTimeSlotDaysMask(127);
+      setNewTimeSlotStart("08:00");
+      setNewTimeSlotEnd("12:00");
+      setNewTimeSlotActive(true);
+      await loadTimeSlots();
+    } catch (e: any) {
+      setTimeSlotsError(e?.message ?? "Request failed");
+    }
+  }
+
+  function startEditTimeSlot(slot: MenuTimeSlot) {
+    setEditingTimeSlotId(slot.id);
+    setEditTimeSlot({ ...slot });
+  }
+
+  async function saveTimeSlot() {
+    if (!editingTimeSlotId) return;
+    try {
+      await api(`/api/admin/menu/time-slots/${editingTimeSlotId}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          name: editTimeSlot.name,
+          daysMask: editTimeSlot.daysMask,
+          startTime: editTimeSlot.startTime,
+          endTime: editTimeSlot.endTime,
+          isActive: editTimeSlot.isActive,
+        }),
+      });
+      setEditingTimeSlotId(null);
+      setEditTimeSlot({});
+      await loadTimeSlots();
+    } catch (e: any) {
+      setTimeSlotsError(e?.message ?? "Request failed");
+    }
+  }
+
+  async function deleteTimeSlot(slotId: number) {
+    if (!confirm(t(lang, "confirmDelete"))) return;
+    try {
+      await api(`/api/admin/menu/time-slots/${slotId}`, { method: "DELETE" });
+      await loadTimeSlots();
+    } catch (e: any) {
+      setTimeSlotsError(e?.message ?? "Request failed");
+    }
+  }
+
+  async function loadItemTimeSlots(itemId: number) {
+    if (!canMenuView) return;
+    setEditItemTimeSlotsLoading(true);
+    try {
+      const res = await api(`/api/admin/menu/items/${itemId}/time-slots`);
+      const body = await res.json();
+      setEditItemTimeSlotIds(body?.timeSlotIds ?? []);
+    } catch (e: any) {
+      setEditItemTimeSlotIds([]);
+    } finally {
+      setEditItemTimeSlotsLoading(false);
+    }
+  }
+
+  async function saveItemTimeSlots(itemId: number) {
+    setEditItemTimeSlotsSaving(true);
+    try {
+      await api(`/api/admin/menu/items/${itemId}/time-slots`, {
+        method: "PUT",
+        body: JSON.stringify({ timeSlotIds: editItemTimeSlotIds }),
+      });
+    } catch (e: any) {
+      setError(e?.message ?? "Request failed");
+    } finally {
+      setEditItemTimeSlotsSaving(false);
+    }
+  }
+
+  async function loadItemTags(itemId: number) {
+    setEditItemTagsLoading(true);
+    try {
+      const res = await api(`/api/admin/menu/items/${itemId}/tags`);
+      const body = await res.json();
+      setEditItemTagIds(Array.isArray(body?.tagIds) ? body.tagIds : []);
+    } catch (e: any) {
+      setError(e?.message ?? "Request failed");
+      setEditItemTagIds([]);
+    } finally {
+      setEditItemTagsLoading(false);
+    }
+  }
+
+  async function saveItemTags(itemId: number) {
+    setEditItemTagsSaving(true);
+    try {
+      await api(`/api/admin/menu/items/${itemId}/tags`, {
+        method: "PUT",
+        body: JSON.stringify({ tagIds: editItemTagIds }),
+      });
+    } catch (e: any) {
+      setError(e?.message ?? "Request failed");
+    } finally {
+      setEditItemTagsSaving(false);
+    }
+  }
+
   async function startEditItem(it: MenuItem) {
     setEditingItemId(it.id);
     setEditItem({ ...it });
+    await loadItemTimeSlots(it.id);
+    await loadItemTags(it.id);
   }
 
   async function createTable() {
@@ -3375,6 +3682,7 @@ export default function AdminPage() {
         payTerminalEnabled: settings.payTerminalEnabled,
         currencyCode: settings.currencyCode,
         defaultLang: settings.defaultLang,
+        timeZone: settings.timeZone,
         commissionModel: settings.commissionModel ?? "MONTHLY_FIXED",
         commissionMonthlyFixedCents: settings.commissionMonthlyFixedCents ?? 0,
         commissionMonthlyPercent: settings.commissionMonthlyPercent ?? 0,
@@ -4041,8 +4349,10 @@ export default function AdminPage() {
         isStopList: editItem.isStopList,
       }),
     });
+    await saveItemTags(editingItemId);
     setEditingItemId(null);
     setEditItem({});
+    setEditItemTagIds([]);
     loadAll();
   }
 
@@ -4553,6 +4863,20 @@ export default function AdminPage() {
                 <option value="ro">{t(lang, "langRo")}</option>
                 <option value="en">{t(lang, "langEn")}</option>
               </select>
+            </label>
+            <label>
+              {t(lang, "timeZone")}
+              <input
+                placeholder="Europe/Chisinau"
+                list="tz-options"
+                value={settings.timeZone ?? ""}
+                onChange={(e) => setSettings({ ...settings, timeZone: e.target.value })}
+              />
+              <datalist id="tz-options">
+                {TIME_ZONE_OPTIONS.map((tz) => (
+                  <option key={tz} value={tz} />
+                ))}
+              </datalist>
             </label>
             <label>{t(lang, "otpTtlSeconds")} <input value={settings.otpTtlSeconds} onChange={(e) => setSettings({ ...settings, otpTtlSeconds: Number(e.target.value) })} /></label>
             <label>{t(lang, "otpMaxAttempts")} <input value={settings.otpMaxAttempts} onChange={(e) => setSettings({ ...settings, otpMaxAttempts: Number(e.target.value) })} /></label>
@@ -5703,6 +6027,154 @@ export default function AdminPage() {
       )}
 
       {showMenu && (
+      <section id="menu-tags-section" style={{ marginTop: 24 }}>
+        <h2>{t(lang, "menuTagsTitle")}</h2>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <input
+            placeholder={t(lang, "menuTagName")}
+            value={newMenuTagName}
+            onChange={(e) => {
+              const v = e.target.value;
+              setNewMenuTagName(v);
+              setNewMenuTagSlug(slugifyTag(v));
+            }}
+          />
+          <input placeholder={t(lang, "menuTagSlug")} value={newMenuTagSlug} readOnly />
+          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <input type="checkbox" checked={newMenuTagAllergen} onChange={(e) => setNewMenuTagAllergen(e.target.checked)} />
+            {t(lang, "menuTagAllergen")}
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <input type="checkbox" checked={newMenuTagActive} onChange={(e) => setNewMenuTagActive(e.target.checked)} />
+            {t(lang, "menuTagActive")}
+          </label>
+          <button onClick={createMenuTag}>{t(lang, "menuTagCreate")}</button>
+        </div>
+        {editingMenuTagId && (
+          <div style={{ marginTop: 10, border: "1px dashed #ddd", padding: 10 }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <input
+                placeholder={t(lang, "menuTagName")}
+                value={editMenuTag.name ?? ""}
+                onChange={(e) => setEditMenuTag({ ...editMenuTag, name: e.target.value, slug: slugifyTag(e.target.value) })}
+              />
+              <input placeholder={t(lang, "menuTagSlug")} value={slugifyTag(editMenuTag.name ?? "")} readOnly />
+              <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <input
+                  type="checkbox"
+                  checked={!!editMenuTag.isAllergen}
+                  onChange={(e) => setEditMenuTag({ ...editMenuTag, isAllergen: e.target.checked })}
+                />
+                {t(lang, "menuTagAllergen")}
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <input
+                  type="checkbox"
+                  checked={!!editMenuTag.isActive}
+                  onChange={(e) => setEditMenuTag({ ...editMenuTag, isActive: e.target.checked })}
+                />
+                {t(lang, "menuTagActive")}
+              </label>
+            </div>
+            <div style={{ marginTop: 8 }}>
+              <button onClick={saveMenuTag}>{t(lang, "menuTagUpdate")}</button>
+              <button onClick={() => { setEditingMenuTagId(null); setEditMenuTag({}); }} style={{ marginLeft: 8 }}>{t(lang, "cancel")}</button>
+            </div>
+          </div>
+        )}
+        <div style={{ marginTop: 10 }}>
+          {menuTags.map((tag) => (
+            <div key={tag.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "6px 0", borderBottom: "1px solid #eee", flexWrap: "wrap" }}>
+              <strong>{tag.name}</strong>
+              <span>{tag.slug}</span>
+              <span>{tag.isAllergen ? t(lang, "menuTagAllergen") : ""}</span>
+              <span>{tag.isActive ? t(lang, "active") : t(lang, "inactive")}</span>
+              <button onClick={() => startEditMenuTag(tag)}>{t(lang, "edit")}</button>
+              <button onClick={() => deleteMenuTag(tag.id)}>{t(lang, "menuTagDelete")}</button>
+            </div>
+          ))}
+        </div>
+      </section>
+      )}
+
+      {showMenu && (
+      <section id="menu-time-slots-section" style={{ marginTop: 24 }}>
+        <h2>{t(lang, "menuTimeSlots")}</h2>
+        {timeSlotsError && <div style={{ color: "#b11e46", marginBottom: 8 }}>{timeSlotsError}</div>}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <input placeholder={t(lang, "timeSlotName")} value={newTimeSlotName} onChange={(e) => setNewTimeSlotName(e.target.value)} />
+          <label>
+            {t(lang, "timeSlotStart")}
+            <input type="time" value={newTimeSlotStart} onChange={(e) => setNewTimeSlotStart(e.target.value)} style={{ marginLeft: 6 }} />
+          </label>
+          <label>
+            {t(lang, "timeSlotEnd")}
+            <input type="time" value={newTimeSlotEnd} onChange={(e) => setNewTimeSlotEnd(e.target.value)} style={{ marginLeft: 6 }} />
+          </label>
+          <label><input type="checkbox" checked={newTimeSlotActive} onChange={(e) => setNewTimeSlotActive(e.target.checked)} /> {t(lang, "active")}</label>
+          <button onClick={createTimeSlot}>{t(lang, "add")}</button>
+        </div>
+        <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {DAY_LABELS[lang].map((label, idx) => (
+            <label key={label} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <input
+                type="checkbox"
+                checked={(newTimeSlotDaysMask & DAY_BITS[idx]) !== 0}
+                onChange={() => setNewTimeSlotDaysMask(toggleDaysMask(newTimeSlotDaysMask, idx))}
+              />
+              {label}
+            </label>
+          ))}
+        </div>
+        {editingTimeSlotId && (
+          <div style={{ marginTop: 10, border: "1px dashed #ddd", padding: 10 }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <input placeholder={t(lang, "timeSlotName")} value={editTimeSlot.name ?? ""} onChange={(e) => setEditTimeSlot({ ...editTimeSlot, name: e.target.value })} />
+              <label>
+                {t(lang, "timeSlotStart")}
+                <input type="time" value={editTimeSlot.startTime ?? ""} onChange={(e) => setEditTimeSlot({ ...editTimeSlot, startTime: e.target.value })} style={{ marginLeft: 6 }} />
+              </label>
+              <label>
+                {t(lang, "timeSlotEnd")}
+                <input type="time" value={editTimeSlot.endTime ?? ""} onChange={(e) => setEditTimeSlot({ ...editTimeSlot, endTime: e.target.value })} style={{ marginLeft: 6 }} />
+              </label>
+              <label><input type="checkbox" checked={!!editTimeSlot.isActive} onChange={(e) => setEditTimeSlot({ ...editTimeSlot, isActive: e.target.checked })} /> {t(lang, "active")}</label>
+            </div>
+            <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {DAY_LABELS[lang].map((label, idx) => (
+                <label key={`edit-${label}`} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <input
+                    type="checkbox"
+                    checked={((editTimeSlot.daysMask ?? 127) & DAY_BITS[idx]) !== 0}
+                    onChange={() => setEditTimeSlot({ ...editTimeSlot, daysMask: toggleDaysMask(editTimeSlot.daysMask ?? 127, idx) })}
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+            <div style={{ marginTop: 8 }}>
+              <button onClick={saveTimeSlot}>{t(lang, "save")}</button>
+              <button onClick={() => { setEditingTimeSlotId(null); setEditTimeSlot({}); }} style={{ marginLeft: 8 }}>{t(lang, "cancel")}</button>
+            </div>
+          </div>
+        )}
+        <div style={{ marginTop: 10 }}>
+          {timeSlotsLoading && <div style={{ color: "#666" }}>{t(lang, "loading")}</div>}
+          {timeSlots.map((slot) => (
+            <div key={slot.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "6px 0", borderBottom: "1px solid #eee", flexWrap: "wrap" }}>
+              <strong>{slot.name}</strong>
+              <span>{formatDaysMask(slot.daysMask)}</span>
+              <span>{slot.startTime}–{slot.endTime}</span>
+              <span>{slot.isActive ? t(lang, "active") : t(lang, "inactive")}</span>
+              <button onClick={() => startEditTimeSlot(slot)}>{t(lang, "edit")}</button>
+              <button onClick={() => deleteTimeSlot(slot.id)}>{t(lang, "delete")}</button>
+            </div>
+          ))}
+        </div>
+      </section>
+      )}
+
+      {showMenu && (
       <section id="items-section" style={{ marginTop: 24 }}>
         <h2>{t(lang, "items")}</h2>
         <div style={{ marginBottom: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -5749,6 +6221,28 @@ export default function AdminPage() {
           <input placeholder={t(lang, "allergens")} value={newItemAllergens} onChange={(e) => setNewItemAllergens(e.target.value)} />
           <input placeholder={t(lang, "weight")} value={newItemWeight} onChange={(e) => setNewItemWeight(e.target.value)} />
           <input placeholder={t(lang, "tagsCsv")} value={newItemTags} onChange={(e) => setNewItemTags(e.target.value)} />
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ fontWeight: 600 }}>{t(lang, "menuItemTagsLabel")}</div>
+            {menuTags.length === 0 ? (
+              <div style={{ fontSize: 12, color: "#666" }}>{t(lang, "menuItemTagsNone")}</div>
+            ) : (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {menuTags.map((tag) => (
+                  <label key={`new-tag-${tag.id}`} style={{ display: "flex", alignItems: "center", gap: 6, opacity: tag.isActive ? 1 : 0.5 }}>
+                    <input
+                      type="checkbox"
+                      checked={newItemTagIds.includes(tag.id)}
+                      disabled={!tag.isActive}
+                      onChange={() => {
+                        setNewItemTagIds((prev) => prev.includes(tag.id) ? prev.filter((x) => x !== tag.id) : [...prev, tag.id]);
+                      }}
+                    />
+                    {tag.name}{tag.isAllergen ? ` (${t(lang, "menuTagAllergen")})` : ""}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
               {t(lang, "photosUpload")}
@@ -5830,6 +6324,36 @@ export default function AdminPage() {
               <input placeholder={t(lang, "weight")} value={editItem.weight ?? ""} onChange={(e) => setEditItem({ ...editItem, weight: e.target.value })} />
               <input placeholder={t(lang, "tagsCsv")} value={editItem.tags ?? ""} onChange={(e) => setEditItem({ ...editItem, tags: e.target.value })} />
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={{ fontWeight: 600 }}>{t(lang, "menuItemTagsLabel")}</div>
+                {menuTags.length === 0 ? (
+                  <div style={{ fontSize: 12, color: "#666" }}>{t(lang, "menuItemTagsNone")}</div>
+                ) : (
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {menuTags.map((tag) => (
+                      <label key={`edit-tag-${tag.id}`} style={{ display: "flex", alignItems: "center", gap: 6, opacity: tag.isActive ? 1 : 0.5 }}>
+                        <input
+                          type="checkbox"
+                          checked={editItemTagIds.includes(tag.id)}
+                          disabled={!tag.isActive || editItemTagsLoading}
+                          onChange={() => {
+                            setEditItemTagIds((prev) => prev.includes(tag.id) ? prev.filter((x) => x !== tag.id) : [...prev, tag.id]);
+                          }}
+                        />
+                        {tag.name}{tag.isAllergen ? ` (${t(lang, "menuTagAllergen")})` : ""}
+                      </label>
+                    ))}
+                  </div>
+                )}
+                <div style={{ marginTop: 4 }}>
+                  <button
+                    onClick={() => editingItemId && saveItemTags(editingItemId)}
+                    disabled={!editingItemId || editItemTagsSaving || editItemTagsLoading}
+                  >
+                    {editItemTagsSaving ? t(lang, "saving") : t(lang, "save")}
+                  </button>
+                </div>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   {t(lang, "photosUpload")}
                   <input
@@ -5887,9 +6411,39 @@ export default function AdminPage() {
               <label><input type="checkbox" checked={!!editItem.isActive} onChange={(e) => setEditItem({ ...editItem, isActive: e.target.checked })} /> {t(lang, "active")}</label>
               <label><input type="checkbox" checked={!!editItem.isStopList} onChange={(e) => setEditItem({ ...editItem, isStopList: e.target.checked })} /> {t(lang, "stopList")}</label>
             </div>
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>{t(lang, "timeSlotAssign")}</div>
+              {timeSlots.length === 0 ? (
+                <div style={{ color: "#666", fontSize: 12 }}>{t(lang, "timeSlotNone")}</div>
+              ) : (
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {timeSlots.map((slot) => (
+                    <label key={`item-slot-${slot.id}`} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <input
+                        type="checkbox"
+                        checked={editItemTimeSlotIds.includes(slot.id)}
+                        disabled={editItemTimeSlotsLoading}
+                        onChange={() => {
+                          setEditItemTimeSlotIds((prev) => prev.includes(slot.id) ? prev.filter((x) => x !== slot.id) : [...prev, slot.id]);
+                        }}
+                      />
+                      {slot.name} ({formatDaysMask(slot.daysMask)}) {slot.startTime}–{slot.endTime} {slot.isActive ? "" : `(${t(lang, "inactive")})`}
+                    </label>
+                  ))}
+                </div>
+              )}
+              <div style={{ marginTop: 6 }}>
+                <button
+                  onClick={() => editingItemId && saveItemTimeSlots(editingItemId)}
+                  disabled={!editingItemId || editItemTimeSlotsSaving || editItemTimeSlotsLoading}
+                >
+                  {editItemTimeSlotsSaving ? t(lang, "saving") : t(lang, "save")}
+                </button>
+              </div>
+            </div>
             <div style={{ marginTop: 8 }}>
               <button onClick={saveEditedItem}>{t(lang, "save")}</button>
-              <button onClick={() => { setEditingItemId(null); setEditItem({}); }} style={{ marginLeft: 8 }}>{t(lang, "cancel")}</button>
+              <button onClick={() => { setEditingItemId(null); setEditItem({}); setEditItemTimeSlotIds([]); setEditItemTagIds([]); }} style={{ marginLeft: 8 }}>{t(lang, "cancel")}</button>
             </div>
           </div>
         )}

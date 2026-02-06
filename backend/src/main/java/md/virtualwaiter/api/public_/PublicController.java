@@ -9,6 +9,9 @@ import md.virtualwaiter.domain.ChatMessage;
 import md.virtualwaiter.domain.GuestSession;
 import md.virtualwaiter.domain.MenuCategory;
 import md.virtualwaiter.domain.MenuItem;
+import md.virtualwaiter.domain.MenuItemTimeSlot;
+import md.virtualwaiter.domain.MenuItemTag;
+import md.virtualwaiter.domain.MenuTag;
 import md.virtualwaiter.domain.MenuItemModifierGroup;
 import md.virtualwaiter.domain.ModifierGroup;
 import md.virtualwaiter.domain.ModifierOption;
@@ -20,6 +23,7 @@ import md.virtualwaiter.domain.TableParty;
 import md.virtualwaiter.domain.WaiterCall;
 import md.virtualwaiter.domain.Branch;
 import md.virtualwaiter.domain.BranchMenuItemOverride;
+import md.virtualwaiter.domain.MenuTimeSlot;
 import md.virtualwaiter.security.QrSignatureService;
 import md.virtualwaiter.domain.PaymentIntent;
 import md.virtualwaiter.domain.PaymentTransaction;
@@ -27,6 +31,10 @@ import md.virtualwaiter.repo.CafeTableRepo;
 import md.virtualwaiter.repo.GuestSessionRepo;
 import md.virtualwaiter.repo.MenuCategoryRepo;
 import md.virtualwaiter.repo.MenuItemRepo;
+import md.virtualwaiter.repo.MenuItemTimeSlotRepo;
+import md.virtualwaiter.repo.MenuItemTagRepo;
+import md.virtualwaiter.repo.MenuTagRepo;
+import md.virtualwaiter.repo.MenuTimeSlotRepo;
 import md.virtualwaiter.repo.BranchRepo;
 import md.virtualwaiter.repo.BranchMenuItemOverrideRepo;
 import md.virtualwaiter.repo.OrderItemRepo;
@@ -78,11 +86,15 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -102,6 +114,10 @@ public class PublicController {
   private final MenuItemRepo itemRepo;
   private final BranchRepo branchRepo;
   private final BranchMenuItemOverrideRepo menuItemOverrideRepo;
+  private final MenuTimeSlotRepo menuTimeSlotRepo;
+  private final MenuItemTimeSlotRepo menuItemTimeSlotRepo;
+  private final MenuTagRepo menuTagRepo;
+  private final MenuItemTagRepo menuItemTagRepo;
   private final OrderRepo orderRepo;
   private final OrderItemRepo orderItemRepo;
   private final WaiterCallRepo waiterCallRepo;
@@ -156,6 +172,10 @@ public class PublicController {
     MenuItemRepo itemRepo,
     BranchRepo branchRepo,
     BranchMenuItemOverrideRepo menuItemOverrideRepo,
+    MenuTimeSlotRepo menuTimeSlotRepo,
+    MenuItemTimeSlotRepo menuItemTimeSlotRepo,
+    MenuTagRepo menuTagRepo,
+    MenuItemTagRepo menuItemTagRepo,
     OrderRepo orderRepo,
     OrderItemRepo orderItemRepo,
     WaiterCallRepo waiterCallRepo,
@@ -208,6 +228,10 @@ public class PublicController {
     this.itemRepo = itemRepo;
     this.branchRepo = branchRepo;
     this.menuItemOverrideRepo = menuItemOverrideRepo;
+    this.menuTimeSlotRepo = menuTimeSlotRepo;
+    this.menuItemTimeSlotRepo = menuItemTimeSlotRepo;
+    this.menuTagRepo = menuTagRepo;
+    this.menuItemTagRepo = menuItemTagRepo;
     this.orderRepo = orderRepo;
     this.orderItemRepo = orderItemRepo;
     this.waiterCallRepo = waiterCallRepo;
@@ -562,6 +586,53 @@ public class PublicController {
     String currency
   ) {}
 
+  private boolean isSlotActiveNow(MenuTimeSlot slot, ZonedDateTime now) {
+    if (!slot.isActive) return false;
+    int dayBit = 1 << (now.getDayOfWeek().getValue() - 1);
+    if ((slot.daysMask & dayBit) == 0) return false;
+    LocalTime t = now.toLocalTime();
+    LocalTime start = slot.startTime;
+    LocalTime end = slot.endTime;
+    if (start.equals(end)) return true;
+    if (end.isAfter(start)) {
+      return !t.isBefore(start) && t.isBefore(end);
+    }
+    return !t.isBefore(start) || t.isBefore(end);
+  }
+
+  private boolean isMenuItemAvailableNow(long menuItemId, Map<Long, List<Long>> slotsByItem, Map<Long, MenuTimeSlot> slotsById, ZonedDateTime now) {
+    List<Long> slotIds = slotsByItem.get(menuItemId);
+    if (slotIds == null || slotIds.isEmpty()) return true;
+    for (Long slotId : slotIds) {
+      MenuTimeSlot slot = slotsById.get(slotId);
+      if (slot != null && isSlotActiveNow(slot, now)) return true;
+    }
+    return false;
+  }
+
+  private boolean isMenuItemAvailableNow(long menuItemId, long branchId, ZonedDateTime now) {
+    List<MenuItemTimeSlot> links = menuItemTimeSlotRepo.findByMenuItemId(menuItemId);
+    if (links.isEmpty()) return true;
+    Map<Long, MenuTimeSlot> slotsById = new HashMap<>();
+    for (MenuTimeSlot s : menuTimeSlotRepo.findByBranchIdAndIsActiveTrue(branchId)) {
+      slotsById.put(s.id, s);
+    }
+    for (MenuItemTimeSlot link : links) {
+      MenuTimeSlot slot = slotsById.get(link.timeSlotId);
+      if (slot != null && isSlotActiveNow(slot, now)) return true;
+    }
+    return false;
+  }
+
+  private ZoneId resolveBranchZone(long branchId) {
+    String tz = settingsService.resolveForBranch(branchId).timeZone();
+    try {
+      return ZoneId.of(tz);
+    } catch (Exception e) {
+      return ZoneId.systemDefault();
+    }
+  }
+
   @GetMapping("/menu-item/{id}")
   public MenuItemDetailResponse getMenuItemDetail(
     @PathVariable("id") long id,
@@ -588,8 +659,12 @@ public class PublicController {
     if (!resolveMenuItemActive(item, override) || resolveMenuItemStopList(item, override)) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Menu item not available");
     }
+    if (!isMenuItemAvailableNow(item.id, branch.id, ZonedDateTime.now(resolveBranchZone(branch.id)))) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Menu item not available");
+    }
 
     String loc = normalizeLocale(locale);
+    Map<Long, List<String>> tagsByItem = loadTagNamesByItemIds(List.of(item.id), branch.tenantId);
     return new MenuItemDetailResponse(
       item.id,
       pick(loc, item.nameRu, item.nameRo, item.nameEn),
@@ -602,7 +677,7 @@ public class PublicController {
       item.fatG,
       item.carbsG,
       splitCsv(item.photoUrls),
-      splitCsv(item.tags),
+      mergeTags(item, tagsByItem),
       item.priceCents,
       item.currency
     );
@@ -698,11 +773,25 @@ public class PublicController {
       : menuItemOverrideRepo.findByBranchIdAndMenuItemIdIn(branch.id, items.stream().map(i -> i.id).toList())
         .stream()
         .collect(java.util.stream.Collectors.toMap(o -> o.menuItemId, o -> o));
+    Map<Long, List<Long>> slotsByItem = items.isEmpty()
+      ? Map.of()
+      : menuItemTimeSlotRepo.findByMenuItemIdIn(items.stream().map(i -> i.id).toList())
+        .stream()
+        .collect(Collectors.groupingBy(l -> l.menuItemId, Collectors.mapping(l -> l.timeSlotId, Collectors.toList())));
+    Map<Long, MenuTimeSlot> slotsById = new HashMap<>();
+    for (MenuTimeSlot s : menuTimeSlotRepo.findByBranchIdAndIsActiveTrue(branch.id)) {
+      slotsById.put(s.id, s);
+    }
+    ZonedDateTime now = ZonedDateTime.now(resolveBranchZone(branch.id));
 
+    Map<Long, List<String>> tagsByItem = loadTagNamesByItemIds(items.stream().map(i -> i.id).toList(), branch.tenantId);
     Map<Long, List<MenuItemDto>> itemsByCat = new HashMap<>();
     for (MenuItem it : items) {
       BranchMenuItemOverride override = overrides.get(it.id);
       if (!resolveMenuItemActive(it, override) || resolveMenuItemStopList(it, override)) {
+        continue;
+      }
+      if (!isMenuItemAvailableNow(it.id, slotsByItem, slotsById, now)) {
         continue;
       }
       itemsByCat.computeIfAbsent(it.categoryId, k -> new ArrayList<>())
@@ -718,7 +807,7 @@ public class PublicController {
           it.fatG,
           it.carbsG,
           splitCsv(it.photoUrls),
-          splitCsv(it.tags),
+          mergeTags(it, tagsByItem),
           it.priceCents,
           it.currency
         ));
@@ -809,6 +898,9 @@ public class PublicController {
       }
       BranchMenuItemOverride override = overrides.get(mi.id);
       if (!resolveMenuItemActive(mi, override) || resolveMenuItemStopList(mi, override)) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Menu item not available");
+      }
+      if (!isMenuItemAvailableNow(mi.id, branch.id, ZonedDateTime.now(resolveBranchZone(branch.id)))) {
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Menu item not available");
       }
     }
@@ -1292,6 +1384,34 @@ public class PublicController {
       if (!v.isEmpty()) out.add(v);
     }
     return out;
+  }
+
+  private Map<Long, List<String>> loadTagNamesByItemIds(List<Long> itemIds, Long tenantId) {
+    if (itemIds == null || itemIds.isEmpty()) return Map.of();
+    List<MenuItemTag> links = menuItemTagRepo.findByMenuItemIdIn(itemIds);
+    if (links.isEmpty()) return Map.of();
+    Set<Long> tagIds = links.stream().map(l -> l.tagId).collect(Collectors.toSet());
+    if (tagIds.isEmpty()) return Map.of();
+    Map<Long, MenuTag> tagById = new HashMap<>();
+    for (MenuTag t : menuTagRepo.findAllById(tagIds)) {
+      if (!t.isActive) continue;
+      if (tenantId != null && !Objects.equals(t.tenantId, tenantId)) continue;
+      tagById.put(t.id, t);
+    }
+    Map<Long, List<String>> out = new HashMap<>();
+    for (MenuItemTag link : links) {
+      MenuTag t = tagById.get(link.tagId);
+      if (t == null) continue;
+      out.computeIfAbsent(link.menuItemId, k -> new ArrayList<>()).add(t.name);
+    }
+    return out;
+  }
+
+  private List<String> mergeTags(MenuItem item, Map<Long, List<String>> tagsByItem) {
+    LinkedHashSet<String> out = new LinkedHashSet<>();
+    for (String t : splitCsv(item.tags)) out.add(t);
+    for (String t : tagsByItem.getOrDefault(item.id, List.of())) out.add(t);
+    return new ArrayList<>(out);
   }
 
   private static String getClientIp(jakarta.servlet.http.HttpServletRequest req) {

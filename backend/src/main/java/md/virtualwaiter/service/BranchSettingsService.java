@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.time.ZoneId;
 
 @Service
 public class BranchSettingsService {
@@ -61,6 +62,7 @@ public class BranchSettingsService {
     boolean payTerminalEnabled,
     String currencyCode,
     String defaultLang,
+    String timeZone,
     String commissionModel,
     int commissionMonthlyFixedCents,
     int commissionMonthlyPercent,
@@ -104,6 +106,7 @@ public class BranchSettingsService {
       boolOr(s == null ? null : s.payTerminalEnabled, true),
       strOr(s == null ? null : s.currencyCode, "MDL"),
       strOr(s == null ? null : s.defaultLang, "ru"),
+      strOr(s == null ? null : s.timeZone, ZoneId.systemDefault().getId()),
       strOr(s == null ? null : s.commissionModel, "MONTHLY_FIXED"),
       intOr(s == null ? null : s.commissionMonthlyFixedCents, 0),
       intOr(s == null ? null : s.commissionMonthlyPercent, 0),

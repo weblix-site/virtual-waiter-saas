@@ -19,6 +19,10 @@ import md.virtualwaiter.domain.MenuCategory;
 import md.virtualwaiter.domain.MenuItem;
 import md.virtualwaiter.domain.MenuItemIngredient;
 import md.virtualwaiter.domain.MenuItemModifierGroup;
+import md.virtualwaiter.domain.MenuItemTimeSlot;
+import md.virtualwaiter.domain.MenuTimeSlot;
+import md.virtualwaiter.domain.MenuTag;
+import md.virtualwaiter.domain.MenuItemTag;
 import md.virtualwaiter.domain.ModifierGroup;
 import md.virtualwaiter.domain.ModifierOption;
 import md.virtualwaiter.domain.StaffReview;
@@ -47,8 +51,12 @@ import md.virtualwaiter.repo.InventoryItemRepo;
 import md.virtualwaiter.repo.MenuCategoryRepo;
 import md.virtualwaiter.repo.MenuItemIngredientRepo;
 import md.virtualwaiter.repo.MenuItemModifierGroupRepo;
+import md.virtualwaiter.repo.MenuItemTagRepo;
+import md.virtualwaiter.repo.MenuItemTimeSlotRepo;
 import md.virtualwaiter.repo.MenuTemplateRepo;
 import md.virtualwaiter.repo.MenuItemRepo;
+import md.virtualwaiter.repo.MenuTagRepo;
+import md.virtualwaiter.repo.MenuTimeSlotRepo;
 import md.virtualwaiter.repo.ModifierGroupRepo;
 import md.virtualwaiter.repo.ModifierOptionRepo;
 import md.virtualwaiter.repo.StaffReviewRepo;
@@ -100,6 +108,8 @@ import java.net.URISyntaxException;
 import java.time.Instant;
 import java.time.Duration;
 import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -131,6 +141,10 @@ public class AdminController {
   private final MenuCategoryRepo categoryRepo;
   private final MenuItemRepo itemRepo;
   private final BranchMenuItemOverrideRepo menuItemOverrideRepo;
+  private final MenuTimeSlotRepo menuTimeSlotRepo;
+  private final MenuItemTimeSlotRepo menuItemTimeSlotRepo;
+  private final MenuTagRepo menuTagRepo;
+  private final MenuItemTagRepo menuItemTagRepo;
   private final CafeTableRepo tableRepo;
   private final BranchRepo branchRepo;
   private final MenuTemplateRepo menuTemplateRepo;
@@ -179,6 +193,10 @@ public class AdminController {
     MenuCategoryRepo categoryRepo,
     MenuItemRepo itemRepo,
     BranchMenuItemOverrideRepo menuItemOverrideRepo,
+    MenuTimeSlotRepo menuTimeSlotRepo,
+    MenuItemTimeSlotRepo menuItemTimeSlotRepo,
+    MenuTagRepo menuTagRepo,
+    MenuItemTagRepo menuItemTagRepo,
     CafeTableRepo tableRepo,
     BranchRepo branchRepo,
     MenuTemplateRepo menuTemplateRepo,
@@ -226,6 +244,10 @@ public class AdminController {
     this.categoryRepo = categoryRepo;
     this.itemRepo = itemRepo;
     this.menuItemOverrideRepo = menuItemOverrideRepo;
+    this.menuTimeSlotRepo = menuTimeSlotRepo;
+    this.menuItemTimeSlotRepo = menuItemTimeSlotRepo;
+    this.menuTagRepo = menuTagRepo;
+    this.menuItemTagRepo = menuItemTagRepo;
     this.tableRepo = tableRepo;
     this.branchRepo = branchRepo;
     this.menuTemplateRepo = menuTemplateRepo;
@@ -295,6 +317,20 @@ public class AdminController {
     if (resourceBranchId == null || !resourceBranchId.equals(u.branchId)) {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong branch");
     }
+  }
+
+  private long resolveTenantIdForBranch(long branchId) {
+    Branch b = branchRepo.findById(branchId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    return b.tenantId;
+  }
+
+  private String slugify(String name) {
+    if (name == null) return "";
+    String s = name.trim().toLowerCase(Locale.ROOT);
+    s = s.replaceAll("[^a-z0-9]+", "-");
+    s = s.replaceAll("^-+|-+$", "");
+    return s;
   }
 
   private long resolveBranchId(StaffUser u, Long branchIdParam) {
@@ -1083,6 +1119,7 @@ public class AdminController {
     boolean payTerminalEnabled,
     String currencyCode,
     String defaultLang,
+    String timeZone,
     String commissionModel,
     int commissionMonthlyFixedCents,
     int commissionMonthlyPercent,
@@ -1131,6 +1168,7 @@ public class AdminController {
       s.payTerminalEnabled(),
       s.currencyCode(),
       s.defaultLang(),
+      s.timeZone(),
       s.commissionModel(),
       s.commissionMonthlyFixedCents(),
       s.commissionMonthlyPercent(),
@@ -1173,6 +1211,7 @@ public class AdminController {
     Boolean payTerminalEnabled,
     String currencyCode,
     String defaultLang,
+    String timeZone,
     String commissionModel,
     Integer commissionMonthlyFixedCents,
     Integer commissionMonthlyPercent,
@@ -1259,6 +1298,15 @@ public class AdminController {
       String lang = normalizeLocale(req.defaultLang);
       s.defaultLang = lang;
     }
+    if (req.timeZone != null && !req.timeZone.isBlank()) {
+      String tz = req.timeZone.trim();
+      try {
+        ZoneId.of(tz);
+      } catch (Exception e) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid time zone");
+      }
+      s.timeZone = tz;
+    }
     if (req.commissionModel != null) {
       String model = req.commissionModel.trim().toUpperCase(Locale.ROOT);
       if (!model.isEmpty() && !Set.of("MONTHLY_FIXED", "MONTHLY_PERCENT", "ORDER_PERCENT", "ORDER_FIXED").contains(model)) {
@@ -1330,6 +1378,7 @@ public class AdminController {
     if (req.payTerminalEnabled != null) changed.add("payTerminalEnabled");
     if (req.currencyCode != null) changed.add("currencyCode");
     if (req.defaultLang != null) changed.add("defaultLang");
+    if (req.timeZone != null) changed.add("timeZone");
     if (req.commissionModel != null) changed.add("commissionModel");
     if (req.commissionMonthlyFixedCents != null) changed.add("commissionMonthlyFixedCents");
     if (req.commissionMonthlyPercent != null) changed.add("commissionMonthlyPercent");
@@ -1386,6 +1435,7 @@ public class AdminController {
       r.payTerminalEnabled(),
       r.currencyCode(),
       r.defaultLang(),
+      r.timeZone(),
       r.commissionModel(),
       r.commissionMonthlyFixedCents(),
       r.commissionMonthlyPercent(),
@@ -2933,6 +2983,100 @@ public class AdminController {
     auditService.log(u, "DELETE", "MenuCategory", c.id, null);
   }
 
+  // --- Menu tags ---
+  public record MenuTagDto(long id, String name, String slug, boolean isAllergen, boolean isActive) {}
+  public record UpsertMenuTagRequest(@NotBlank String name, Boolean isAllergen, Boolean isActive) {}
+
+  @GetMapping("/menu/tags")
+  public List<MenuTagDto> listMenuTags(@RequestParam(value = "branchId", required = false) Long branchId, Authentication auth) {
+    StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_VIEW);
+    long bid = resolveBranchId(u, branchId);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
+    List<MenuTag> tags = menuTagRepo.findByTenantIdOrderByNameAscIdAsc(b.tenantId);
+    List<MenuTagDto> out = new ArrayList<>();
+    for (MenuTag t : tags) {
+      out.add(new MenuTagDto(t.id, t.name, t.slug, t.isAllergen, t.isActive));
+    }
+    return out;
+  }
+
+  @PostMapping("/menu/tags")
+  public MenuTagDto createMenuTag(
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @Valid @RequestBody UpsertMenuTagRequest req,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_MANAGE);
+    long bid = resolveBranchId(u, branchId);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
+    String slug = slugify(req.name);
+    if (slug.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid tag name");
+    if (menuTagRepo.findByTenantIdAndSlug(b.tenantId, slug).isPresent()) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "Tag already exists");
+    }
+    MenuTag t = new MenuTag();
+    t.tenantId = b.tenantId;
+    t.name = req.name.trim();
+    t.slug = slug;
+    t.isAllergen = req.isAllergen != null && req.isAllergen;
+    t.isActive = req.isActive == null || req.isActive;
+    t = menuTagRepo.save(t);
+    auditService.log(u, "CREATE", "MenuTag", t.id, null);
+    return new MenuTagDto(t.id, t.name, t.slug, t.isAllergen, t.isActive);
+  }
+
+  @PutMapping("/menu/tags/{id}")
+  public MenuTagDto updateMenuTag(@PathVariable long id, @Valid @RequestBody UpsertMenuTagRequest req, Authentication auth) {
+    StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_MANAGE);
+    long bid = resolveBranchId(u, null);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    MenuTag t = menuTagRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tag not found"));
+    requireBranchAccess(u, b.id);
+    if (!Objects.equals(t.tenantId, b.tenantId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong tenant");
+    }
+    String slug = slugify(req.name);
+    if (slug.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid tag name");
+    menuTagRepo.findByTenantIdAndSlug(b.tenantId, slug)
+      .filter(existing -> !existing.id.equals(t.id))
+      .ifPresent(existing -> {
+        throw new ResponseStatusException(HttpStatus.CONFLICT, "Tag already exists");
+      });
+    t.name = req.name.trim();
+    t.slug = slug;
+    if (req.isAllergen != null) t.isAllergen = req.isAllergen;
+    if (req.isActive != null) t.isActive = req.isActive;
+    t = menuTagRepo.save(t);
+    auditService.log(u, "UPDATE", "MenuTag", t.id, null);
+    return new MenuTagDto(t.id, t.name, t.slug, t.isAllergen, t.isActive);
+  }
+
+  @DeleteMapping("/menu/tags/{id}")
+  public void deleteMenuTag(@PathVariable long id, Authentication auth) {
+    StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_MANAGE);
+    long bid = resolveBranchId(u, null);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    MenuTag t = menuTagRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tag not found"));
+    requireBranchAccess(u, b.id);
+    if (!Objects.equals(t.tenantId, b.tenantId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong tenant");
+    }
+    menuTagRepo.delete(t);
+    auditService.log(u, "DELETE", "MenuTag", t.id, null);
+  }
+
   // --- Menu items ---
   public record MenuItemDto(
     long id,
@@ -2985,6 +3129,9 @@ public class AdminController {
     Boolean isStopList
   ) {}
 
+  public record MenuItemTagsResponse(List<Long> tagIds) {}
+  public record MenuItemTagsRequest(List<Long> tagIds) {}
+
   @GetMapping("/menu/items")
   public List<MenuItemDto> listMenuItems(
     @RequestParam(value = "categoryId", required = false) Long categoryId,
@@ -3018,6 +3165,67 @@ public class AdminController {
       out.add(toDto(it, o));
     }
     return out;
+  }
+
+  @GetMapping("/menu/items/{id}/tags")
+  public MenuItemTagsResponse getMenuItemTags(@PathVariable long id, Authentication auth) {
+    StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_VIEW);
+    long bid = resolveBranchId(u, null);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    MenuItem it = itemRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Menu item not found"));
+    MenuCategory c = categoryRepo.findById(it.categoryId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found"));
+    requireBranchAccess(u, b.id);
+    if (!Objects.equals(c.tenantId, b.tenantId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong tenant");
+    }
+    List<Long> tagIds = menuItemTagRepo.findByMenuItemId(it.id).stream().map(t -> t.tagId).toList();
+    return new MenuItemTagsResponse(tagIds);
+  }
+
+  @PutMapping("/menu/items/{id}/tags")
+  @Transactional
+  public void updateMenuItemTags(@PathVariable long id, @RequestBody MenuItemTagsRequest req, Authentication auth) {
+    StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_MANAGE);
+    long bid = resolveBranchId(u, null);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    MenuItem it = itemRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Menu item not found"));
+    MenuCategory c = categoryRepo.findById(it.categoryId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found"));
+    requireBranchAccess(u, b.id);
+    if (!Objects.equals(c.tenantId, b.tenantId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong tenant");
+    }
+    List<Long> tagIds = req == null || req.tagIds == null ? List.of() : req.tagIds.stream().distinct().toList();
+    if (!tagIds.isEmpty()) {
+      List<MenuTag> tags = menuTagRepo.findAllById(tagIds);
+      if (tags.size() != tagIds.size()) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown tag");
+      }
+      for (MenuTag t : tags) {
+        if (!Objects.equals(t.tenantId, b.tenantId)) {
+          throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong tenant");
+        }
+      }
+    }
+    menuItemTagRepo.deleteByMenuItemId(it.id);
+    List<MenuItemTag> links = new ArrayList<>();
+    for (Long tagId : tagIds) {
+      MenuItemTag link = new MenuItemTag();
+      link.menuItemId = it.id;
+      link.tagId = tagId;
+      links.add(link);
+    }
+    if (!links.isEmpty()) {
+      menuItemTagRepo.saveAll(links);
+    }
+    auditService.log(u, "UPDATE_TAGS", "MenuItem", it.id, "tagIds=" + tagIds);
   }
 
   @PostMapping("/menu/items")
@@ -3103,6 +3311,65 @@ public class AdminController {
     Boolean isActive,
     Boolean isStopList
   ) {}
+
+  public record MenuTimeSlotDto(
+    long id,
+    long branchId,
+    String name,
+    int daysMask,
+    String startTime,
+    String endTime,
+    boolean isActive
+  ) {}
+
+  public record CreateMenuTimeSlotRequest(
+    @NotBlank String name,
+    Integer daysMask,
+    @NotBlank String startTime,
+    @NotBlank String endTime,
+    Boolean isActive
+  ) {}
+
+  public record UpdateMenuTimeSlotRequest(
+    String name,
+    Integer daysMask,
+    String startTime,
+    String endTime,
+    Boolean isActive
+  ) {}
+
+  public record MenuItemTimeSlotsResponse(long menuItemId, List<Long> timeSlotIds) {}
+  public record MenuItemTimeSlotsRequest(@NotNull List<Long> timeSlotIds) {}
+
+  private LocalTime parseLocalTime(String value, String fieldName) {
+    if (value == null || value.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, fieldName + " is required");
+    }
+    try {
+      return LocalTime.parse(value.trim());
+    } catch (Exception e) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, fieldName + " is invalid");
+    }
+  }
+
+  private void validateDaysMask(Integer mask) {
+    if (mask == null) return;
+    if (mask < 1 || mask > 127) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "daysMask out of range");
+    }
+  }
+
+  private MenuTimeSlotDto toDto(MenuTimeSlot s) {
+    return new MenuTimeSlotDto(
+      s.id,
+      s.branchId,
+      s.name,
+      s.daysMask,
+      s.startTime.toString(),
+      s.endTime.toString(),
+      s.isActive
+    );
+  }
 
   @PatchMapping("/menu/items/{id}")
   public MenuItemDto updateMenuItem(
@@ -3250,6 +3517,167 @@ public class AdminController {
     o.isStopList = isStopList;
     o.updatedAt = Instant.now();
     menuItemOverrideRepo.save(o);
+  }
+
+  // --- Menu Time Slots ---
+  @GetMapping("/menu/time-slots")
+  public List<MenuTimeSlotDto> listMenuTimeSlots(
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_VIEW);
+    long bid = resolveBranchId(u, branchId);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
+    List<MenuTimeSlot> slots = menuTimeSlotRepo.findByBranchId(b.id);
+    return slots.stream().map(this::toDto).toList();
+  }
+
+  @PostMapping("/menu/time-slots")
+  public MenuTimeSlotDto createMenuTimeSlot(
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @Valid @RequestBody CreateMenuTimeSlotRequest req,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_MANAGE);
+    long bid = resolveBranchId(u, branchId);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
+    validateDaysMask(req.daysMask);
+    MenuTimeSlot s = new MenuTimeSlot();
+    s.branchId = b.id;
+    s.name = req.name.trim();
+    s.daysMask = req.daysMask == null ? 127 : req.daysMask;
+    s.startTime = parseLocalTime(req.startTime, "startTime");
+    s.endTime = parseLocalTime(req.endTime, "endTime");
+    s.isActive = req.isActive == null || req.isActive;
+    s.updatedAt = Instant.now();
+    s = menuTimeSlotRepo.save(s);
+    auditService.log(u, "CREATE", "MenuTimeSlot", s.id, null);
+    return toDto(s);
+  }
+
+  @PutMapping("/menu/time-slots/{id}")
+  public MenuTimeSlotDto updateMenuTimeSlot(
+    @PathVariable long id,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @RequestBody UpdateMenuTimeSlotRequest req,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_MANAGE);
+    long bid = resolveBranchId(u, branchId);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
+    MenuTimeSlot s = menuTimeSlotRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Time slot not found"));
+    if (!Objects.equals(s.branchId, b.id)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong branch");
+    }
+    validateDaysMask(req.daysMask);
+    if (req.name != null) s.name = req.name.trim();
+    if (req.daysMask != null) s.daysMask = req.daysMask;
+    if (req.startTime != null) s.startTime = parseLocalTime(req.startTime, "startTime");
+    if (req.endTime != null) s.endTime = parseLocalTime(req.endTime, "endTime");
+    if (req.isActive != null) s.isActive = req.isActive;
+    s.updatedAt = Instant.now();
+    s = menuTimeSlotRepo.save(s);
+    auditService.log(u, "UPDATE", "MenuTimeSlot", s.id, null);
+    return toDto(s);
+  }
+
+  @DeleteMapping("/menu/time-slots/{id}")
+  public void deleteMenuTimeSlot(
+    @PathVariable long id,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_MANAGE);
+    long bid = resolveBranchId(u, branchId);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
+    MenuTimeSlot s = menuTimeSlotRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Time slot not found"));
+    if (!Objects.equals(s.branchId, b.id)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong branch");
+    }
+    menuTimeSlotRepo.delete(s);
+    auditService.log(u, "DELETE", "MenuTimeSlot", s.id, null);
+  }
+
+  @GetMapping("/menu/items/{id}/time-slots")
+  public MenuItemTimeSlotsResponse getMenuItemTimeSlots(
+    @PathVariable long id,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_VIEW);
+    long bid = resolveBranchId(u, branchId);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
+    MenuItem it = itemRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Menu item not found"));
+    MenuCategory c = categoryRepo.findById(it.categoryId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found"));
+    if (!Objects.equals(c.tenantId, b.tenantId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong tenant");
+    }
+    List<Long> slotIds = menuItemTimeSlotRepo.findByMenuItemId(id).stream().map(x -> x.timeSlotId).toList();
+    return new MenuItemTimeSlotsResponse(id, slotIds);
+  }
+
+  @PutMapping("/menu/items/{id}/time-slots")
+  @Transactional
+  public MenuItemTimeSlotsResponse setMenuItemTimeSlots(
+    @PathVariable long id,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @Valid @RequestBody MenuItemTimeSlotsRequest req,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_MANAGE);
+    long bid = resolveBranchId(u, branchId);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
+    MenuItem it = itemRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Menu item not found"));
+    MenuCategory c = categoryRepo.findById(it.categoryId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found"));
+    if (!Objects.equals(c.tenantId, b.tenantId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong tenant");
+    }
+    List<Long> requested = req.timeSlotIds == null ? List.of() : req.timeSlotIds.stream().filter(Objects::nonNull).toList();
+    if (!requested.isEmpty()) {
+      List<Long> allowed = menuTimeSlotRepo.findByBranchId(b.id).stream().map(x -> x.id).toList();
+      for (Long sid : requested) {
+        if (!allowed.contains(sid)) {
+          throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Time slot not in branch");
+        }
+      }
+    }
+    menuItemTimeSlotRepo.deleteByMenuItemId(id);
+    if (!requested.isEmpty()) {
+      List<MenuItemTimeSlot> links = new ArrayList<>();
+      for (Long sid : requested) {
+        MenuItemTimeSlot link = new MenuItemTimeSlot();
+        link.menuItemId = id;
+        link.timeSlotId = sid;
+        links.add(link);
+      }
+      menuItemTimeSlotRepo.saveAll(links);
+    }
+    auditService.log(u, "UPDATE", "MenuItemTimeSlots", id, null);
+    return new MenuItemTimeSlotsResponse(id, requested);
   }
 
   // --- Tables ---

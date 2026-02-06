@@ -170,6 +170,8 @@ export default function TablePage({ params, searchParams }: any) {
   const [error, setError] = useState<string | null>(null);
   const [session, setSession] = useState<StartSessionResponse | null>(null);
   const [menu, setMenu] = useState<MenuResponse | null>(null);
+  const [tagFilters, setTagFilters] = useState<string[]>([]);
+  const [allergenHidden, setAllergenHidden] = useState<string[]>([]);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [placing, setPlacing] = useState(false);
   const [orderId, setOrderId] = useState<number | null>(null);
@@ -238,6 +240,66 @@ export default function TablePage({ params, searchParams }: any) {
   const [guestProfileError, setGuestProfileError] = useState<string | null>(null);
   const [guestVisits, setGuestVisits] = useState<{ orderId: number; status: string; createdAt: string; tableNumber: number; branchId: number }[]>([]);
   const [guestVisitsLoading, setGuestVisitsLoading] = useState(false);
+
+  const normalizeToken = useCallback((value: string) => value.trim().toLowerCase(), []);
+  const splitAllergens = useCallback((value?: string | null) => {
+    if (!value) return [] as string[];
+    return value
+      .split(",")
+      .map((v) => v.trim())
+      .filter(Boolean);
+  }, []);
+
+  const availableTags = useMemo(() => {
+    const set = new Set<string>();
+    (menu?.categories ?? []).forEach((cat) => {
+      cat.items.forEach((it) => {
+        (it.tags ?? []).forEach((tag) => {
+          const normalized = normalizeToken(tag);
+          if (normalized) set.add(normalized);
+        });
+      });
+    });
+    return Array.from(set).sort();
+  }, [menu, normalizeToken]);
+
+  const availableAllergens = useMemo(() => {
+    const set = new Set<string>();
+    (menu?.categories ?? []).forEach((cat) => {
+      cat.items.forEach((it) => {
+        splitAllergens(it.allergens).forEach((al) => {
+          const normalized = normalizeToken(al);
+          if (normalized) set.add(normalized);
+        });
+      });
+    });
+    return Array.from(set).sort();
+  }, [menu, splitAllergens, normalizeToken]);
+
+  const filteredMenu = useMemo(() => {
+    if (!menu) return null;
+    const needTags = tagFilters.length > 0;
+    const hideAllergens = allergenHidden.length > 0;
+    const hiddenSet = new Set(allergenHidden.map(normalizeToken));
+    const tagSet = new Set(tagFilters.map(normalizeToken));
+    const categories = menu.categories
+      .map((cat) => {
+        const items = cat.items.filter((it) => {
+          if (needTags) {
+            const itemTags = (it.tags ?? []).map(normalizeToken);
+            if (!itemTags.some((t) => tagSet.has(t))) return false;
+          }
+          if (hideAllergens) {
+            const itemAll = splitAllergens(it.allergens).map(normalizeToken);
+            if (itemAll.some((a) => hiddenSet.has(a))) return false;
+          }
+          return true;
+        });
+        return { ...cat, items };
+      })
+      .filter((cat) => cat.items.length > 0);
+    return { ...menu, categories };
+  }, [menu, tagFilters, allergenHidden, normalizeToken, splitAllergens]);
   const [lastOrders, setLastOrders] = useState<{ orderId: number; status: string; createdAt: string | null; items: { menuItemId: number; name: string; qty: number }[]; }[]>([]);
   const [lastOrdersLoading, setLastOrdersLoading] = useState(false);
   const [lastOrdersError, setLastOrdersError] = useState<string | null>(null);
@@ -2006,7 +2068,96 @@ export default function TablePage({ params, searchParams }: any) {
       )}
 
       <h2 style={{ marginTop: 20 }}>{t(lang, "menu")}</h2>
-      {menu?.categories.map((cat) => (
+      {(availableTags.length > 0 || availableAllergens.length > 0) && (
+        <div style={{ border: "1px solid #eee", borderRadius: 10, padding: 12, marginTop: 10 }}>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>{t(lang, "filtersTitle")}</div>
+          {availableTags.length > 0 && (
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 12, color: "#666", marginBottom: 4 }}>{t(lang, "filterTags")}</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={() => setTagFilters([])}
+                  style={{
+                    padding: "4px 8px",
+                    borderRadius: 999,
+                    border: tagFilters.length === 0 ? "2px solid #111" : "1px solid #ddd",
+                    background: tagFilters.length === 0 ? "#111" : "#fff",
+                    color: tagFilters.length === 0 ? "#fff" : "#111",
+                    fontSize: 12,
+                  }}
+                >
+                  {t(lang, "filterAll")}
+                </button>
+                {availableTags.map((tag) => {
+                  const active = tagFilters.includes(tag);
+                  return (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() =>
+                        setTagFilters((prev) => (active ? prev.filter((t) => t !== tag) : [...prev, tag]))
+                      }
+                      style={{
+                        padding: "4px 8px",
+                        borderRadius: 999,
+                        border: active ? "2px solid #111" : "1px solid #ddd",
+                        background: active ? "#111" : "#fff",
+                        color: active ? "#fff" : "#111",
+                        fontSize: 12,
+                      }}
+                    >
+                      {tag}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {availableAllergens.length > 0 && (
+            <div style={{ marginBottom: 6 }}>
+              <div style={{ fontSize: 12, color: "#666", marginBottom: 4 }}>{t(lang, "filterAllergens")}</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {availableAllergens.map((al) => {
+                  const hidden = allergenHidden.includes(al);
+                  return (
+                    <button
+                      key={al}
+                      type="button"
+                      onClick={() =>
+                        setAllergenHidden((prev) => (hidden ? prev.filter((a) => a !== al) : [...prev, al]))
+                      }
+                      style={{
+                        padding: "4px 8px",
+                        borderRadius: 999,
+                        border: hidden ? "2px solid #b11e46" : "1px solid #ddd",
+                        background: hidden ? "#fee2e2" : "#fff",
+                        color: hidden ? "#991b1b" : "#111",
+                        fontSize: 12,
+                      }}
+                    >
+                      {hidden ? `${t(lang, "filterShowAllergen")}: ${al}` : `${t(lang, "filterHideAllergen")}: ${al}`}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {(tagFilters.length > 0 || allergenHidden.length > 0) && (
+            <button
+              type="button"
+              onClick={() => {
+                setTagFilters([]);
+                setAllergenHidden([]);
+              }}
+              style={{ marginTop: 6, fontSize: 12 }}
+            >
+              {t(lang, "filterClear")}
+            </button>
+          )}
+        </div>
+      )}
+      {filteredMenu?.categories.map((cat) => (
         <section key={cat.id} style={{ marginBottom: 18 }}>
           <h3 style={{ margin: "10px 0" }}>{cat.name}</h3>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 10 }}>

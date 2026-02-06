@@ -8,6 +8,23 @@ import GuestConsentLogs from "../components/GuestConsentLogs";
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8080";
 
 type Lang = "ru" | "ro" | "en";
+const TIME_ZONE_OPTIONS = [
+  "UTC",
+  "Europe/Chisinau",
+  "Europe/Kiev",
+  "Europe/Bucharest",
+  "Europe/Warsaw",
+  "Europe/London",
+  "Europe/Berlin",
+  "Europe/Paris",
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Los_Angeles",
+  "Asia/Dubai",
+  "Asia/Tbilisi",
+  "Asia/Yerevan",
+];
 const dict: Record<string, Record<Lang, string>> = {
   loginTitle: { ru: "Вход Super Admin", ro: "Autentificare Super Admin", en: "Super Admin Login" },
   superAdmin: { ru: "Супер‑админ", ro: "Super Admin", en: "Super Admin" },
@@ -24,6 +41,7 @@ const dict: Record<string, Record<Lang, string>> = {
   branches: { ru: "Филиалы", ro: "Filiale", en: "Branches" },
   branchSettings: { ru: "Настройки филиала", ro: "Setări filială", en: "Branch settings" },
   defaultLanguage: { ru: "Язык по умолчанию (гость)", ro: "Limba implicită (oaspete)", en: "Default language (guest)" },
+  timeZone: { ru: "Часовой пояс", ro: "Fus orar", en: "Time zone" },
   langRu: { ru: "Русский", ro: "Rusă", en: "Russian" },
   langRo: { ru: "Румынский", ro: "Română", en: "Romanian" },
   langEn: { ru: "Английский", ro: "Engleză", en: "English" },
@@ -327,6 +345,7 @@ type Branch = {
 type BranchSettings = {
   branchId: number;
   defaultLang?: string;
+  timeZone?: string;
   onlinePayEnabled?: boolean;
   onlinePayProvider?: string | null;
   onlinePayCurrencyCode?: string | null;
@@ -945,7 +964,7 @@ export default function SuperAdminPage() {
     setPermissionsMessage(null);
   }, [permissionsStaffId, staff, parsePermissionsCsv, defaultPermsForRole]);
 
-  async function api(path: string, init?: RequestInit) {
+  const api = useCallback(async (path: string, init?: RequestInit) => {
     const res = await fetch(`${API_BASE}${path}`, {
       ...init,
       credentials: "include",
@@ -968,7 +987,7 @@ export default function SuperAdminPage() {
       throw new Error(body?.message ?? `${t(lang, "requestFailed")} (${res.status})`);
     }
     return res;
-  }
+  }, [lang]);
 
   async function uploadMediaFile(file: File, type: string) {
     const form = new FormData();
@@ -1216,7 +1235,7 @@ export default function SuperAdminPage() {
     }
   }
 
-  async function loadTotpStatus(force = false) {
+  const loadTotpStatus = useCallback(async (force = false) => {
     if (!authReady && !force) return;
     try {
       const res = await api("/api/super/2fa/status");
@@ -1229,7 +1248,7 @@ export default function SuperAdminPage() {
     } catch {
       setTotpStatus(null);
     }
-  }
+  }, [authReady, api]);
 
   async function setupTotp() {
     setTotpError(null);
@@ -1274,7 +1293,7 @@ export default function SuperAdminPage() {
     }
   }
 
-  async function loadTenants() {
+  const loadTenants = useCallback(async () => {
     if (!authReady) return;
     setError(null);
     try {
@@ -1295,9 +1314,9 @@ export default function SuperAdminPage() {
     } catch (e: any) {
       setError(e?.message ?? t(lang, "loadError"));
     }
-  }
+  }, [authReady, tenantStatusFilter, tenantId, branchRestaurantFilterId, branchStatusFilter, api, lang]);
 
-  async function loadCurrencies() {
+  const loadCurrencies = useCallback(async () => {
     if (!authReady) return;
     try {
       const res = await api("/api/admin/currencies?includeInactive=true");
@@ -1305,14 +1324,13 @@ export default function SuperAdminPage() {
     } catch (_) {
       setCurrencies([]);
     }
-  }
+  }, [authReady, api]);
 
   useEffect(() => {
     loadTenants();
     loadCurrencies();
     loadTotpStatus();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authReady, tenantStatusFilter, branchStatusFilter, branchRestaurantFilterId, tenantId]);
+  }, [loadTenants, loadCurrencies, loadTotpStatus]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1334,7 +1352,7 @@ export default function SuperAdminPage() {
     };
   }, [totpOtpauth]);
 
-  async function loadTables() {
+  const loadTables = useCallback(async () => {
     if (!branchId) return;
     const hallsRes = await api(`/api/admin/halls?branchId=${branchId}`);
     const hallsBody = await hallsRes.json();
@@ -1344,9 +1362,9 @@ export default function SuperAdminPage() {
     }
     const res = await api(`/api/admin/tables?branchId=${branchId}`);
     setTables(await res.json());
-  }
+  }, [api, branchId, hallId]);
 
-  async function loadBranchSettings() {
+  const loadBranchSettings = useCallback(async () => {
     if (!branchId) {
       setBranchSettings(null);
       setCurrentIp("");
@@ -1367,7 +1385,7 @@ export default function SuperAdminPage() {
       setBranchSettings(null);
       setCurrentIp("");
     }
-  }
+  }, [api, branchId]);
 
   async function saveBranchSettings() {
     if (!branchId || !branchSettings) return;
@@ -1375,6 +1393,7 @@ export default function SuperAdminPage() {
       method: "PUT",
       body: JSON.stringify({
         defaultLang: branchSettings.defaultLang ?? "ru",
+        timeZone: branchSettings.timeZone,
         onlinePayEnabled: branchSettings.onlinePayEnabled,
         onlinePayProvider: branchSettings.onlinePayProvider,
         onlinePayCurrencyCode: branchSettings.onlinePayCurrencyCode,
@@ -1604,8 +1623,7 @@ export default function SuperAdminPage() {
     } else {
       setBranchSettings(null);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [branchId]);
+  }, [branchId, loadTables, loadBranchSettings]);
 
   useEffect(() => {
     if (!branchId || !hallId) return;
@@ -1644,8 +1662,7 @@ export default function SuperAdminPage() {
         }
       } catch (_) {}
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hallId, branchId]);
+  }, [api, hallId, branchId]);
 
   useEffect(() => {
     if (!hallId) return;
@@ -2679,6 +2696,20 @@ export default function SuperAdminPage() {
                 <option value="en">{t(lang, "langEn")}</option>
               </select>
             </label>
+            <label>
+              {t(lang, "timeZone")}
+              <input
+                list="tz-options"
+                value={branchSettings.timeZone ?? ""}
+                onChange={(e) => setBranchSettings({ ...branchSettings, timeZone: e.target.value })}
+                placeholder="Europe/Chisinau"
+              />
+            </label>
+            <datalist id="tz-options">
+              {TIME_ZONE_OPTIONS.map((tz) => (
+                <option key={tz} value={tz} />
+              ))}
+            </datalist>
             <label><input type="checkbox" checked={!!branchSettings.onlinePayEnabled} onChange={(e) => setBranchSettings({ ...branchSettings, onlinePayEnabled: e.target.checked })} /> {t(lang, "onlinePayEnabled")}</label>
             <label>
               {t(lang, "onlinePayProvider")}

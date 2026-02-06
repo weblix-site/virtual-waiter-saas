@@ -106,6 +106,9 @@ public class BranchSettings {
   @Column(name = "default_lang")
   public String defaultLang;
 
+  @Column(name = "time_zone")
+  public String timeZone;
+
   @Column(name = "commission_model")
   public String commissionModel;
 

@@ -59,7 +59,7 @@ docker compose version
 
 ## 2.1) (Опционально) Установить Flutter для staff‑app
 
-Если нужен запуск/тесты `staff-app`, установите Flutter SDK и добавьте в PATH:
+Если нужен запуск/тесты `staff-app`, установите Flutter SDK и добавьте в PATH на постоянной основе:
 ```bash
 mkdir -p /opt
 git clone https://github.com/flutter/flutter.git -b stable --depth 1 /opt/flutter
@@ -68,6 +68,7 @@ chmod +x /etc/profile.d/flutter.sh
 source /etc/profile.d/flutter.sh
 flutter --version
 ```
+Если `flutter` не найден — перезапустите терминал/сессию.
 
 ---
 
