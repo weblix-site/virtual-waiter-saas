@@ -245,6 +245,12 @@ const dict: Record<string, Record<Lang, string>> = {
   avgSla: { ru: "Средний SLA (мин.)", ro: "SLA mediu (min.)", en: "Average SLA (min.)" },
   topItems: { ru: "Топ‑позиции", ro: "Top produse", en: "Top items" },
   topWaiters: { ru: "Топ‑официанты", ro: "Top chelneri", en: "Top waiters" },
+  items: { ru: "Позиции", ro: "Produse", en: "Items" },
+  order: { ru: "Порядок", ro: "Ordine", en: "Order" },
+  prev: { ru: "Назад", ro: "Înapoi", en: "Prev" },
+  next: { ru: "Вперёд", ro: "Înainte", en: "Next" },
+  page: { ru: "Стр.", ro: "Pag.", en: "Page" },
+  of: { ru: "из", ro: "din", en: "of" },
   qty: { ru: "Кол-во", ro: "Cantitate", en: "Qty" },
   slaMinutes: { ru: "SLA (мин.)", ro: "SLA (min.)", en: "SLA (min.)" },
   branchReviewsAvg: { ru: "Средний рейтинг", ro: "Rating mediu", en: "Average rating" },
@@ -256,6 +262,12 @@ const dict: Record<string, Record<Lang, string>> = {
   branchesCsv: { ru: "Филиалы CSV", ro: "Filiale CSV", en: "Branches CSV" },
   topItemsCsv: { ru: "Топ‑позиции CSV", ro: "Top produse CSV", en: "Top items CSV" },
   topWaitersCsv: { ru: "Топ‑официанты CSV", ro: "Top chelneri CSV", en: "Top waiters CSV" },
+  combosTitle: { ru: "Комбо", ro: "Combo", en: "Combos" },
+  combosCsv: { ru: "Комбо CSV", ro: "Combo CSV", en: "Combos CSV" },
+  comboMenuItem: { ru: "Комбо‑позиция", ro: "Produs combo", en: "Combo item" },
+  comboItemsCount: { ru: "Позиции (кол‑во)", ro: "Articole (nr.)", en: "Items count" },
+  comboItemsSummary: { ru: "Состав", ro: "Componență", en: "Composition" },
+  comboActive: { ru: "Активность", ro: "Activ", en: "Active" },
   period: { ru: "Период", ro: "Perioadă", en: "Period" },
   orders: { ru: "Заказы", ro: "Comenzi", en: "Orders" },
   waiterCalls: { ru: "Вызовы", ro: "Apeluri", en: "Waiter calls" },
@@ -432,6 +444,18 @@ type WaiterMotivationRow = {
   ordersCount: number;
   tipsCents: number;
   avgSlaMinutes?: number | null;
+};
+
+type ComboReportRow = {
+  comboId: number;
+  tenantId: number;
+  restaurantId?: number | null;
+  branchId?: number | null;
+  menuItemId?: number | null;
+  menuItemName?: string | null;
+  active: boolean;
+  itemsCount: number;
+  itemsSummary?: string | null;
 };
 
 type ConsentLog = {
@@ -799,6 +823,16 @@ export default function SuperAdminPage() {
   const [branchStats, setBranchStats] = useState<BranchSummaryRow[]>([]);
   const [topItems, setTopItems] = useState<TopItemRow[]>([]);
   const [topWaiters, setTopWaiters] = useState<WaiterMotivationRow[]>([]);
+  const [combos, setCombos] = useState<ComboReportRow[]>([]);
+  const [combosLoading, setCombosLoading] = useState(false);
+  const [combosError, setCombosError] = useState<string | null>(null);
+  const [combosTotal, setCombosTotal] = useState(0);
+  const [combosPage, setCombosPage] = useState(0);
+  const [combosSize, setCombosSize] = useState(25);
+  const [combosSortBy, setCombosSortBy] = useState<"branchId" | "comboId" | "menuItemName" | "itemsCount" | "active" | "restaurantId">("branchId");
+  const [combosSortDir, setCombosSortDir] = useState<"asc" | "desc">("asc");
+  const [combosHasNext, setCombosHasNext] = useState(false);
+  const combosInitRef = useRef(false);
   const [tables, setTables] = useState<TableDto[]>([]);
   const [halls, setHalls] = useState<HallDto[]>([]);
   const [hallPlans, setHallPlans] = useState<HallPlanDto[]>([]);
@@ -1713,6 +1747,78 @@ export default function SuperAdminPage() {
     setTopWaiters(await resTopWaiters.json());
   }
 
+  const loadCombosReport = useCallback(async () => {
+    if (!tenantId) return;
+    setCombosLoading(true);
+    setCombosError(null);
+    try {
+      const qs = new URLSearchParams();
+      qs.set("tenantId", String(tenantId));
+      if (branchRestaurantFilterId) qs.set("restaurantId", String(branchRestaurantFilterId));
+      if (branchId) qs.set("branchId", String(branchId));
+      qs.set("sortBy", combosSortBy);
+      qs.set("sortDir", combosSortDir);
+      qs.set("page", String(combosPage));
+      qs.set("size", String(combosSize));
+      const res = await api(`/api/super/combos?${qs.toString()}`);
+      if (!res.ok) throw new Error(await res.text());
+      const body = await res.json();
+      const totalHeader = res.headers.get("x-total-count");
+      const total = totalHeader ? Number(totalHeader) : (Array.isArray(body) ? body.length : 0);
+      setCombosTotal(Number.isFinite(total) ? total : 0);
+      setCombos(body);
+      const totalPages = combosSize > 0 ? Math.ceil((Number.isFinite(total) ? total : 0) / combosSize) : 0;
+      setCombosHasNext(combosPage + 1 < totalPages);
+    } catch (err: any) {
+      setCombosError(err?.message ?? "Failed to load combos");
+      setCombos([]);
+      setCombosTotal(0);
+      setCombosHasNext(false);
+    } finally {
+      setCombosLoading(false);
+    }
+  }, [tenantId, branchRestaurantFilterId, branchId, combosSortBy, combosSortDir, combosPage, combosSize, api]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const p = Number(params.get("comboPage"));
+    const s = Number(params.get("comboSize"));
+    const sortBy = params.get("comboSortBy");
+    const sortDir = params.get("comboSortDir");
+    if (Number.isFinite(p) && p >= 0) setCombosPage(p);
+    if (Number.isFinite(s) && s > 0) setCombosSize(s);
+    if (sortBy === "branchId" || sortBy === "comboId" || sortBy === "menuItemName" || sortBy === "itemsCount" || sortBy === "active" || sortBy === "restaurantId") {
+      setCombosSortBy(sortBy);
+    }
+    if (sortDir === "asc" || sortDir === "desc") setCombosSortDir(sortDir);
+    combosInitRef.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (!combosInitRef.current) return;
+    setCombosPage(0);
+  }, [tenantId, branchRestaurantFilterId, branchId, combosSortBy, combosSortDir, combosSize]);
+
+  useEffect(() => {
+    if (!tenantId) return;
+    loadCombosReport();
+  }, [tenantId, branchRestaurantFilterId, branchId, combosPage, combosSize, combosSortBy, combosSortDir, loadCombosReport]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (combosPage > 0) url.searchParams.set("comboPage", String(combosPage));
+    else url.searchParams.delete("comboPage");
+    if (combosSize !== 25) url.searchParams.set("comboSize", String(combosSize));
+    else url.searchParams.delete("comboSize");
+    if (combosSortBy !== "branchId") url.searchParams.set("comboSortBy", combosSortBy);
+    else url.searchParams.delete("comboSortBy");
+    if (combosSortDir !== "asc") url.searchParams.set("comboSortDir", combosSortDir);
+    else url.searchParams.delete("comboSortDir");
+    window.history.replaceState({}, "", url.toString());
+  }, [combosPage, combosSize, combosSortBy, combosSortDir]);
+
   async function loadGuestConsents() {
     const phone = guestConsentPhone.trim();
     if (!phone) {
@@ -1934,6 +2040,24 @@ export default function SuperAdminPage() {
     const a = document.createElement("a");
     a.href = url;
     a.download = "tenant-top-waiters.csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function downloadCombosCsv() {
+    if (!tenantId) return;
+    const qs = new URLSearchParams();
+    qs.set("tenantId", String(tenantId));
+    if (branchRestaurantFilterId) qs.set("restaurantId", String(branchRestaurantFilterId));
+    if (branchId) qs.set("branchId", String(branchId));
+    const res = await api(`/api/super/combos.csv?${qs.toString()}`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "tenant-combos.csv";
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -3931,6 +4055,122 @@ export default function SuperAdminPage() {
             </div>
           </div>
         )}
+      </section>
+
+      <section style={{ marginTop: 24 }}>
+        <h2>{t(lang, "combosTitle")}</h2>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <label>
+            {t(lang, "restaurant")}
+            <select value={branchRestaurantFilterId} onChange={(e) => setBranchRestaurantFilterId(e.target.value ? Number(e.target.value) : "")}>
+              <option value="">{t(lang, "selectRestaurant")}</option>
+              {restaurants.filter((r) => !tenantId || r.tenantId === tenantId).map((r) => (
+                <option key={r.id} value={r.id}>{restaurantOptionLabel(r)}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            {t(lang, "branch")}
+            <select
+              value={branchId}
+              onChange={(e) => {
+                const next = e.target.value ? Number(e.target.value) : "";
+                setBranchId(next);
+                if (!next) setHallId("");
+              }}
+            >
+              <option value="">{t(lang, "selectBranch")}</option>
+              {branches
+                .filter((b) => (!tenantId || b.tenantId === Number(tenantId)) && (!branchRestaurantFilterId || b.restaurantId === branchRestaurantFilterId))
+                .map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+            </select>
+          </label>
+          <label>
+            {t(lang, "sort")}
+            <select value={combosSortBy} onChange={(e) => setCombosSortBy(e.target.value as any)}>
+              <option value="branchId">{t(lang, "branch")}</option>
+              <option value="comboId">ID</option>
+              <option value="menuItemName">{t(lang, "comboMenuItem")}</option>
+              <option value="itemsCount">{t(lang, "comboItemsCount")}</option>
+              <option value="active">{t(lang, "comboActive")}</option>
+              <option value="restaurantId">{t(lang, "restaurant")}</option>
+            </select>
+          </label>
+          <label>
+            {t(lang, "order")}
+            <select value={combosSortDir} onChange={(e) => setCombosSortDir(e.target.value as any)}>
+              <option value="asc">ASC</option>
+              <option value="desc">DESC</option>
+            </select>
+          </label>
+          <label>
+            {t(lang, "items")}
+            <select value={combosSize} onChange={(e) => setCombosSize(Number(e.target.value))}>
+              <option value={10}>10</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+          </label>
+          <button onClick={loadCombosReport} disabled={!tenantId}>{t(lang, "load")}</button>
+          <button onClick={downloadCombosCsv} disabled={!tenantId}>{t(lang, "combosCsv")}</button>
+          {combosLoading && <span style={{ fontSize: 12 }}>{t(lang, "loading")}</span>}
+          {combosError && <span style={{ fontSize: 12, color: "#b11e46" }}>{combosError}</span>}
+        </div>
+        <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <button onClick={() => setCombosPage((p) => Math.max(0, p - 1))} disabled={combosPage === 0}>
+            {t(lang, "prev")}
+          </button>
+          <span style={{ fontSize: 12 }}>
+            {t(lang, "page")} {combosPage + 1} {t(lang, "of")} {Math.max(1, Math.ceil(combosTotal / Math.max(1, combosSize)))}
+          </span>
+          <button onClick={() => setCombosPage((p) => p + 1)} disabled={!combosHasNext}>
+            {t(lang, "next")}
+          </button>
+        </div>
+        <div style={{ marginTop: 10 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr>
+                <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>ID</th>
+                <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "comboMenuItem")}</th>
+                <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "restaurant")}</th>
+                <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "branch")}</th>
+                <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "comboActive")}</th>
+                <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "comboItemsCount")}</th>
+                <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "comboItemsSummary")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {combos.map((c) => (
+                <tr key={c.comboId}>
+                  <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{c.comboId}</td>
+                  <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>
+                    {c.menuItemName ?? `#${c.menuItemId ?? ""}`}
+                  </td>
+                  <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>
+                    {restaurantLabel(c.restaurantId ?? null)}
+                  </td>
+                  <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>
+                    {branches.find((b) => b.id === c.branchId)?.name ?? c.branchId}
+                  </td>
+                  <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>
+                    {c.active ? t(lang, "active") : t(lang, "inactive")}
+                  </td>
+                  <td style={{ padding: "6px 4px", textAlign: "right", borderBottom: "1px solid #f0f0f0" }}>{c.itemsCount}</td>
+                  <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{c.itemsSummary || "—"}</td>
+                </tr>
+              ))}
+              {combos.length === 0 && !combosLoading && (
+                <tr>
+                  <td colSpan={7} style={{ padding: "6px 4px", color: "#666" }}>{t(lang, "noData")}</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section style={{ marginTop: 24 }}>

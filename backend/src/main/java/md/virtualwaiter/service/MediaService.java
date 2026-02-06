@@ -26,13 +26,17 @@ public class MediaService {
   private final Path storageRoot;
   private final String publicBaseUrl;
   private final long maxUploadBytes;
+  private final long maxVideoBytes;
   private final Set<String> allowedExts;
+  private final Set<String> allowedVideoExts;
 
   public MediaService(MediaProperties props) {
     this.storageRoot = Path.of(props.storageRoot).toAbsolutePath().normalize();
     this.publicBaseUrl = trimTrailingSlash(props.publicBaseUrl);
     this.maxUploadBytes = props.maxUploadBytes;
+    this.maxVideoBytes = props.maxVideoBytes;
     this.allowedExts = parseExts(props.allowedPhotoExts);
+    this.allowedVideoExts = parseExts(props.allowedVideoExts);
   }
 
   public record UploadResult(String url, String relativePath, long size, String contentType) {}
@@ -41,16 +45,26 @@ public class MediaService {
     if (file == null || file.isEmpty()) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "File is required");
     }
-    if (maxUploadBytes > 0 && file.getSize() > maxUploadBytes) {
-      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "File is too large");
-    }
     String type = normalizeType(rawType);
     String ext = resolveExt(file);
     if (ext == null) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unable to detect file type");
     }
-    if (!allowedExts.isEmpty() && !allowedExts.contains(ext)) {
-      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported file type");
+    boolean isVideo = allowedVideoExts.contains(ext);
+    if (isVideo) {
+      if (maxVideoBytes > 0 && file.getSize() > maxVideoBytes) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Video file is too large");
+      }
+      if (!allowedVideoExts.isEmpty() && !allowedVideoExts.contains(ext)) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported video type");
+      }
+    } else {
+      if (maxUploadBytes > 0 && file.getSize() > maxUploadBytes) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "File is too large");
+      }
+      if (!allowedExts.isEmpty() && !allowedExts.contains(ext)) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported file type");
+      }
     }
 
     String datePath = LocalDate.now().format(PATH_FMT);
@@ -97,6 +111,9 @@ public class MediaService {
       case "image/png" -> "png";
       case "image/webp" -> "webp";
       case "image/gif" -> "gif";
+      case "video/mp4" -> "mp4";
+      case "video/webm" -> "webm";
+      case "video/quicktime" -> "mov";
       default -> null;
     };
   }

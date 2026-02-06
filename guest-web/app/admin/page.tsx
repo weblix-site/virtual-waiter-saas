@@ -112,6 +112,37 @@ const dict: Record<string, Record<Lang, string>> = {
   menuTagDelete: { ru: "Удалить тег", ro: "Șterge eticheta", en: "Delete tag" },
   menuItemTagsLabel: { ru: "Теги (справочник)", ro: "Etichete (catalog)", en: "Tags (catalog)" },
   menuItemTagsNone: { ru: "Нет доступных тегов", ro: "Nu există etichete", en: "No tags available" },
+  menuItemRecsTitle: { ru: "Рекомендации", ro: "Recomandări", en: "Recommendations" },
+  menuItemRecsAdd: { ru: "Добавить рекомендацию", ro: "Adaugă recomandare", en: "Add recommendation" },
+  menuItemRecsSave: { ru: "Сохранить рекомендации", ro: "Salvează recomandările", en: "Save recommendations" },
+  menuItemRecsType: { ru: "Тип", ro: "Tip", en: "Type" },
+  menuItemRecsTarget: { ru: "Блюдо", ro: "Produs", en: "Item" },
+  menuItemRecsWith: { ru: "С этим берут", ro: "Cu acesta", en: "With" },
+  menuItemRecsDrink: { ru: "Напиток", ro: "Băutură", en: "Drink" },
+  menuItemRecsDessert: { ru: "Десерт", ro: "Desert", en: "Dessert" },
+  menuItemRecsSauce: { ru: "Соус", ro: "Sos", en: "Sauce" },
+  menuItemRecsSide: { ru: "Гарнир", ro: "Garnitură", en: "Side" },
+  branchRecsTitle: { ru: "Рекомендованные шаблоны", ro: "Șabloane recomandate", en: "Recommended templates" },
+  branchRecsName: { ru: "Название шаблона", ro: "Nume șablon", en: "Template name" },
+  branchRecsAdd: { ru: "Добавить шаблон", ro: "Adaugă șablon", en: "Add template" },
+  branchRecsActive: { ru: "Активен", ro: "Activ", en: "Active" },
+  branchRecsSort: { ru: "Сортировка", ro: "Sortare", en: "Sort order" },
+  branchRecsDelete: { ru: "Удалить", ro: "Șterge", en: "Delete" },
+  branchRecsSelect: { ru: "Выберите шаблон", ro: "Selectează șablon", en: "Select template" },
+  branchRecsItemsTitle: { ru: "Состав шаблона", ro: "Componență șablon", en: "Template items" },
+  branchRecsAddItem: { ru: "Добавить позицию", ro: "Adaugă poziție", en: "Add item" },
+  branchRecsSaveItems: { ru: "Сохранить состав", ro: "Salvează compoziția", en: "Save items" },
+  branchRecsError: { ru: "Ошибка шаблонов", ro: "Eroare șabloane", en: "Template error" },
+  combosTitle: { ru: "Комбо/сеты", ro: "Combo/seturi", en: "Combos" },
+  comboMenuItem: { ru: "Позиция комбо", ro: "Produs combo", en: "Combo item" },
+  comboCreate: { ru: "Создать комбо", ro: "Creează combo", en: "Create combo" },
+  comboActive: { ru: "Активно", ro: "Activ", en: "Active" },
+  comboItems: { ru: "Состав комбо", ro: "Componente combo", en: "Combo items" },
+  comboAddItem: { ru: "Добавить позицию", ro: "Adaugă poziție", en: "Add item" },
+  comboMin: { ru: "Мин.", ro: "Min.", en: "Min" },
+  comboMax: { ru: "Макс.", ro: "Max.", en: "Max" },
+  comboSaveItems: { ru: "Сохранить состав", ro: "Salvează compoziția", en: "Save items" },
+  comboLoadError: { ru: "Ошибка комбо", ro: "Eroare combo", en: "Combo error" },
   discountScope: { ru: "Тип", ro: "Tip", en: "Scope" },
   discountScopeCoupon: { ru: "Промокод", ro: "Cod promo", en: "Coupon" },
   discountScopeHappyHour: { ru: "Happy‑hour", ro: "Happy‑hour", en: "Happy hour" },
@@ -474,6 +505,7 @@ const dict: Record<string, Record<Lang, string>> = {
   saveLayout: { ru: "Сохранить раскладку", ro: "Salvează aranjarea", en: "Save layout" },
   exportJson: { ru: "Экспорт JSON", ro: "Export JSON", en: "Export JSON" },
   showHistory: { ru: "Показать историю", ro: "Arată istoricul", en: "Show history" },
+  hide: { ru: "Скрыть", ro: "Ascunde", en: "Hide" },
   hideHistory: { ru: "Скрыть историю", ro: "Ascunde istoricul", en: "Hide history" },
   importJson: { ru: "Импорт JSON", ro: "Import JSON", en: "Import JSON" },
   applyLayouts: { ru: "Применить layout (с перезаписью)", ro: "Aplică layout (suprascrie)", en: "Apply layouts (overwrite)" },
@@ -551,6 +583,8 @@ const dict: Record<string, Record<Lang, string>> = {
   photoUrl: { ru: "Фото", ro: "Foto", en: "Photo" },
   photoUpload: { ru: "Загрузить фото", ro: "Încarcă foto", en: "Upload photo" },
   photosUpload: { ru: "Загрузить фото (несколько)", ro: "Încarcă poze (multiple)", en: "Upload photos (multiple)" },
+  videoUrl: { ru: "Ссылка на видео", ro: "Link video", en: "Video URL" },
+  videoUpload: { ru: "Загрузить видео", ro: "Încarcă video", en: "Upload video" },
   uploading: { ru: "Загрузка...", ro: "Se încarcă...", en: "Uploading..." },
   removePhoto: { ru: "Убрать", ro: "Elimină", en: "Remove" },
   commissionModel: { ru: "Комиссия: модель", ro: "Comision: model", en: "Commission model" },
@@ -703,6 +737,7 @@ type MenuItem = {
   weight?: string | null;
   tags?: string | null;
   photoUrls?: string | null;
+  videoUrl?: string | null;
   kcal?: number | null;
   proteinG?: number | null;
   fatG?: number | null;
@@ -711,6 +746,22 @@ type MenuItem = {
   currency: string;
   isActive: boolean;
   isStopList: boolean;
+};
+
+type ComboDto = {
+  id: number;
+  branchId: number;
+  menuItemId: number;
+  isActive: boolean;
+};
+
+type ComboItemDto = {
+  id?: number;
+  menuItemId: number;
+  minQty: number;
+  maxQty: number;
+  sortOrder: number;
+  isActive: boolean;
 };
 
 type MenuTimeSlot = {
@@ -728,6 +779,13 @@ type MenuTag = {
   name: string;
   slug: string;
   isAllergen: boolean;
+  isActive: boolean;
+};
+
+type MenuItemRecommendation = {
+  targetItemId: number;
+  type: string;
+  sortOrder: number;
   isActive: boolean;
 };
 
@@ -1326,12 +1384,30 @@ export default function AdminPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<MenuItem[]>([]);
   const [menuTags, setMenuTags] = useState<MenuTag[]>([]);
+  const [combos, setCombos] = useState<ComboDto[]>([]);
+  const [comboItemsByCombo, setComboItemsByCombo] = useState<Record<number, ComboItemDto[]>>({});
+  const [comboEditingId, setComboEditingId] = useState<number | null>(null);
+  const [comboLoading, setComboLoading] = useState(false);
+  const [comboError, setComboError] = useState<string | null>(null);
+  const [newComboMenuItemId, setNewComboMenuItemId] = useState<number | "">("");
+  const [newComboActive, setNewComboActive] = useState(true);
   const [menuTemplates, setMenuTemplates] = useState<MenuTemplateDto[]>([]);
   const [menuTemplateName, setMenuTemplateName] = useState("");
   const [menuTemplateScope, setMenuTemplateScope] = useState<"TENANT" | "RESTAURANT">("TENANT");
   const [menuTemplateApplyId, setMenuTemplateApplyId] = useState<number | "">("");
   const [menuTemplateReplace, setMenuTemplateReplace] = useState(true);
   const [menuTemplateMessage, setMenuTemplateMessage] = useState<string | null>(null);
+  const [branchRecTemplates, setBranchRecTemplates] = useState<{ id: number; name: string; sortOrder: number; isActive: boolean }[]>([]);
+  const [branchRecTemplateName, setBranchRecTemplateName] = useState("");
+  const [branchRecTemplateSort, setBranchRecTemplateSort] = useState(0);
+  const [branchRecTemplateActive, setBranchRecTemplateActive] = useState(true);
+  const [branchRecTemplateEdit, setBranchRecTemplateEdit] = useState<Record<number, { name: string; sortOrder: number; isActive: boolean }>>({});
+  const [branchRecTemplateId, setBranchRecTemplateId] = useState<number | "">("");
+  const [branchRecTemplateItems, setBranchRecTemplateItems] = useState<{ menuItemId: number; sortOrder: number; isActive: boolean }[]>([]);
+  const [branchRecTemplateNewItemId, setBranchRecTemplateNewItemId] = useState<number | "">("");
+  const [branchRecTemplateItemsLoading, setBranchRecTemplateItemsLoading] = useState(false);
+  const [branchRecTemplateItemsSaving, setBranchRecTemplateItemsSaving] = useState(false);
+  const [branchRecTemplateMessage, setBranchRecTemplateMessage] = useState<string | null>(null);
   const [tables, setTables] = useState<TableDto[]>([]);
   const [halls, setHalls] = useState<HallDto[]>([]);
   const [hallPlans, setHallPlans] = useState<HallPlanDto[]>([]);
@@ -1368,6 +1444,7 @@ export default function AdminPage() {
   const [applyLayoutsOnImport, setApplyLayoutsOnImport] = useState(true);
   const [applyTablesOnImport, setApplyTablesOnImport] = useState(true);
   const [currencies, setCurrencies] = useState<CurrencyDto[]>([]);
+  const menuItemMap = useMemo(() => new Map(items.map((it) => [it.id, it])), [items]);
   const zoneDragRef = useRef<{
     id: string;
     startX: number;
@@ -1620,6 +1697,7 @@ export default function AdminPage() {
   const [newItemTags, setNewItemTags] = useState("");
   const [newItemTagIds, setNewItemTagIds] = useState<number[]>([]);
   const [newItemPhotos, setNewItemPhotos] = useState("");
+  const [newItemVideoUrl, setNewItemVideoUrl] = useState("");
   const [newItemKcal, setNewItemKcal] = useState(0);
   const [newItemProtein, setNewItemProtein] = useState(0);
   const [newItemFat, setNewItemFat] = useState(0);
@@ -1658,6 +1736,9 @@ export default function AdminPage() {
   const [editItemTagIds, setEditItemTagIds] = useState<number[]>([]);
   const [editItemTagsLoading, setEditItemTagsLoading] = useState(false);
   const [editItemTagsSaving, setEditItemTagsSaving] = useState(false);
+  const [editItemRecs, setEditItemRecs] = useState<MenuItemRecommendation[]>([]);
+  const [editItemRecsLoading, setEditItemRecsLoading] = useState(false);
+  const [editItemRecsSaving, setEditItemRecsSaving] = useState(false);
 
   const [newMenuTagName, setNewMenuTagName] = useState("");
   const [newMenuTagSlug, setNewMenuTagSlug] = useState("");
@@ -2029,7 +2110,7 @@ export default function AdminPage() {
       next[row.tableId] = row;
     });
     setPlanSignals(next);
-  }, [authReady, planOperatorMode, hallId]);
+  }, [authReady, planOperatorMode, hallId, api]);
 
   useEffect(() => {
     if (!planOperatorMode) {
@@ -2227,16 +2308,98 @@ export default function AdminPage() {
     }
   }
 
+  const loadCombos = useCallback(async () => {
+    if (!canMenuView) return;
+    setComboLoading(true);
+    setComboError(null);
+    try {
+      const res = await api("/api/admin/combos");
+      setCombos(await res.json());
+    } catch (e: any) {
+      setComboError(e?.message ?? t(lang, "comboLoadError"));
+    } finally {
+      setComboLoading(false);
+    }
+  }, [api, canMenuView, lang]);
+
+  const loadComboItems = useCallback(async (comboId: number) => {
+    try {
+      const res = await api(`/api/admin/combos/${comboId}/items`);
+      const items: ComboItemDto[] = await res.json();
+      setComboItemsByCombo((prev) => ({ ...prev, [comboId]: items }));
+    } catch (e: any) {
+      setComboError(e?.message ?? t(lang, "comboLoadError"));
+    }
+  }, [api, lang]);
+
+  const createCombo = useCallback(async () => {
+    if (!newComboMenuItemId) return;
+    try {
+      await api("/api/admin/combos", {
+        method: "POST",
+        body: JSON.stringify({ menuItemId: newComboMenuItemId, isActive: newComboActive }),
+      });
+      setNewComboMenuItemId("");
+      setNewComboActive(true);
+      await loadCombos();
+    } catch (e: any) {
+      setComboError(e?.message ?? t(lang, "comboLoadError"));
+    }
+  }, [api, loadCombos, lang, newComboMenuItemId, newComboActive]);
+
+  const updateCombo = useCallback(async (comboId: number, payload: Partial<ComboDto>) => {
+    try {
+      await api(`/api/admin/combos/${comboId}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      });
+      await loadCombos();
+    } catch (e: any) {
+      setComboError(e?.message ?? t(lang, "comboLoadError"));
+    }
+  }, [api, loadCombos, lang]);
+
+  const deleteCombo = useCallback(async (comboId: number) => {
+    if (!confirm(t(lang, "confirmDelete"))) return;
+    try {
+      await api(`/api/admin/combos/${comboId}`, { method: "DELETE" });
+      setComboItemsByCombo((prev) => {
+        const next = { ...prev };
+        delete next[comboId];
+        return next;
+      });
+      if (comboEditingId === comboId) setComboEditingId(null);
+      await loadCombos();
+    } catch (e: any) {
+      setComboError(e?.message ?? t(lang, "comboLoadError"));
+    }
+  }, [api, comboEditingId, lang, loadCombos]);
+
+  const saveComboItems = useCallback(async (comboId: number) => {
+    try {
+      const items = comboItemsByCombo[comboId] ?? [];
+      await api(`/api/admin/combos/${comboId}/items`, {
+        method: "PUT",
+        body: JSON.stringify({ items }),
+      });
+      await loadComboItems(comboId);
+    } catch (e: any) {
+      setComboError(e?.message ?? t(lang, "comboLoadError"));
+    }
+  }, [api, comboItemsByCombo, lang, loadComboItems]);
+
   const loadAll = useCallback(async () => {
     if (!authReady) return;
     setError(null);
     try {
-      const [branchRes, catsRes, itemsRes, tagsRes, templatesRes, timeSlotsRes, tablesRes, staffRes, settingsRes, modGroupsRes, partiesRes, hallsRes, currenciesRes, discountsRes, inventoryRes, inventoryLowRes, onboardingRes, onboardingAuditRes, myIpRes] = await Promise.all([
+      const [branchRes, catsRes, itemsRes, tagsRes, combosRes, templatesRes, recTemplatesRes, timeSlotsRes, tablesRes, staffRes, settingsRes, modGroupsRes, partiesRes, hallsRes, currenciesRes, discountsRes, inventoryRes, inventoryLowRes, onboardingRes, onboardingAuditRes, myIpRes] = await Promise.all([
         api("/api/admin/branch"),
         canMenuView ? api("/api/admin/menu/categories") : Promise.resolve(null),
         canMenuView ? api("/api/admin/menu/items") : Promise.resolve(null),
         canMenuView ? api("/api/admin/menu/tags") : Promise.resolve(null),
+        canMenuView ? api("/api/admin/combos") : Promise.resolve(null),
         canMenuView ? api("/api/admin/menu-templates?includeInactive=true") : Promise.resolve(null),
+        canMenuView ? api("/api/admin/recommendation-templates") : Promise.resolve(null),
         canMenuView ? api("/api/admin/menu/time-slots") : Promise.resolve(null),
         needTables ? api("/api/admin/tables") : Promise.resolve(null),
         canStaffView ? api("/api/admin/staff") : Promise.resolve(null),
@@ -2256,7 +2419,19 @@ export default function AdminPage() {
       setCategories(catsRes ? await catsRes.json() : []);
       setItems(itemsRes ? await itemsRes.json() : []);
       setMenuTags(tagsRes ? await tagsRes.json() : []);
+      setCombos(combosRes ? await combosRes.json() : []);
       setMenuTemplates(templatesRes ? await templatesRes.json() : []);
+      const recTemplatesBody = recTemplatesRes ? await recTemplatesRes.json() : [];
+      setBranchRecTemplates(recTemplatesBody);
+      setBranchRecTemplateEdit((prev) => {
+        const next: Record<number, { name: string; sortOrder: number; isActive: boolean }> = { ...prev };
+        for (const tplt of Array.isArray(recTemplatesBody) ? recTemplatesBody : []) {
+          if (!next[tplt.id]) {
+            next[tplt.id] = { name: tplt.name ?? "", sortOrder: tplt.sortOrder ?? 0, isActive: !!tplt.isActive };
+          }
+        }
+        return next;
+      });
       setTimeSlots(timeSlotsRes ? await timeSlotsRes.json() : []);
       setTables(tablesRes ? await tablesRes.json() : []);
       setStaff(staffRes ? await staffRes.json() : []);
@@ -2599,7 +2774,7 @@ export default function AdminPage() {
       .then((body) => setPlanVersions(Array.isArray(body) ? body : []))
       .catch(() => setPlanVersions([]))
       .finally(() => setPlanVersionsLoading(false));
-  }, [authReady, hallPlanId]);
+  }, [authReady, hallPlanId, api]);
 
   useEffect(() => {
     if (!authReady || statsHallId === "") {
@@ -2617,7 +2792,7 @@ export default function AdminPage() {
         setStatsHallPlans([]);
       }
     })();
-  }, [authReady, statsHallId]);
+  }, [authReady, statsHallId, api]);
 
   useEffect(() => {
     localStorage.setItem("admin_menu_search", menuSearch);
@@ -2638,6 +2813,14 @@ export default function AdminPage() {
     localStorage.setItem("admin_staff_role", staffFilterRole);
     localStorage.setItem("admin_staff_active", staffFilterActive);
   }, [staffFilterText, staffFilterRole, staffFilterActive]);
+
+  useEffect(() => {
+    if (!branchRecTemplateId) {
+      setBranchRecTemplateItems([]);
+      return;
+    }
+    loadBranchRecTemplateItems(Number(branchRecTemplateId));
+  }, [branchRecTemplateId, loadBranchRecTemplateItems]);
 
   useEffect(() => {
     if (auditLimit > 0) {
@@ -2902,6 +3085,7 @@ export default function AdminPage() {
         weight: newItemWeight,
         tags: newItemTags,
         photoUrls: newItemPhotos,
+        videoUrl: newItemVideoUrl,
         kcal: newItemKcal,
         proteinG: newItemProtein,
         fatG: newItemFat,
@@ -2934,6 +3118,7 @@ export default function AdminPage() {
     setNewItemTags("");
     setNewItemTagIds([]);
     setNewItemPhotos("");
+    setNewItemVideoUrl("");
     setNewItemKcal(0);
     setNewItemProtein(0);
     setNewItemFat(0);
@@ -2979,6 +3164,113 @@ export default function AdminPage() {
       loadAll();
     } catch (e: any) {
       setMenuTemplateMessage(`${t(lang, "menuTemplateError")}: ${e?.message ?? ""}`.trim());
+    }
+  }
+
+  async function loadBranchRecTemplates() {
+    try {
+      const res = await api("/api/admin/recommendation-templates");
+      const body = await res.json();
+      setBranchRecTemplates(Array.isArray(body) ? body : []);
+      setBranchRecTemplateEdit((prev) => {
+        const next: Record<number, { name: string; sortOrder: number; isActive: boolean }> = { ...prev };
+        for (const tplt of Array.isArray(body) ? body : []) {
+          if (!next[tplt.id]) {
+            next[tplt.id] = { name: tplt.name ?? "", sortOrder: tplt.sortOrder ?? 0, isActive: !!tplt.isActive };
+          }
+        }
+        return next;
+      });
+    } catch (e: any) {
+      setBranchRecTemplateMessage(`${t(lang, "branchRecsError")}: ${e?.message ?? ""}`.trim());
+      setBranchRecTemplates([]);
+    }
+  }
+
+  async function createBranchRecTemplate() {
+    if (!branchRecTemplateName.trim()) return;
+    setBranchRecTemplateMessage(null);
+    try {
+      await api("/api/admin/recommendation-templates", {
+        method: "POST",
+        body: JSON.stringify({
+          name: branchRecTemplateName.trim(),
+          sortOrder: branchRecTemplateSort,
+          isActive: branchRecTemplateActive,
+        }),
+      });
+      setBranchRecTemplateName("");
+      setBranchRecTemplateSort(0);
+      setBranchRecTemplateActive(true);
+      await loadBranchRecTemplates();
+    } catch (e: any) {
+      setBranchRecTemplateMessage(`${t(lang, "branchRecsError")}: ${e?.message ?? ""}`.trim());
+    }
+  }
+
+  async function saveBranchRecTemplate(id: number) {
+    const payload = branchRecTemplateEdit[id];
+    if (!payload?.name?.trim()) return;
+    setBranchRecTemplateMessage(null);
+    try {
+      await api(`/api/admin/recommendation-templates/${id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          name: payload.name.trim(),
+          sortOrder: payload.sortOrder ?? 0,
+          isActive: !!payload.isActive,
+        }),
+      });
+      await loadBranchRecTemplates();
+    } catch (e: any) {
+      setBranchRecTemplateMessage(`${t(lang, "branchRecsError")}: ${e?.message ?? ""}`.trim());
+    }
+  }
+
+  async function deleteBranchRecTemplate(id: number) {
+    if (!confirm(t(lang, "confirmDelete"))) return;
+    setBranchRecTemplateMessage(null);
+    try {
+      await api(`/api/admin/recommendation-templates/${id}`, { method: "DELETE" });
+      if (branchRecTemplateId === id) {
+        setBranchRecTemplateId("");
+        setBranchRecTemplateItems([]);
+      }
+      await loadBranchRecTemplates();
+    } catch (e: any) {
+      setBranchRecTemplateMessage(`${t(lang, "branchRecsError")}: ${e?.message ?? ""}`.trim());
+    }
+  }
+
+  const loadBranchRecTemplateItems = useCallback(async (templateId: number) => {
+    setBranchRecTemplateItemsLoading(true);
+    setBranchRecTemplateMessage(null);
+    try {
+      const res = await api(`/api/admin/recommendation-templates/${templateId}/items`);
+      const body = await res.json();
+      setBranchRecTemplateItems(Array.isArray(body) ? body : []);
+    } catch (e: any) {
+      setBranchRecTemplateMessage(`${t(lang, "branchRecsError")}: ${e?.message ?? ""}`.trim());
+      setBranchRecTemplateItems([]);
+    } finally {
+      setBranchRecTemplateItemsLoading(false);
+    }
+  }, [api, lang]);
+
+  async function saveBranchRecTemplateItems() {
+    if (!branchRecTemplateId) return;
+    setBranchRecTemplateItemsSaving(true);
+    setBranchRecTemplateMessage(null);
+    try {
+      await api(`/api/admin/recommendation-templates/${branchRecTemplateId}/items`, {
+        method: "PUT",
+        body: JSON.stringify({ items: branchRecTemplateItems }),
+      });
+      await loadBranchRecTemplateItems(Number(branchRecTemplateId));
+    } catch (e: any) {
+      setBranchRecTemplateMessage(`${t(lang, "branchRecsError")}: ${e?.message ?? ""}`.trim());
+    } finally {
+      setBranchRecTemplateItemsSaving(false);
     }
   }
 
@@ -3114,6 +3406,43 @@ export default function AdminPage() {
     }
   }
 
+  async function loadItemRecommendations(itemId: number) {
+    setEditItemRecsLoading(true);
+    try {
+      const res = await api(`/api/admin/menu/items/${itemId}/recommendations`);
+      const body = await res.json();
+      const list = Array.isArray(body) ? body : [];
+      setEditItemRecs(list.map((r: any, idx: number) => ({
+        targetItemId: Number(r.targetItemId),
+        type: (r.type ?? "WITH").toString(),
+        sortOrder: Number(r.sortOrder ?? idx),
+        isActive: r.isActive !== false,
+      })));
+    } catch (e: any) {
+      setError(e?.message ?? "Request failed");
+      setEditItemRecs([]);
+    } finally {
+      setEditItemRecsLoading(false);
+    }
+  }
+
+  async function saveItemRecommendations(itemId: number) {
+    setEditItemRecsSaving(true);
+    try {
+      const cleaned = editItemRecs
+        .filter((r) => r.targetItemId && r.targetItemId !== itemId)
+        .map((r, idx) => ({ ...r, sortOrder: r.sortOrder ?? idx }));
+      await api(`/api/admin/menu/items/${itemId}/recommendations`, {
+        method: "PUT",
+        body: JSON.stringify({ items: cleaned }),
+      });
+    } catch (e: any) {
+      setError(e?.message ?? "Request failed");
+    } finally {
+      setEditItemRecsSaving(false);
+    }
+  }
+
   async function saveItemTags(itemId: number) {
     setEditItemTagsSaving(true);
     try {
@@ -3133,6 +3462,7 @@ export default function AdminPage() {
     setEditItem({ ...it });
     await loadItemTimeSlots(it.id);
     await loadItemTags(it.id);
+    await loadItemRecommendations(it.id);
   }
 
   async function createTable() {
@@ -4339,6 +4669,7 @@ export default function AdminPage() {
         weight: editItem.weight,
         tags: editItem.tags,
         photoUrls: editItem.photoUrls,
+        videoUrl: editItem.videoUrl,
         kcal: editItem.kcal,
         proteinG: editItem.proteinG,
         fatG: editItem.fatG,
@@ -4350,9 +4681,11 @@ export default function AdminPage() {
       }),
     });
     await saveItemTags(editingItemId);
+    await saveItemRecommendations(editingItemId);
     setEditingItemId(null);
     setEditItem({});
     setEditItemTagIds([]);
+    setEditItemRecs([]);
     loadAll();
   }
 
@@ -5983,6 +6316,165 @@ export default function AdminPage() {
       )}
 
       {showMenu && (
+      <section id="branch-recommendations-section" style={{ marginTop: 24 }}>
+        <h2>{t(lang, "branchRecsTitle")}</h2>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <input
+            placeholder={t(lang, "branchRecsName")}
+            value={branchRecTemplateName}
+            onChange={(e) => setBranchRecTemplateName(e.target.value)}
+          />
+          <input
+            type="number"
+            placeholder={t(lang, "branchRecsSort")}
+            value={branchRecTemplateSort}
+            onChange={(e) => setBranchRecTemplateSort(Number(e.target.value))}
+            style={{ width: 110 }}
+          />
+          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <input type="checkbox" checked={branchRecTemplateActive} onChange={(e) => setBranchRecTemplateActive(e.target.checked)} />
+            {t(lang, "branchRecsActive")}
+          </label>
+          <button onClick={createBranchRecTemplate}>{t(lang, "branchRecsAdd")}</button>
+        </div>
+        {branchRecTemplateMessage && (
+          <div style={{ marginTop: 8, color: branchRecTemplateMessage.startsWith(t(lang, "branchRecsError")) ? "#b91c1c" : "#0f766e" }}>
+            {branchRecTemplateMessage}
+          </div>
+        )}
+        {branchRecTemplates.length > 0 && (
+          <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+            {branchRecTemplates.map((tplt) => {
+              const draft = branchRecTemplateEdit[tplt.id] ?? { name: tplt.name, sortOrder: tplt.sortOrder, isActive: tplt.isActive };
+              return (
+                <div key={tplt.id} style={{ border: "1px solid #e5e7eb", borderRadius: 10, padding: 10, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+                  <input
+                    value={draft.name}
+                    onChange={(e) =>
+                      setBranchRecTemplateEdit((prev) => ({
+                        ...prev,
+                        [tplt.id]: { ...draft, name: e.target.value },
+                      }))
+                    }
+                    style={{ minWidth: 200 }}
+                  />
+                  <input
+                    type="number"
+                    value={draft.sortOrder ?? 0}
+                    onChange={(e) =>
+                      setBranchRecTemplateEdit((prev) => ({
+                        ...prev,
+                        [tplt.id]: { ...draft, sortOrder: Number(e.target.value) },
+                      }))
+                    }
+                    style={{ width: 110 }}
+                  />
+                  <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <input
+                      type="checkbox"
+                      checked={!!draft.isActive}
+                      onChange={(e) =>
+                        setBranchRecTemplateEdit((prev) => ({
+                          ...prev,
+                          [tplt.id]: { ...draft, isActive: e.target.checked },
+                        }))
+                      }
+                    />
+                    {t(lang, "branchRecsActive")}
+                  </label>
+                  <button onClick={() => saveBranchRecTemplate(tplt.id)}>{t(lang, "save")}</button>
+                  <button onClick={() => deleteBranchRecTemplate(tplt.id)}>{t(lang, "branchRecsDelete")}</button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <select value={branchRecTemplateId} onChange={(e) => setBranchRecTemplateId(e.target.value ? Number(e.target.value) : "")}>
+            <option value="">{t(lang, "branchRecsSelect")}</option>
+            {branchRecTemplates.map((tplt) => (
+              <option key={`branch-rec-${tplt.id}`} value={tplt.id}>
+                {tplt.name}
+              </option>
+            ))}
+          </select>
+          {branchRecTemplateItemsLoading && <span style={{ fontSize: 12, color: "#666" }}>{t(lang, "loading")}</span>}
+        </div>
+        {branchRecTemplateId && (
+          <div style={{ marginTop: 10 }}>
+            <h3 style={{ margin: "6px 0" }}>{t(lang, "branchRecsItemsTitle")}</h3>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <select
+                value={branchRecTemplateNewItemId}
+                onChange={(e) => setBranchRecTemplateNewItemId(e.target.value ? Number(e.target.value) : "")}
+              >
+                <option value="">{t(lang, "branchRecsAddItem")}</option>
+                {items.map((it) => (
+                  <option key={`branch-rec-item-${it.id}`} value={it.id}>
+                    {it.name} {it.isActive ? "" : `(${t(lang, "inactive")})`}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={() => {
+                  if (!branchRecTemplateNewItemId) return;
+                  const menuItemId = Number(branchRecTemplateNewItemId);
+                  if (branchRecTemplateItems.some((it) => it.menuItemId === menuItemId)) return;
+                  setBranchRecTemplateItems((prev) => [
+                    ...prev,
+                    { menuItemId, sortOrder: prev.length + 1, isActive: true },
+                  ]);
+                  setBranchRecTemplateNewItemId("");
+                }}
+              >
+                {t(lang, "branchRecsAddItem")}
+              </button>
+              <button onClick={saveBranchRecTemplateItems} disabled={branchRecTemplateItemsSaving}>
+                {branchRecTemplateItemsSaving ? t(lang, "saving") : t(lang, "branchRecsSaveItems")}
+              </button>
+            </div>
+            <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
+              {branchRecTemplateItems.map((it) => {
+                const item = menuItemMap.get(it.menuItemId);
+                return (
+                  <div key={`branch-rec-row-${it.menuItemId}`} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", borderBottom: "1px dashed #eee", paddingBottom: 6 }}>
+                    <strong style={{ minWidth: 160 }}>{item?.name ?? `#${it.menuItemId}`}</strong>
+                    <input
+                      type="number"
+                      value={it.sortOrder ?? 0}
+                      onChange={(e) => {
+                        const next = Number(e.target.value);
+                        setBranchRecTemplateItems((prev) => prev.map((x) => (x.menuItemId === it.menuItemId ? { ...x, sortOrder: next } : x)));
+                      }}
+                      style={{ width: 90 }}
+                    />
+                    <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <input
+                        type="checkbox"
+                        checked={!!it.isActive}
+                        onChange={(e) =>
+                          setBranchRecTemplateItems((prev) => prev.map((x) => (x.menuItemId === it.menuItemId ? { ...x, isActive: e.target.checked } : x)))
+                        }
+                      />
+                      {t(lang, "branchRecsActive")}
+                    </label>
+                    <button
+                      onClick={() =>
+                        setBranchRecTemplateItems((prev) => prev.filter((x) => x.menuItemId !== it.menuItemId))
+                      }
+                    >
+                      {t(lang, "delete")}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </section>
+      )}
+
+      {showMenu && (
       <section id="categories-section" style={{ marginTop: 24 }}>
         <h2>{t(lang, "categories")}</h2>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -6285,6 +6777,26 @@ export default function AdminPage() {
               ))}
             </div>
           </div>
+          <input placeholder={t(lang, "videoUrl")} value={newItemVideoUrl} onChange={(e) => setNewItemVideoUrl(e.target.value)} />
+          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            {t(lang, "videoUpload")}
+            <input
+              type="file"
+              accept="video/*"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                try {
+                  const url = await uploadMediaFile(file, "food");
+                  setNewItemVideoUrl(url);
+                } catch (err: any) {
+                  setError(err?.message ?? "Upload error");
+                } finally {
+                  e.currentTarget.value = "";
+                }
+              }}
+            />
+          </label>
           <input type="number" placeholder={t(lang, "kcal")} value={newItemKcal} onChange={(e) => setNewItemKcal(Number(e.target.value))} />
           <input type="number" placeholder={t(lang, "proteinG")} value={newItemProtein} onChange={(e) => setNewItemProtein(Number(e.target.value))} />
           <input type="number" placeholder={t(lang, "fatG")} value={newItemFat} onChange={(e) => setNewItemFat(Number(e.target.value))} />
@@ -6354,6 +6866,70 @@ export default function AdminPage() {
                 </div>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={{ fontWeight: 600 }}>{t(lang, "menuItemRecsTitle")}</div>
+                {editItemRecsLoading && <div style={{ fontSize: 12, color: "#666" }}>{t(lang, "loading")}</div>}
+                {editItemRecs.map((rec, idx) => (
+                  <div key={`rec-${idx}`} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                    <select
+                      value={rec.type}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setEditItemRecs((prev) => prev.map((r, i) => i === idx ? { ...r, type: val } : r));
+                      }}
+                    >
+                      <option value="WITH">{t(lang, "menuItemRecsWith")}</option>
+                      <option value="DRINK">{t(lang, "menuItemRecsDrink")}</option>
+                      <option value="DESSERT">{t(lang, "menuItemRecsDessert")}</option>
+                      <option value="SAUCE">{t(lang, "menuItemRecsSauce")}</option>
+                      <option value="SIDE">{t(lang, "menuItemRecsSide")}</option>
+                    </select>
+                    <select
+                      value={rec.targetItemId}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        setEditItemRecs((prev) => prev.map((r, i) => i === idx ? { ...r, targetItemId: val } : r));
+                      }}
+                    >
+                      <option value={0}>{t(lang, "menuItemRecsTarget")}</option>
+                      {items.map((it) => (
+                        <option key={`rec-item-${it.id}`} value={it.id}>
+                          {it.nameRu}
+                        </option>
+                      ))}
+                    </select>
+                    <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <input
+                        type="checkbox"
+                        checked={rec.isActive}
+                        onChange={(e) => setEditItemRecs((prev) => prev.map((r, i) => i === idx ? { ...r, isActive: e.target.checked } : r))}
+                      />
+                      {t(lang, "active")}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setEditItemRecs((prev) => prev.filter((_, i) => i !== idx))}
+                    >
+                      {t(lang, "delete")}
+                    </button>
+                  </div>
+                ))}
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={() => setEditItemRecs((prev) => [...prev, { targetItemId: 0, type: "WITH", sortOrder: prev.length, isActive: true }])}
+                  >
+                    {t(lang, "menuItemRecsAdd")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => editingItemId && saveItemRecommendations(editingItemId)}
+                    disabled={!editingItemId || editItemRecsSaving}
+                  >
+                    {editItemRecsSaving ? t(lang, "saving") : t(lang, "menuItemRecsSave")}
+                  </button>
+                </div>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   {t(lang, "photosUpload")}
                   <input
@@ -6395,6 +6971,26 @@ export default function AdminPage() {
                   ))}
                 </div>
               </div>
+              <input placeholder={t(lang, "videoUrl")} value={editItem.videoUrl ?? ""} onChange={(e) => setEditItem({ ...editItem, videoUrl: e.target.value })} />
+              <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                {t(lang, "videoUpload")}
+                <input
+                  type="file"
+                  accept="video/*"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    try {
+                      const url = await uploadMediaFile(file, "food");
+                      setEditItem({ ...editItem, videoUrl: url });
+                    } catch (err: any) {
+                      setError(err?.message ?? "Upload error");
+                    } finally {
+                      e.currentTarget.value = "";
+                    }
+                  }}
+                />
+              </label>
               <input type="number" placeholder={t(lang, "kcal")} value={editItem.kcal ?? 0} onChange={(e) => setEditItem({ ...editItem, kcal: Number(e.target.value) })} />
               <input type="number" placeholder={t(lang, "proteinG")} value={editItem.proteinG ?? 0} onChange={(e) => setEditItem({ ...editItem, proteinG: Number(e.target.value) })} />
               <input type="number" placeholder={t(lang, "fatG")} value={editItem.fatG ?? 0} onChange={(e) => setEditItem({ ...editItem, fatG: Number(e.target.value) })} />
@@ -6443,7 +7039,7 @@ export default function AdminPage() {
             </div>
             <div style={{ marginTop: 8 }}>
               <button onClick={saveEditedItem}>{t(lang, "save")}</button>
-              <button onClick={() => { setEditingItemId(null); setEditItem({}); setEditItemTimeSlotIds([]); setEditItemTagIds([]); }} style={{ marginLeft: 8 }}>{t(lang, "cancel")}</button>
+              <button onClick={() => { setEditingItemId(null); setEditItem({}); setEditItemTimeSlotIds([]); setEditItemTagIds([]); setEditItemRecs([]); }} style={{ marginLeft: 8 }}>{t(lang, "cancel")}</button>
             </div>
           </div>
         )}
@@ -6480,6 +7076,172 @@ export default function AdminPage() {
               <button onClick={() => toggleStopList(it)}>{it.isStopList ? t(lang, "enable") : t(lang, "stopList")}</button>
             </div>
           ))}
+        </div>
+      </section>
+      )}
+
+      {showMenu && (
+      <section id="combos-section" style={{ marginTop: 24 }}>
+        <h2>{t(lang, "combosTitle")}</h2>
+        {comboError && <div style={{ color: "#b11e46", marginBottom: 8 }}>{comboError}</div>}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <select value={newComboMenuItemId} onChange={(e) => setNewComboMenuItemId(e.target.value ? Number(e.target.value) : "")}>
+            <option value="">{t(lang, "comboMenuItem")}</option>
+            {items.map((it) => (
+              <option key={`combo-${it.id}`} value={it.id}>{it.nameRu}</option>
+            ))}
+          </select>
+          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <input type="checkbox" checked={newComboActive} onChange={(e) => setNewComboActive(e.target.checked)} />
+            {t(lang, "comboActive")}
+          </label>
+          <button onClick={createCombo} disabled={!newComboMenuItemId}>{t(lang, "comboCreate")}</button>
+          <button onClick={loadCombos} disabled={comboLoading}>{t(lang, "refresh")}</button>
+        </div>
+        <div style={{ marginTop: 10 }}>
+          {combos.length === 0 && !comboLoading && (
+            <div style={{ color: "#666", fontSize: 12 }}>{t(lang, "noData")}</div>
+          )}
+          {combos.map((combo) => {
+            const comboItem = menuItemMap.get(combo.menuItemId);
+            const editing = comboEditingId === combo.id;
+            const itemsForCombo = comboItemsByCombo[combo.id] ?? [];
+            return (
+              <div key={combo.id} style={{ borderBottom: "1px solid #eee", padding: "8px 0" }}>
+                <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                  <strong>{comboItem?.nameRu ?? `#${combo.menuItemId}`}</strong>
+                  <span>{combo.isActive ? t(lang, "active") : t(lang, "inactive")}</span>
+                  <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <input
+                      type="checkbox"
+                      checked={combo.isActive}
+                      onChange={(e) => updateCombo(combo.id, { isActive: e.target.checked })}
+                    />
+                    {t(lang, "comboActive")}
+                  </label>
+                  <button
+                    onClick={async () => {
+                      const next = editing ? null : combo.id;
+                      setComboEditingId(next);
+                      if (!editing) await loadComboItems(combo.id);
+                    }}
+                  >
+                    {editing ? t(lang, "hide") : t(lang, "edit")}
+                  </button>
+                  <button onClick={() => deleteCombo(combo.id)}>{t(lang, "delete")}</button>
+                </div>
+                {editing && (
+                  <div style={{ marginTop: 8, padding: 10, border: "1px dashed #ddd" }}>
+                    <div style={{ fontWeight: 600, marginBottom: 6 }}>{t(lang, "comboItems")}</div>
+                    {itemsForCombo.map((ci, idx) => (
+                      <div key={`${combo.id}-${idx}`} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 6 }}>
+                        <select
+                          value={ci.menuItemId}
+                          onChange={(e) => {
+                            const v = e.target.value ? Number(e.target.value) : 0;
+                            setComboItemsByCombo((prev) => {
+                              const next = [...(prev[combo.id] ?? [])];
+                              next[idx] = { ...next[idx], menuItemId: v };
+                              return { ...prev, [combo.id]: next };
+                            });
+                          }}
+                        >
+                          <option value="">{t(lang, "comboMenuItem")}</option>
+                          {items.map((it) => (
+                            <option key={`${combo.id}-item-${it.id}`} value={it.id}>{it.nameRu}</option>
+                          ))}
+                        </select>
+                        <input
+                          type="number"
+                          placeholder={t(lang, "comboMin")}
+                          value={ci.minQty}
+                          onChange={(e) => {
+                            const v = Number(e.target.value);
+                            setComboItemsByCombo((prev) => {
+                              const next = [...(prev[combo.id] ?? [])];
+                              next[idx] = { ...next[idx], minQty: v };
+                              return { ...prev, [combo.id]: next };
+                            });
+                          }}
+                          style={{ width: 80 }}
+                        />
+                        <input
+                          type="number"
+                          placeholder={t(lang, "comboMax")}
+                          value={ci.maxQty}
+                          onChange={(e) => {
+                            const v = Number(e.target.value);
+                            setComboItemsByCombo((prev) => {
+                              const next = [...(prev[combo.id] ?? [])];
+                              next[idx] = { ...next[idx], maxQty: v };
+                              return { ...prev, [combo.id]: next };
+                            });
+                          }}
+                          style={{ width: 80 }}
+                        />
+                        <input
+                          type="number"
+                          placeholder={t(lang, "sort")}
+                          value={ci.sortOrder}
+                          onChange={(e) => {
+                            const v = Number(e.target.value);
+                            setComboItemsByCombo((prev) => {
+                              const next = [...(prev[combo.id] ?? [])];
+                              next[idx] = { ...next[idx], sortOrder: v };
+                              return { ...prev, [combo.id]: next };
+                            });
+                          }}
+                          style={{ width: 80 }}
+                        />
+                        <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <input
+                            type="checkbox"
+                            checked={ci.isActive}
+                            onChange={(e) => {
+                              const v = e.target.checked;
+                              setComboItemsByCombo((prev) => {
+                                const next = [...(prev[combo.id] ?? [])];
+                                next[idx] = { ...next[idx], isActive: v };
+                                return { ...prev, [combo.id]: next };
+                              });
+                            }}
+                          />
+                          {t(lang, "active")}
+                        </label>
+                        <button
+                          onClick={() => {
+                            setComboItemsByCombo((prev) => {
+                              const next = [...(prev[combo.id] ?? [])];
+                              next.splice(idx, 1);
+                              return { ...prev, [combo.id]: next };
+                            });
+                          }}
+                        >
+                          {t(lang, "delete")}
+                        </button>
+                      </div>
+                    ))}
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button
+                        onClick={() => {
+                          setComboItemsByCombo((prev) => ({
+                            ...prev,
+                            [combo.id]: [
+                              ...(prev[combo.id] ?? []),
+                              { menuItemId: 0, minQty: 0, maxQty: 1, sortOrder: (prev[combo.id]?.length ?? 0) + 1, isActive: true },
+                            ],
+                          }));
+                        }}
+                      >
+                        {t(lang, "comboAddItem")}
+                      </button>
+                      <button onClick={() => saveComboItems(combo.id)}>{t(lang, "comboSaveItems")}</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </section>
       )}

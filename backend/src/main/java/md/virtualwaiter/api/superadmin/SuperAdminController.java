@@ -3,6 +3,8 @@ package md.virtualwaiter.api.superadmin;
 import md.virtualwaiter.domain.Branch;
 import md.virtualwaiter.domain.BranchReview;
 import md.virtualwaiter.domain.BranchHall;
+import md.virtualwaiter.domain.Combo;
+import md.virtualwaiter.domain.ComboItem;
 import md.virtualwaiter.domain.Restaurant;
 import md.virtualwaiter.domain.StaffDeviceToken;
 import md.virtualwaiter.domain.StaffUser;
@@ -11,6 +13,9 @@ import md.virtualwaiter.repo.CafeTableRepo;
 import md.virtualwaiter.repo.BranchRepo;
 import md.virtualwaiter.repo.BranchHallRepo;
 import md.virtualwaiter.repo.BranchReviewRepo;
+import md.virtualwaiter.repo.ComboItemRepo;
+import md.virtualwaiter.repo.ComboRepo;
+import md.virtualwaiter.repo.MenuItemRepo;
 import md.virtualwaiter.repo.RestaurantRepo;
 import md.virtualwaiter.repo.StaffDeviceTokenRepo;
 import md.virtualwaiter.repo.StaffUserRepo;
@@ -74,6 +79,9 @@ public class SuperAdminController {
   private final BranchReviewRepo branchReviewRepo;
   private final CafeTableRepo tableRepo;
   private final StaffDeviceTokenRepo staffDeviceTokenRepo;
+  private final ComboRepo comboRepo;
+  private final ComboItemRepo comboItemRepo;
+  private final MenuItemRepo menuItemRepo;
   private final PasswordEncoder passwordEncoder;
   private final StatsService statsService;
   private final AuditService auditService;
@@ -94,6 +102,9 @@ public class SuperAdminController {
     BranchReviewRepo branchReviewRepo,
     CafeTableRepo tableRepo,
     StaffDeviceTokenRepo staffDeviceTokenRepo,
+    ComboRepo comboRepo,
+    ComboItemRepo comboItemRepo,
+    MenuItemRepo menuItemRepo,
     PasswordEncoder passwordEncoder,
     StatsService statsService,
     AuditService auditService,
@@ -113,6 +124,9 @@ public class SuperAdminController {
     this.branchReviewRepo = branchReviewRepo;
     this.tableRepo = tableRepo;
     this.staffDeviceTokenRepo = staffDeviceTokenRepo;
+    this.comboRepo = comboRepo;
+    this.comboItemRepo = comboItemRepo;
+    this.menuItemRepo = menuItemRepo;
     this.passwordEncoder = passwordEncoder;
     this.statsService = statsService;
     this.auditService = auditService;
@@ -249,6 +263,18 @@ public class SuperAdminController {
     Long branchId,
     @NotBlank String flagType,
     boolean active
+  ) {}
+
+  public record ComboReportRow(
+    Long comboId,
+    Long tenantId,
+    Long restaurantId,
+    Long branchId,
+    Long menuItemId,
+    String menuItemName,
+    boolean active,
+    int itemsCount,
+    String itemsSummary
   ) {}
 
   @GetMapping("/devices")
@@ -1499,6 +1525,191 @@ public class SuperAdminController {
       .contentType(MediaType.parseMediaType("text/csv"))
       .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
       .body(sb.toString());
+  }
+
+  @GetMapping("/combos")
+  public ResponseEntity<List<ComboReportRow>> getCombosReport(
+    @RequestParam(value = "tenantId") Long tenantId,
+    @RequestParam(value = "restaurantId", required = false) Long restaurantId,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @RequestParam(value = "sortBy", required = false) String sortBy,
+    @RequestParam(value = "sortDir", required = false) String sortDir,
+    @RequestParam(value = "page", required = false) Integer page,
+    @RequestParam(value = "size", required = false) Integer size,
+    Authentication auth
+  ) {
+    requireSuper(auth);
+    List<ComboReportRow> full = buildComboReport(tenantId, restaurantId, branchId, sortBy, sortDir);
+    int total = full.size();
+    List<ComboReportRow> paged = paginateCombos(full, page, size);
+    return ResponseEntity.ok()
+      .header("X-Total-Count", String.valueOf(total))
+      .body(paged);
+  }
+
+  @GetMapping("/combos.csv")
+  public ResponseEntity<String> getCombosReportCsv(
+    @RequestParam(value = "tenantId") Long tenantId,
+    @RequestParam(value = "restaurantId", required = false) Long restaurantId,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    Authentication auth
+  ) {
+    requireSuper(auth);
+    List<ComboReportRow> rows = buildComboReport(tenantId, restaurantId, branchId, null, null);
+    StringBuilder sb = new StringBuilder();
+    sb.append("combo_id,tenant_id,restaurant_id,branch_id,menu_item_id,menu_item_name,is_active,items_count,items_summary\n");
+    for (ComboReportRow r : rows) {
+      sb.append(r.comboId() == null ? "" : r.comboId()).append(',')
+        .append(r.tenantId() == null ? "" : r.tenantId()).append(',')
+        .append(r.restaurantId() == null ? "" : r.restaurantId()).append(',')
+        .append(r.branchId() == null ? "" : r.branchId()).append(',')
+        .append(r.menuItemId() == null ? "" : r.menuItemId()).append(',')
+        .append(r.menuItemName() == null ? "" : r.menuItemName().replace(",", " ")).append(',')
+        .append(r.active()).append(',')
+        .append(r.itemsCount()).append(',')
+        .append(r.itemsSummary() == null ? "" : r.itemsSummary().replace(",", " ")).append('\n');
+    }
+    String filename = "tenant-combos-" + tenantId + ".csv";
+    return ResponseEntity.ok()
+      .contentType(MediaType.parseMediaType("text/csv"))
+      .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+      .body(sb.toString());
+  }
+
+  private List<ComboReportRow> buildComboReport(
+    Long tenantId,
+    Long restaurantId,
+    Long branchId,
+    String sortBy,
+    String sortDir
+  ) {
+    if (tenantId == null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "tenantId is required");
+    }
+    List<Branch> branches;
+    if (branchId != null) {
+      Branch b = branchRepo.findById(branchId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+      if (!Objects.equals(b.tenantId, tenantId)) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "branchId does not belong to tenant");
+      }
+      if (restaurantId != null && !Objects.equals(b.restaurantId, restaurantId)) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "branchId does not belong to restaurant");
+      }
+      branches = List.of(b);
+    } else if (restaurantId != null) {
+      branches = branchRepo.findByTenantIdAndRestaurantId(tenantId, restaurantId);
+    } else {
+      branches = branchRepo.findByTenantId(tenantId);
+    }
+    if (branches.isEmpty()) {
+      return List.of();
+    }
+    Map<Long, Branch> branchMap = branches.stream().collect(Collectors.toMap(b -> b.id, b -> b));
+    List<Combo> combos = new ArrayList<>();
+    for (Branch b : branches) {
+      combos.addAll(comboRepo.findByBranchId(b.id));
+    }
+    if (combos.isEmpty()) {
+      return List.of();
+    }
+    List<Long> comboIds = combos.stream().map(c -> c.id).filter(Objects::nonNull).toList();
+    List<ComboItem> comboItems = comboItemRepo.findByComboIdIn(comboIds);
+    Map<Long, List<ComboItem>> itemsByCombo = new java.util.HashMap<>();
+    for (ComboItem item : comboItems) {
+      itemsByCombo.computeIfAbsent(item.comboId, k -> new ArrayList<>()).add(item);
+    }
+    Set<Long> menuItemIds = new HashSet<>();
+    for (Combo c : combos) {
+      if (c.menuItemId != null) menuItemIds.add(c.menuItemId);
+    }
+    for (ComboItem item : comboItems) {
+      if (item.menuItemId != null) menuItemIds.add(item.menuItemId);
+    }
+    Map<Long, String> menuItemNames = menuItemIds.isEmpty()
+      ? Map.of()
+      : menuItemRepo.findAllById(menuItemIds).stream()
+        .collect(Collectors.toMap(m -> m.id, m -> m.nameRu));
+    List<ComboReportRow> out = new ArrayList<>();
+    for (Combo combo : combos) {
+      Branch b = branchMap.get(combo.branchId);
+      Long restId = b == null ? null : b.restaurantId;
+      String menuItemName = combo.menuItemId == null ? null : menuItemNames.get(combo.menuItemId);
+      List<ComboItem> items = itemsByCombo.getOrDefault(combo.id, List.of());
+      List<ComboItem> sortedItems = new ArrayList<>(items);
+      sortedItems.sort((a, z) -> {
+        int cmp = Integer.compare(a.sortOrder, z.sortOrder);
+        if (cmp != 0) return cmp;
+        if (a.id == null && z.id == null) return 0;
+        if (a.id == null) return -1;
+        if (z.id == null) return 1;
+        return Long.compare(a.id, z.id);
+      });
+      String itemsSummary = sortedItems.stream().map((item) -> {
+        String name = item.menuItemId == null ? null : menuItemNames.get(item.menuItemId);
+        String label = name == null ? ("#" + item.menuItemId) : name;
+        String suffix = item.isActive ? "" : " inactive";
+        return label + "(" + item.minQty + "-" + item.maxQty + suffix + ")";
+      }).collect(Collectors.joining("; "));
+      out.add(new ComboReportRow(
+        combo.id,
+        combo.tenantId,
+        restId,
+        combo.branchId,
+        combo.menuItemId,
+        menuItemName,
+        combo.isActive,
+        items.size(),
+        itemsSummary
+      ));
+    }
+    out.sort((a, b) -> {
+      String key = sortBy == null || sortBy.isBlank() ? "branchId" : sortBy;
+      int cmp;
+      switch (key) {
+        case "comboId" -> cmp = compareLong(a.comboId(), b.comboId());
+        case "menuItemId" -> cmp = compareLong(a.menuItemId(), b.menuItemId());
+        case "menuItemName" -> cmp = compareString(a.menuItemName(), b.menuItemName());
+        case "restaurantId" -> cmp = compareLong(a.restaurantId(), b.restaurantId());
+        case "itemsCount" -> cmp = Integer.compare(a.itemsCount(), b.itemsCount());
+        case "active" -> cmp = Boolean.compare(a.active(), b.active());
+        case "branchId" -> cmp = compareLong(a.branchId(), b.branchId());
+        default -> cmp = compareLong(a.branchId(), b.branchId());
+      }
+      if (cmp == 0) {
+        cmp = compareLong(a.comboId(), b.comboId());
+      }
+      if ("desc".equalsIgnoreCase(sortDir)) {
+        return -cmp;
+      }
+      return cmp;
+    });
+    return out;
+  }
+
+  private static List<ComboReportRow> paginateCombos(List<ComboReportRow> rows, Integer page, Integer size) {
+    int pageNum = page == null || page < 0 ? 0 : page;
+    int pageSize = size == null || size <= 0 ? 50 : Math.min(size, 200);
+    int from = pageNum * pageSize;
+    if (from >= rows.size()) {
+      return List.of();
+    }
+    int to = Math.min(from + pageSize, rows.size());
+    return rows.subList(from, to);
+  }
+
+  private static int compareLong(Long a, Long b) {
+    if (a == null && b == null) return 0;
+    if (a == null) return 1;
+    if (b == null) return -1;
+    return Long.compare(a, b);
+  }
+
+  private static int compareString(String a, String b) {
+    if (a == null && b == null) return 0;
+    if (a == null) return 1;
+    if (b == null) return -1;
+    return a.compareToIgnoreCase(b);
   }
 
   private static Instant parseInstantOrDate(String v, boolean isStart) {

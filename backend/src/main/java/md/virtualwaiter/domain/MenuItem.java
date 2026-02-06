@@ -61,6 +61,10 @@ public class MenuItem {
   @Column(name = "photo_urls")
   public String photoUrls;
 
+  /** Optional video URL (MVP) */
+  @Column(name = "video_url")
+  public String videoUrl;
+
   @Column(name = "kcal")
   public Integer kcal;
 

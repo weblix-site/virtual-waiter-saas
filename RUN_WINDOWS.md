@@ -165,8 +165,12 @@ app:
 ```
 $env:APP_QR_HMAC_SECRET="CHANGE_ME_DEV_SECRET"
 $env:APP_AUTH_COOKIE_SECRET="CHANGE_ME_AUTH_SECRET"
+$env:APP_MEDIA_VIDEO_URL_ALLOWLIST="cdn.example.com,media.example.com"
+$env:APP_MEDIA_MAX_VIDEO_BYTES="52428800"
 ```
 **Важно:** без этих переменных backend падает при старте (ошибка `app.qr.hmacSecret must be set` / `app.auth.cookieSecret must be set`).
+`APP_MEDIA_VIDEO_URL_ALLOWLIST` — опционально, ограничивает домены для videoUrl.
+`APP_MEDIA_MAX_VIDEO_BYTES` — опционально, лимит размера видео (в байтах).
 
 После этого запускайте backend:
 ```

@@ -6,10 +6,15 @@ import md.virtualwaiter.domain.BranchDiscount;
 import md.virtualwaiter.domain.BranchReview;
 import md.virtualwaiter.domain.CafeTable;
 import md.virtualwaiter.domain.ChatMessage;
+import md.virtualwaiter.domain.Combo;
+import md.virtualwaiter.domain.ComboItem;
+import md.virtualwaiter.domain.BranchRecommendationTemplate;
+import md.virtualwaiter.domain.BranchRecommendationTemplateItem;
 import md.virtualwaiter.domain.GuestSession;
 import md.virtualwaiter.domain.MenuCategory;
 import md.virtualwaiter.domain.MenuItem;
 import md.virtualwaiter.domain.MenuItemTimeSlot;
+import md.virtualwaiter.domain.MenuItemRecommendation;
 import md.virtualwaiter.domain.MenuItemTag;
 import md.virtualwaiter.domain.MenuTag;
 import md.virtualwaiter.domain.MenuItemModifierGroup;
@@ -32,9 +37,14 @@ import md.virtualwaiter.repo.GuestSessionRepo;
 import md.virtualwaiter.repo.MenuCategoryRepo;
 import md.virtualwaiter.repo.MenuItemRepo;
 import md.virtualwaiter.repo.MenuItemTimeSlotRepo;
+import md.virtualwaiter.repo.MenuItemRecommendationRepo;
 import md.virtualwaiter.repo.MenuItemTagRepo;
 import md.virtualwaiter.repo.MenuTagRepo;
 import md.virtualwaiter.repo.MenuTimeSlotRepo;
+import md.virtualwaiter.repo.ComboRepo;
+import md.virtualwaiter.repo.ComboItemRepo;
+import md.virtualwaiter.repo.BranchRecommendationTemplateRepo;
+import md.virtualwaiter.repo.BranchRecommendationTemplateItemRepo;
 import md.virtualwaiter.repo.BranchRepo;
 import md.virtualwaiter.repo.BranchMenuItemOverrideRepo;
 import md.virtualwaiter.repo.OrderItemRepo;
@@ -118,6 +128,11 @@ public class PublicController {
   private final MenuItemTimeSlotRepo menuItemTimeSlotRepo;
   private final MenuTagRepo menuTagRepo;
   private final MenuItemTagRepo menuItemTagRepo;
+  private final MenuItemRecommendationRepo menuItemRecommendationRepo;
+  private final ComboRepo comboRepo;
+  private final ComboItemRepo comboItemRepo;
+  private final BranchRecommendationTemplateRepo branchRecommendationTemplateRepo;
+  private final BranchRecommendationTemplateItemRepo branchRecommendationTemplateItemRepo;
   private final OrderRepo orderRepo;
   private final OrderItemRepo orderItemRepo;
   private final WaiterCallRepo waiterCallRepo;
@@ -174,8 +189,13 @@ public class PublicController {
     BranchMenuItemOverrideRepo menuItemOverrideRepo,
     MenuTimeSlotRepo menuTimeSlotRepo,
     MenuItemTimeSlotRepo menuItemTimeSlotRepo,
+    MenuItemRecommendationRepo menuItemRecommendationRepo,
     MenuTagRepo menuTagRepo,
     MenuItemTagRepo menuItemTagRepo,
+    ComboRepo comboRepo,
+    ComboItemRepo comboItemRepo,
+    BranchRecommendationTemplateRepo branchRecommendationTemplateRepo,
+    BranchRecommendationTemplateItemRepo branchRecommendationTemplateItemRepo,
     OrderRepo orderRepo,
     OrderItemRepo orderItemRepo,
     WaiterCallRepo waiterCallRepo,
@@ -232,6 +252,11 @@ public class PublicController {
     this.menuItemTimeSlotRepo = menuItemTimeSlotRepo;
     this.menuTagRepo = menuTagRepo;
     this.menuItemTagRepo = menuItemTagRepo;
+    this.menuItemRecommendationRepo = menuItemRecommendationRepo;
+    this.comboRepo = comboRepo;
+    this.comboItemRepo = comboItemRepo;
+    this.branchRecommendationTemplateRepo = branchRecommendationTemplateRepo;
+    this.branchRecommendationTemplateItemRepo = branchRecommendationTemplateItemRepo;
     this.orderRepo = orderRepo;
     this.orderItemRepo = orderItemRepo;
     this.waiterCallRepo = waiterCallRepo;
@@ -546,9 +571,13 @@ public class PublicController {
     Integer fatG,
     Integer carbsG,
     List<String> photos,
+    String videoUrl,
     List<String> tags,
     int priceCents,
-    String currency
+    String currency,
+    boolean isActive,
+    boolean isStopList,
+    boolean isLowStock
   ) {}
 
   public record MenuCategoryDto(
@@ -562,6 +591,26 @@ public class PublicController {
     long branchId,
     String locale,
     List<MenuCategoryDto> categories
+  ) {}
+
+  public record ComboItemPublicDto(
+    long menuItemId,
+    String name,
+    int minQty,
+    int maxQty,
+    boolean isActive
+  ) {}
+
+  public record ComboPublicDto(
+    long id,
+    MenuItemDto item,
+    List<ComboItemPublicDto> items
+  ) {}
+
+  public record RecommendationTemplatePublicDto(
+    long id,
+    String name,
+    List<MenuItemDto> items
   ) {}
 
   // --- Modifiers public ---
@@ -581,10 +630,16 @@ public class PublicController {
     Integer fatG,
     Integer carbsG,
     List<String> photos,
+    String videoUrl,
     List<String> tags,
     int priceCents,
-    String currency
+    String currency,
+    boolean isActive,
+    boolean isStopList,
+    boolean isLowStock
   ) {}
+
+  public record MenuItemRecommendationResponse(MenuItemDto item, String type) {}
 
   private boolean isSlotActiveNow(MenuTimeSlot slot, ZonedDateTime now) {
     if (!slot.isActive) return false;
@@ -656,7 +711,9 @@ public class PublicController {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong tenant");
     }
     BranchMenuItemOverride override = menuItemOverrideRepo.findByBranchIdAndMenuItemId(branch.id, item.id).orElse(null);
-    if (!resolveMenuItemActive(item, override) || resolveMenuItemStopList(item, override)) {
+    boolean isActive = resolveMenuItemActive(item, override);
+    boolean isStopList = resolveMenuItemStopList(item, override);
+    if (!isActive) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Menu item not available");
     }
     if (!isMenuItemAvailableNow(item.id, branch.id, ZonedDateTime.now(resolveBranchZone(branch.id)))) {
@@ -665,6 +722,7 @@ public class PublicController {
 
     String loc = normalizeLocale(locale);
     Map<Long, List<String>> tagsByItem = loadTagNamesByItemIds(List.of(item.id), branch.tenantId);
+    boolean lowStock = inventoryService.resolveLowStockForMenuItems(branch.id, List.of(item.id)).getOrDefault(item.id, false);
     return new MenuItemDetailResponse(
       item.id,
       pick(loc, item.nameRu, item.nameRo, item.nameEn),
@@ -677,9 +735,13 @@ public class PublicController {
       item.fatG,
       item.carbsG,
       splitCsv(item.photoUrls),
+      item.videoUrl,
       mergeTags(item, tagsByItem),
       item.priceCents,
-      item.currency
+      item.currency,
+      isActive,
+      isStopList,
+      lowStock
     );
   }
 
@@ -706,7 +768,7 @@ public class PublicController {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong tenant");
     }
     BranchMenuItemOverride override = menuItemOverrideRepo.findByBranchIdAndMenuItemId(branch.id, item.id).orElse(null);
-    if (!resolveMenuItemActive(item, override) || resolveMenuItemStopList(item, override)) {
+    if (!resolveMenuItemActive(item, override)) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Menu item not available");
     }
 
@@ -742,6 +804,90 @@ public class PublicController {
       ));
     }
     return new MenuItemModifiersResponse(id, out);
+  }
+
+  @GetMapping("/menu-item/{id}/recommendations")
+  public List<MenuItemRecommendationResponse> getMenuItemRecommendations(
+    @PathVariable("id") long id,
+    @RequestParam("tablePublicId") String tablePublicId,
+    @RequestParam("sig") String sig,
+    @RequestParam("ts") Long ts,
+    @RequestParam(value = "locale", required = false) String locale
+  ) {
+    if (!qrSig.verifyTablePublicId(tablePublicId, sig, ts)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Invalid QR signature");
+    }
+    CafeTable table = tableRepo.findByPublicId(tablePublicId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Table not found"));
+    Branch branch = branchRepo.findById(table.branchId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    MenuItem item = itemRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Menu item not found"));
+    MenuCategory cat = categoryRepo.findById(item.categoryId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found"));
+    if (!Objects.equals(cat.tenantId, branch.tenantId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong tenant");
+    }
+    List<MenuItemRecommendation> recs = menuItemRecommendationRepo.findBySourceItemIdOrderBySortOrderAscIdAsc(item.id);
+    if (recs.isEmpty()) return List.of();
+    List<Long> targetIds = recs.stream().map(r -> r.targetItemId).distinct().toList();
+    List<MenuItem> targets = itemRepo.findAllById(targetIds);
+    Map<Long, MenuItem> targetById = targets.stream().collect(Collectors.toMap(t -> t.id, t -> t));
+    Map<Long, Boolean> lowStockByItem = inventoryService.resolveLowStockForMenuItems(branch.id, targetIds);
+    Map<Long, BranchMenuItemOverride> overrides = targets.isEmpty()
+      ? Map.of()
+      : menuItemOverrideRepo.findByBranchIdAndMenuItemIdIn(branch.id, targetIds)
+        .stream()
+        .collect(Collectors.toMap(o -> o.menuItemId, o -> o));
+    Map<Long, List<Long>> slotsByItem = targets.isEmpty()
+      ? Map.of()
+      : menuItemTimeSlotRepo.findByMenuItemIdIn(targetIds)
+        .stream()
+        .collect(Collectors.groupingBy(l -> l.menuItemId, Collectors.mapping(l -> l.timeSlotId, Collectors.toList())));
+    Map<Long, MenuTimeSlot> slotsById = new HashMap<>();
+    for (MenuTimeSlot s : menuTimeSlotRepo.findByBranchIdAndIsActiveTrue(branch.id)) {
+      slotsById.put(s.id, s);
+    }
+    ZonedDateTime now = ZonedDateTime.now(resolveBranchZone(branch.id));
+    String loc = normalizeLocale(locale);
+    Map<Long, List<String>> tagsByItem = loadTagNamesByItemIds(targetIds, branch.tenantId);
+    List<MenuItemRecommendationResponse> out = new ArrayList<>();
+    for (MenuItemRecommendation r : recs) {
+      if (!r.isActive) continue;
+      MenuItem t = targetById.get(r.targetItemId);
+      if (t == null) continue;
+      MenuCategory tc = categoryRepo.findById(t.categoryId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found"));
+      if (!Objects.equals(tc.tenantId, branch.tenantId)) continue;
+      BranchMenuItemOverride override = overrides.get(t.id);
+      boolean isActive = resolveMenuItemActive(t, override);
+      boolean isStopList = resolveMenuItemStopList(t, override);
+      if (!isActive || isStopList) continue;
+      if (!isMenuItemAvailableNow(t.id, slotsByItem, slotsById, now)) continue;
+      boolean lowStock = lowStockByItem.getOrDefault(t.id, false);
+      MenuItemDto dto = new MenuItemDto(
+        t.id,
+        pick(loc, t.nameRu, t.nameRo, t.nameEn),
+        pick(loc, t.descriptionRu, t.descriptionRo, t.descriptionEn),
+        pick(loc, t.ingredientsRu, t.ingredientsRo, t.ingredientsEn),
+        t.allergens,
+        t.weight,
+        t.kcal,
+        t.proteinG,
+        t.fatG,
+        t.carbsG,
+        splitCsv(t.photoUrls),
+        t.videoUrl,
+        mergeTags(t, tagsByItem),
+        t.priceCents,
+        t.currency,
+        isActive,
+        isStopList,
+        lowStock
+      );
+      out.add(new MenuItemRecommendationResponse(dto, r.type));
+    }
+    return out;
   }
 
   @GetMapping("/menu")
@@ -784,11 +930,16 @@ public class PublicController {
     }
     ZonedDateTime now = ZonedDateTime.now(resolveBranchZone(branch.id));
 
-    Map<Long, List<String>> tagsByItem = loadTagNamesByItemIds(items.stream().map(i -> i.id).toList(), branch.tenantId);
+    List<Long> itemIds = items.stream().map(i -> i.id).toList();
+    Map<Long, List<String>> tagsByItem = loadTagNamesByItemIds(itemIds, branch.tenantId);
+    Map<Long, Boolean> lowStockByItem = inventoryService.resolveLowStockForMenuItems(branch.id, itemIds);
     Map<Long, List<MenuItemDto>> itemsByCat = new HashMap<>();
     for (MenuItem it : items) {
       BranchMenuItemOverride override = overrides.get(it.id);
-      if (!resolveMenuItemActive(it, override) || resolveMenuItemStopList(it, override)) {
+      boolean isActive = resolveMenuItemActive(it, override);
+      boolean isStopList = resolveMenuItemStopList(it, override);
+      boolean isLowStock = lowStockByItem.getOrDefault(it.id, false);
+      if (!isActive) {
         continue;
       }
       if (!isMenuItemAvailableNow(it.id, slotsByItem, slotsById, now)) {
@@ -807,9 +958,13 @@ public class PublicController {
           it.fatG,
           it.carbsG,
           splitCsv(it.photoUrls),
+          it.videoUrl,
           mergeTags(it, tagsByItem),
           it.priceCents,
-          it.currency
+          it.currency,
+          isActive,
+          isStopList,
+          isLowStock
         ));
     }
 
@@ -825,6 +980,318 @@ public class PublicController {
     }
 
     return new MenuResponse(table.branchId, loc, out);
+  }
+
+  @GetMapping("/menu/combos")
+  public List<ComboPublicDto> listCombos(
+    @RequestParam("branchId") long branchId,
+    @RequestParam(value = "lang", required = false) String locale
+  ) {
+    Branch branch = branchRepo.findById(branchId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    String loc = normalizeLocale(locale);
+    List<Combo> combos = comboRepo.findByBranchIdAndIsActiveTrue(branch.id);
+    if (combos.isEmpty()) return List.of();
+
+    List<Long> comboIds = combos.stream().map(c -> c.id).toList();
+    List<ComboItem> comboItems = comboItemRepo.findByComboIdIn(comboIds);
+    Map<Long, List<ComboItem>> itemsByCombo = comboItems.stream()
+      .filter(ci -> ci.isActive)
+      .collect(Collectors.groupingBy(ci -> ci.comboId));
+
+    Set<Long> allItemIds = new HashSet<>();
+    for (Combo c : combos) allItemIds.add(c.menuItemId);
+    for (ComboItem ci : comboItems) allItemIds.add(ci.menuItemId);
+    Map<Long, MenuItem> menuById = new HashMap<>();
+    for (MenuItem mi : itemRepo.findAllById(allItemIds)) {
+      menuById.put(mi.id, mi);
+    }
+
+    Map<Long, BranchMenuItemOverride> overrides = allItemIds.isEmpty()
+      ? Map.of()
+      : menuItemOverrideRepo.findByBranchIdAndMenuItemIdIn(branch.id, new ArrayList<>(allItemIds))
+        .stream()
+        .collect(Collectors.toMap(o -> o.menuItemId, o -> o));
+
+    Map<Long, List<Long>> slotsByItem = allItemIds.isEmpty()
+      ? Map.of()
+      : menuItemTimeSlotRepo.findByMenuItemIdIn(new ArrayList<>(allItemIds))
+        .stream()
+        .collect(Collectors.groupingBy(l -> l.menuItemId, Collectors.mapping(l -> l.timeSlotId, Collectors.toList())));
+    Map<Long, MenuTimeSlot> slotsById = new HashMap<>();
+    for (MenuTimeSlot s : menuTimeSlotRepo.findByBranchIdAndIsActiveTrue(branch.id)) {
+      slotsById.put(s.id, s);
+    }
+    ZonedDateTime now = ZonedDateTime.now(resolveBranchZone(branch.id));
+
+    Map<Long, List<String>> tagsByItem = loadTagNamesByItemIds(new ArrayList<>(allItemIds), branch.tenantId);
+    Map<Long, Boolean> lowStockByItem = inventoryService.resolveLowStockForMenuItems(branch.id, new ArrayList<>(allItemIds));
+
+    List<ComboPublicDto> out = new ArrayList<>();
+    for (Combo c : combos) {
+      MenuItem main = menuById.get(c.menuItemId);
+      if (main == null) continue;
+      MenuCategory mainCat = categoryRepo.findById(main.categoryId).orElse(null);
+      if (mainCat == null || !Objects.equals(mainCat.tenantId, branch.tenantId)) continue;
+      BranchMenuItemOverride mainOverride = overrides.get(main.id);
+      if (!resolveMenuItemActive(main, mainOverride)) continue;
+      if (resolveMenuItemStopList(main, mainOverride)) continue;
+      if (!isMenuItemAvailableNow(main.id, slotsByItem, slotsById, now)) continue;
+
+      List<ComboItem> items = itemsByCombo.getOrDefault(c.id, List.of());
+      List<ComboItemPublicDto> publicItems = new ArrayList<>();
+      boolean invalid = false;
+      for (ComboItem ci : items) {
+        MenuItem it = menuById.get(ci.menuItemId);
+        if (it == null) {
+          if (ci.minQty > 0) invalid = true;
+          continue;
+        }
+        MenuCategory cat = categoryRepo.findById(it.categoryId).orElse(null);
+        if (cat == null || !Objects.equals(cat.tenantId, branch.tenantId)) {
+          if (ci.minQty > 0) invalid = true;
+          continue;
+        }
+        BranchMenuItemOverride o = overrides.get(it.id);
+        boolean active = resolveMenuItemActive(it, o) && !resolveMenuItemStopList(it, o) && isMenuItemAvailableNow(it.id, slotsByItem, slotsById, now);
+        if (!active && ci.minQty > 0) invalid = true;
+        publicItems.add(new ComboItemPublicDto(
+          it.id,
+          pick(loc, it.nameRu, it.nameRo, it.nameEn),
+          ci.minQty,
+          ci.maxQty,
+          active
+        ));
+      }
+      if (invalid || publicItems.isEmpty()) continue;
+      MenuItemDto dto = new MenuItemDto(
+        main.id,
+        pick(loc, main.nameRu, main.nameRo, main.nameEn),
+        pick(loc, main.descriptionRu, main.descriptionRo, main.descriptionEn),
+        pick(loc, main.ingredientsRu, main.ingredientsRo, main.ingredientsEn),
+        main.allergens,
+        main.weight,
+        main.kcal,
+        main.proteinG,
+        main.fatG,
+        main.carbsG,
+        splitCsv(main.photoUrls),
+        main.videoUrl,
+        mergeTags(main, tagsByItem),
+        main.priceCents,
+        main.currency,
+        true,
+        false,
+        lowStockByItem.getOrDefault(main.id, false)
+      );
+      out.add(new ComboPublicDto(c.id, dto, publicItems));
+    }
+    return out;
+  }
+
+  @GetMapping("/recommendation-templates")
+  public List<RecommendationTemplatePublicDto> listRecommendationTemplates(
+    @RequestParam("branchId") long branchId,
+    @RequestParam(value = "lang", required = false) String locale
+  ) {
+    Branch branch = branchRepo.findById(branchId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    String loc = normalizeLocale(locale);
+    List<BranchRecommendationTemplate> templates = branchRecommendationTemplateRepo.findByBranchIdAndIsActiveTrueOrderBySortOrderAscIdAsc(branch.id);
+    if (templates.isEmpty()) return List.of();
+
+    List<Long> templateIds = templates.stream().map(t -> t.id).toList();
+    List<BranchRecommendationTemplateItem> templateItems = branchRecommendationTemplateItemRepo.findByTemplateIdIn(templateIds);
+    if (templateItems.isEmpty()) return List.of();
+    Map<Long, List<BranchRecommendationTemplateItem>> itemsByTemplate = templateItems.stream()
+      .collect(Collectors.groupingBy(i -> i.templateId));
+    List<Long> itemIds = templateItems.stream().map(i -> i.menuItemId).distinct().toList();
+    List<MenuItem> items = itemRepo.findAllById(itemIds);
+    Map<Long, MenuItem> itemById = items.stream().collect(Collectors.toMap(i -> i.id, i -> i));
+    Map<Long, BranchMenuItemOverride> overrides = itemIds.isEmpty()
+      ? Map.of()
+      : menuItemOverrideRepo.findByBranchIdAndMenuItemIdIn(branch.id, itemIds)
+        .stream()
+        .collect(Collectors.toMap(o -> o.menuItemId, o -> o));
+    Map<Long, List<Long>> slotsByItem = itemIds.isEmpty()
+      ? Map.of()
+      : menuItemTimeSlotRepo.findByMenuItemIdIn(itemIds)
+        .stream()
+        .collect(Collectors.groupingBy(l -> l.menuItemId, Collectors.mapping(l -> l.timeSlotId, Collectors.toList())));
+    Map<Long, MenuTimeSlot> slotsById = new HashMap<>();
+    for (MenuTimeSlot s : menuTimeSlotRepo.findByBranchIdAndIsActiveTrue(branch.id)) {
+      slotsById.put(s.id, s);
+    }
+    ZonedDateTime now = ZonedDateTime.now(resolveBranchZone(branch.id));
+    Map<Long, List<String>> tagsByItem = loadTagNamesByItemIds(itemIds, branch.tenantId);
+    Map<Long, Boolean> lowStockByItem = inventoryService.resolveLowStockForMenuItems(branch.id, itemIds);
+
+    List<RecommendationTemplatePublicDto> out = new ArrayList<>();
+    for (BranchRecommendationTemplate t : templates) {
+      List<BranchRecommendationTemplateItem> links = itemsByTemplate.getOrDefault(t.id, List.of());
+      if (links.isEmpty()) continue;
+      links.sort((a, b) -> {
+        int cmp = Integer.compare(a.sortOrder, b.sortOrder);
+        if (cmp != 0) return cmp;
+        if (a.id == null && b.id == null) return 0;
+        if (a.id == null) return -1;
+        if (b.id == null) return 1;
+        return Long.compare(a.id, b.id);
+      });
+      List<MenuItemDto> templateItemsOut = new ArrayList<>();
+      for (BranchRecommendationTemplateItem link : links) {
+        if (!link.isActive) continue;
+        MenuItem it = itemById.get(link.menuItemId);
+        if (it == null) continue;
+        MenuCategory c = categoryRepo.findById(it.categoryId)
+          .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found"));
+        if (!Objects.equals(c.tenantId, branch.tenantId)) continue;
+        BranchMenuItemOverride override = overrides.get(it.id);
+        boolean isActive = resolveMenuItemActive(it, override);
+        boolean isStopList = resolveMenuItemStopList(it, override);
+        if (!isActive || isStopList) continue;
+        if (!isMenuItemAvailableNow(it.id, slotsByItem, slotsById, now)) continue;
+        boolean lowStock = lowStockByItem.getOrDefault(it.id, false);
+        templateItemsOut.add(new MenuItemDto(
+          it.id,
+          pick(loc, it.nameRu, it.nameRo, it.nameEn),
+          pick(loc, it.descriptionRu, it.descriptionRo, it.descriptionEn),
+          pick(loc, it.ingredientsRu, it.ingredientsRo, it.ingredientsEn),
+          it.allergens,
+          it.weight,
+          it.kcal,
+          it.proteinG,
+          it.fatG,
+          it.carbsG,
+          splitCsv(it.photoUrls),
+          it.videoUrl,
+          mergeTags(it, tagsByItem),
+          it.priceCents,
+          it.currency,
+          isActive,
+          isStopList,
+          lowStock
+        ));
+      }
+      if (!templateItemsOut.isEmpty()) {
+        out.add(new RecommendationTemplatePublicDto(t.id, t.name, templateItemsOut));
+      }
+    }
+    return out;
+  }
+
+  @GetMapping("/recommendations/personal")
+  public List<MenuItemDto> getPersonalRecommendations(
+    @RequestParam("guestSessionId") long guestSessionId,
+    @RequestParam("branchId") long branchId,
+    @RequestParam(value = "limit", required = false) Integer limit,
+    @RequestParam(value = "lang", required = false) String locale,
+    jakarta.servlet.http.HttpServletRequest httpReq
+  ) {
+    GuestSession s = sessionRepo.findById(guestSessionId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
+    requireSessionSecret(s, httpReq);
+    if (!s.isVerified || s.verifiedPhone == null || s.verifiedPhone.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Phone not verified");
+    }
+    Branch branch = branchRepo.findById(branchId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    String loc = normalizeLocale(locale);
+    int lim = limit == null ? 12 : Math.max(1, Math.min(limit, 30));
+
+    LinkedHashSet<Long> itemIds = new LinkedHashSet<>();
+    try {
+      LoyaltyService.LoyaltyProfile profile = loyaltyService.getProfile(branch.id, s.verifiedPhone);
+      if (profile != null && profile.favorites() != null) {
+        for (LoyaltyService.FavoriteItemDto f : profile.favorites()) {
+          if (f.menuItemId() > 0) itemIds.add(f.menuItemId());
+        }
+      }
+    } catch (Exception e) {
+      // ignore loyalty failures, fallback to orders
+    }
+
+    List<GuestSession> sessions = sessionRepo.findTop200ByVerifiedPhoneOrderByIdDesc(s.verifiedPhone);
+    if (!sessions.isEmpty()) {
+      List<Long> sessionIds = sessions.stream().map(gs -> gs.id).toList();
+      List<Order> orders = orderRepo.findTop200ByGuestSessionIdInOrderByCreatedAtDesc(sessionIds);
+      if (!orders.isEmpty()) {
+        List<Long> orderIds = orders.stream().map(o -> o.id).toList();
+        List<OrderItem> items = orderItemRepo.findByOrderIdIn(orderIds);
+        items.sort((a, b) -> {
+          Order oa = orders.stream().filter(o -> Objects.equals(o.id, a.orderId)).findFirst().orElse(null);
+          Order ob = orders.stream().filter(o -> Objects.equals(o.id, b.orderId)).findFirst().orElse(null);
+          Instant ia = oa == null ? Instant.EPOCH : oa.createdAt;
+          Instant ib = ob == null ? Instant.EPOCH : ob.createdAt;
+          return ib.compareTo(ia);
+        });
+        for (OrderItem it : items) {
+          if (it.menuItemId != null && it.menuItemId > 0) {
+            itemIds.add(it.menuItemId);
+          }
+          if (itemIds.size() >= lim * 2L) break;
+        }
+      }
+    }
+
+    if (itemIds.isEmpty()) return List.of();
+
+    List<Long> candidateIds = new ArrayList<>(itemIds);
+    List<MenuItem> items = itemRepo.findAllById(candidateIds);
+    Map<Long, MenuItem> itemById = items.stream().collect(Collectors.toMap(i -> i.id, i -> i));
+    Map<Long, BranchMenuItemOverride> overrides = candidateIds.isEmpty()
+      ? Map.of()
+      : menuItemOverrideRepo.findByBranchIdAndMenuItemIdIn(branch.id, candidateIds)
+        .stream()
+        .collect(Collectors.toMap(o -> o.menuItemId, o -> o));
+    Map<Long, List<Long>> slotsByItem = candidateIds.isEmpty()
+      ? Map.of()
+      : menuItemTimeSlotRepo.findByMenuItemIdIn(candidateIds)
+        .stream()
+        .collect(Collectors.groupingBy(l -> l.menuItemId, Collectors.mapping(l -> l.timeSlotId, Collectors.toList())));
+    Map<Long, MenuTimeSlot> slotsById = new HashMap<>();
+    for (MenuTimeSlot ts : menuTimeSlotRepo.findByBranchIdAndIsActiveTrue(branch.id)) {
+      slotsById.put(ts.id, ts);
+    }
+    ZonedDateTime now = ZonedDateTime.now(resolveBranchZone(branch.id));
+    Map<Long, List<String>> tagsByItem = loadTagNamesByItemIds(candidateIds, branch.tenantId);
+    Map<Long, Boolean> lowStockByItem = inventoryService.resolveLowStockForMenuItems(branch.id, candidateIds);
+
+    List<MenuItemDto> out = new ArrayList<>();
+    for (Long id : candidateIds) {
+      if (out.size() >= lim) break;
+      MenuItem it = itemById.get(id);
+      if (it == null) continue;
+      MenuCategory cat = categoryRepo.findById(it.categoryId).orElse(null);
+      if (cat == null || !Objects.equals(cat.tenantId, branch.tenantId)) continue;
+      BranchMenuItemOverride override = overrides.get(it.id);
+      boolean isActive = resolveMenuItemActive(it, override);
+      boolean isStopList = resolveMenuItemStopList(it, override);
+      if (!isActive || isStopList) continue;
+      if (!isMenuItemAvailableNow(it.id, slotsByItem, slotsById, now)) continue;
+      boolean lowStock = lowStockByItem.getOrDefault(it.id, false);
+      out.add(new MenuItemDto(
+        it.id,
+        pick(loc, it.nameRu, it.nameRo, it.nameEn),
+        pick(loc, it.descriptionRu, it.descriptionRo, it.descriptionEn),
+        pick(loc, it.ingredientsRu, it.ingredientsRo, it.ingredientsEn),
+        it.allergens,
+        it.weight,
+        it.kcal,
+        it.proteinG,
+        it.fatG,
+        it.carbsG,
+        splitCsv(it.photoUrls),
+        it.videoUrl,
+        mergeTags(it, tagsByItem),
+        it.priceCents,
+        it.currency,
+        isActive,
+        isStopList,
+        lowStock
+      ));
+    }
+    return out;
   }
 
   // --- Orders ---

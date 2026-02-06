@@ -131,8 +131,12 @@ APP_QR_HMAC_SECRET=СЕКРЕТ_32_СИМВОЛА_ИЛИ_БОЛЕЕ
 APP_AUTH_COOKIE_SECRET=ДРУГОЙ_СЕКРЕТ_32_СИМВОЛА_ИЛИ_БОЛЕЕ
 APP_AUTH_COOKIE_SECURE=true
 
-# Медиа (загрузка изображений)
+# Медиа (загрузка изображений/видео)
 APP_MEDIA_PUBLIC_BASE_URL=https://YOUR_DOMAIN
+# Опционально: разрешённые домены для videoUrl (через запятую)
+APP_MEDIA_VIDEO_URL_ALLOWLIST=cdn.example.com,media.example.com
+# Опционально: лимит размера видео (байты)
+APP_MEDIA_MAX_VIDEO_BYTES=52428800
 ```
 
 ### Retention (хранение/удаление гостевых данных)

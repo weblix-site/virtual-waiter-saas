@@ -28,15 +28,39 @@ type MenuItem = {
   fatG?: number | null;
   carbsG?: number | null;
   photos: string[];
+  videoUrl?: string | null;
   tags: string[];
   priceCents: number;
   currency: string;
+  isActive: boolean;
+  isStopList: boolean;
+  isLowStock: boolean;
 };
 
 type MenuCategory = {
   id: number;
   name: string;
   sortOrder: number;
+  items: MenuItem[];
+};
+
+type ComboItem = {
+  menuItemId: number;
+  name: string;
+  minQty: number;
+  maxQty: number;
+  isActive: boolean;
+};
+
+type Combo = {
+  id: number;
+  item: MenuItem;
+  items: ComboItem[];
+};
+
+type RecommendationTemplate = {
+  id: number;
+  name: string;
   items: MenuItem[];
 };
 
@@ -145,7 +169,7 @@ type ModOption = { id: number; name: string; priceCents: number };
 type ModGroup = { id: number; name: string; isRequired: boolean; minSelect?: number | null; maxSelect?: number | null; options: ModOption[] };
 type MenuItemModifiersResponse = { menuItemId: number; groups: ModGroup[] };
 
-type CartLine = { item: MenuItem; qty: number; comment?: string; modifierOptionIds?: number[]; modifierSummary?: string };
+type CartLine = { lineId: string; item: MenuItem; qty: number; comment?: string; modifierOptionIds?: number[]; modifierSummary?: string; isCombo?: boolean };
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8080";
 
@@ -165,11 +189,28 @@ export default function TablePage({ params, searchParams }: any) {
   // If QR signature is missing (e.g., dev link), show a friendly error.
   // In production, all QR links must include ?sig=...
 
+  const makeLineId = useCallback(() => {
+    if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+      return crypto.randomUUID();
+    }
+    return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  }, []);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [session, setSession] = useState<StartSessionResponse | null>(null);
   const [menu, setMenu] = useState<MenuResponse | null>(null);
+  const [combos, setCombos] = useState<Combo[]>([]);
+  const [comboOpenById, setComboOpenById] = useState<Record<number, boolean>>({});
+  const [comboSelections, setComboSelections] = useState<Record<number, Record<number, number>>>({});
+  const [comboLoading, setComboLoading] = useState(false);
+  const [comboError, setComboError] = useState<string | null>(null);
+  const [branchRecTemplates, setBranchRecTemplates] = useState<RecommendationTemplate[]>([]);
+  const [branchRecLoading, setBranchRecLoading] = useState(false);
+  const [branchRecError, setBranchRecError] = useState<string | null>(null);
+  const [personalRecs, setPersonalRecs] = useState<MenuItem[]>([]);
+  const [personalRecsLoading, setPersonalRecsLoading] = useState(false);
+  const [personalRecsError, setPersonalRecsError] = useState<string | null>(null);
   const [tagFilters, setTagFilters] = useState<string[]>([]);
   const [allergenHidden, setAllergenHidden] = useState<string[]>([]);
   const [cart, setCart] = useState<CartLine[]>([]);
@@ -300,6 +341,202 @@ export default function TablePage({ params, searchParams }: any) {
       .filter((cat) => cat.items.length > 0);
     return { ...menu, categories };
   }, [menu, tagFilters, allergenHidden, normalizeToken, splitAllergens]);
+
+  const typeGroups = useMemo(() => {
+    if (!filteredMenu?.categories?.length) return [] as { key: string; label: string; items: MenuItem[] }[];
+    const normalize = (v?: string) => (v ?? "").toLowerCase().trim();
+    const rules: { key: string; label: string; tags: string[] }[] = [
+      { key: "DRINKS", label: t(lang, "typeDrinks"), tags: ["drink", "drinks", "beverage", "beverages", "напиток", "напитки"] },
+      { key: "DESSERTS", label: t(lang, "typeDesserts"), tags: ["dessert", "desserts", "десерт", "десерты"] },
+      { key: "SAUCES", label: t(lang, "typeSauces"), tags: ["sauce", "sauces", "соус", "соусы"] },
+    ];
+    const byKey = new Map<string, MenuItem[]>();
+    for (const cat of filteredMenu.categories) {
+      for (const it of cat.items) {
+        const tags = (it.tags ?? []).map((tag) => normalize(tag));
+        for (const rule of rules) {
+          if (rule.tags.some((tag) => tags.includes(tag))) {
+            if (!byKey.has(rule.key)) byKey.set(rule.key, []);
+            byKey.get(rule.key)!.push(it);
+            break;
+          }
+        }
+      }
+    }
+    return rules
+      .map((rule) => ({ key: rule.key, label: rule.label, items: byKey.get(rule.key) ?? [] }))
+      .filter((group) => group.items.length > 0);
+  }, [filteredMenu, lang]);
+
+  const typeItemIds = useMemo(() => {
+    const ids = new Set<number>();
+    for (const group of typeGroups) {
+      for (const it of group.items) {
+        ids.add(it.id);
+      }
+    }
+    return ids;
+  }, [typeGroups]);
+
+  const menuForCategories = useMemo(() => {
+    if (!filteredMenu || !hideTypeItemsFromCategories || typeItemIds.size === 0) return filteredMenu;
+    const categories = filteredMenu.categories
+      .map((cat) => ({ ...cat, items: cat.items.filter((it) => !typeItemIds.has(it.id)) }))
+      .filter((cat) => cat.items.length > 0);
+    return { ...filteredMenu, categories };
+  }, [filteredMenu, hideTypeItemsFromCategories, typeItemIds]);
+
+  const renderMenuItemCard = (it: MenuItem) => (
+    <div key={it.id} style={{ border: "1px solid #eee", borderRadius: 10, padding: 12 }}>
+      {it.photos?.[0] ? (
+        <Image
+          src={it.photos[0]}
+          alt={it.name}
+          width={520}
+          height={280}
+          style={{ width: "100%", height: 140, objectFit: "cover", borderRadius: 8, marginBottom: 8 }}
+          unoptimized
+        />
+      ) : it.videoUrl ? (
+        <video
+          muted
+          preload="none"
+          controls
+          style={{ width: "100%", height: 140, objectFit: "cover", borderRadius: 8, marginBottom: 8 }}
+          src={it.videoUrl}
+        />
+      ) : null}
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+        <strong>{it.name}</strong>
+        <span>{money(it.priceCents, it.currency)}</span>
+      </div>
+      {it.isStopList && (
+        <div style={{ marginTop: 6 }}>
+          <span style={{ fontSize: 12, padding: "2px 8px", borderRadius: 999, background: "#fee2e2", color: "#991b1b" }}>
+            {t(lang, "outOfStock")}
+          </span>
+        </div>
+      )}
+      {!it.isStopList && it.isLowStock && (
+        <div style={{ marginTop: 6 }}>
+          <span style={{ fontSize: 12, padding: "2px 8px", borderRadius: 999, background: "#fff7ed", color: "#9a3412" }}>
+            {t(lang, "lowStock")}
+          </span>
+        </div>
+      )}
+      {(it.weight || it.kcal || it.proteinG || it.fatG || it.carbsG) && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", fontSize: 12, color: "#666", marginTop: 4 }}>
+          {it.weight && (
+            <span style={{ padding: "2px 6px", border: "1px solid #eee", borderRadius: 999 }}>
+              {t(lang, "weightShort")}: {it.weight}
+            </span>
+          )}
+          {it.kcal && (
+            <span style={{ padding: "2px 6px", border: "1px solid #eee", borderRadius: 999 }}>
+              {t(lang, "calories")}: {it.kcal}
+            </span>
+          )}
+          {it.proteinG && (
+            <span style={{ padding: "2px 6px", border: "1px solid #eee", borderRadius: 999 }}>
+              {t(lang, "protein")}: {it.proteinG}г
+            </span>
+          )}
+          {it.fatG && (
+            <span style={{ padding: "2px 6px", border: "1px solid #eee", borderRadius: 999 }}>
+              {t(lang, "fat")}: {it.fatG}г
+            </span>
+          )}
+          {it.carbsG && (
+            <span style={{ padding: "2px 6px", border: "1px solid #eee", borderRadius: 999 }}>
+              {t(lang, "carbs")}: {it.carbsG}г
+            </span>
+          )}
+        </div>
+      )}
+      {it.videoUrl && (
+        <div style={{ marginTop: 6, fontSize: 12 }}>
+          <a href={it.videoUrl} target="_blank" rel="noreferrer">{t(lang, "video")}</a>
+        </div>
+      )}
+      {it.description && <p style={{ margin: "8px 0", color: "#444" }}>{it.description}</p>}
+      {it.ingredients && <div style={{ fontSize: 12, color: "#666" }}>{it.ingredients}</div>}
+      {it.allergens && <div style={{ fontSize: 12, color: "#b11e46" }}>{it.allergens}</div>}
+      <div style={{ marginTop: 10, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        {cart.find((c) => c.item.id === it.id) ? (
+          <>
+            <button onClick={() => dec(it.id)}>-</button>
+            <span>{cart.find((c) => c.item.id === it.id)?.qty ?? 0}</span>
+            <button onClick={() => addToCart(it)} disabled={it.isStopList}>+</button>
+          </>
+        ) : (
+          <button onClick={() => addToCart(it)} style={{ padding: "8px 12px" }} disabled={it.isStopList}>
+            {t(lang, "addToCart")}
+          </button>
+        )}
+        <button onClick={() => toggleModifiers(it.id)} style={{ padding: "6px 10px" }}>
+          {t(lang, "modifiers")}
+        </button>
+      </div>
+      <a href={`/t/${tablePublicId}/item/${it.id}?lang=${lang}&sig=${encodeURIComponent(sig)}&ts=${encodeURIComponent(ts)}`} style={{ display: "inline-block", marginTop: 6 }}>
+        {t(lang, "details")}
+      </a>
+      {modOpenByItem[it.id] && modifiersByItem[it.id]?.groups?.length ? (
+        <div style={{ marginTop: 8, borderTop: "1px dashed #ddd", paddingTop: 8 }}>
+          {modifiersByItem[it.id].groups.map((g) => (
+            <div key={g.id} style={{ marginBottom: 8 }}>
+              <div style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                {g.name}
+                <span
+                  style={{
+                    fontSize: 11,
+                    padding: "2px 6px",
+                    borderRadius: 999,
+                    background: g.isRequired ? "#fee2e2" : "#e0f2fe",
+                    color: g.isRequired ? "#991b1b" : "#0369a1",
+                  }}
+                >
+                  {g.isRequired ? t(lang, "modifiersRequiredLabel") : t(lang, "modifiersOptionalLabel")}
+                </span>
+                <span style={{ fontSize: 11, color: "#666" }}>
+                  {t(lang, "modifiersSelected")}:{" "}
+                  {(() => {
+                    const optionIds = new Set(g.options.map((o) => o.id));
+                    const selected = cart.find((c) => c.item.id === it.id)?.modifierOptionIds ?? [];
+                    return selected.filter((id) => optionIds.has(id)).length;
+                  })()}
+                </span>
+              </div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {g.options.map((o) => {
+                  const selected = cart.find((c) => c.item.id === it.id)?.modifierOptionIds?.includes(o.id) ?? false;
+                  return (
+                    <button
+                      key={o.id}
+                      onClick={() => toggleOption(it, g, o)}
+                      style={{
+                        padding: "6px 8px",
+                        borderRadius: 8,
+                        border: selected ? "2px solid #333" : "1px solid #ddd",
+                        background: selected ? "#111" : "#fff",
+                        color: selected ? "#fff" : "#111",
+                      }}
+                    >
+                      {o.name} {o.priceCents ? `+${money(o.priceCents, it.currency)}` : ""}
+                    </button>
+                  );
+                })}
+              </div>
+              <div style={{ color: "#666", fontSize: 12, marginTop: 4 }}>
+                {g.minSelect ? `${t(lang, "choose")} ${g.minSelect}` : ""}
+                {g.maxSelect ? ` / ${g.maxSelect}` : ""}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+
   const [lastOrders, setLastOrders] = useState<{ orderId: number; status: string; createdAt: string | null; items: { menuItemId: number; name: string; qty: number }[]; }[]>([]);
   const [lastOrdersLoading, setLastOrdersLoading] = useState(false);
   const [lastOrdersError, setLastOrdersError] = useState<string | null>(null);
@@ -308,6 +545,7 @@ export default function TablePage({ params, searchParams }: any) {
   const [guestAllergens, setGuestAllergens] = useState("");
   const [revealedOffers, setRevealedOffers] = useState<Record<number, boolean>>({});
   const [offersFilter, setOffersFilter] = useState<"ALL" | "ACTIVE" | "EXPIRING">("ALL");
+  const [hideTypeItemsFromCategories, setHideTypeItemsFromCategories] = useState(true);
 
   const menuItemById = useMemo(() => {
     const map = new Map<number, MenuItem>();
@@ -320,6 +558,36 @@ export default function TablePage({ params, searchParams }: any) {
     }
     return map;
   }, [menu]);
+
+  const initComboSelection = useCallback((combo: Combo) => {
+    setComboSelections((prev) => {
+      if (prev[combo.id]) return prev;
+      const next: Record<number, number> = {};
+      combo.items.forEach((ci) => {
+        next[ci.menuItemId] = Math.max(0, ci.minQty);
+      });
+      return { ...prev, [combo.id]: next };
+    });
+  }, []);
+
+  const updateComboSelection = useCallback((comboId: number, itemId: number, qty: number) => {
+    setComboSelections((prev) => ({
+      ...prev,
+      [comboId]: { ...(prev[comboId] ?? {}), [itemId]: qty },
+    }));
+  }, []);
+
+  const addComboToCart = useCallback((combo: Combo) => {
+    const selections = comboSelections[combo.id] ?? {};
+    const lines = combo.items.map((ci) => {
+      const qty = selections[ci.menuItemId] ?? Math.max(0, ci.minQty);
+      return { name: ci.name, qty };
+    }).filter((l) => l.qty > 0);
+    const summary = lines.map((l) => `${l.name} x${l.qty}`).join(", ");
+    const comment = summary ? `${t(lang, "comboLabel")}: ${summary}` : t(lang, "comboLabel");
+    setCart((prev) => [...prev, { lineId: makeLineId(), item: combo.item, qty: 1, comment, modifierOptionIds: [], modifierSummary: "", isCombo: true }]);
+    setComboOpenById((prev) => ({ ...prev, [combo.id]: false }));
+  }, [comboSelections, lang, makeLineId]);
 
   const formatOfferDate = useCallback((iso?: string | null) => {
     if (!iso) return "";
@@ -585,6 +853,7 @@ export default function TablePage({ params, searchParams }: any) {
   }, [lang, modifiersByItem, sig, tablePublicId, ts]);
 
   const addToCart = useCallback(async (item: MenuItem) => {
+    if (item.isStopList) return;
     setOrderId(null);
     const loaded = await ensureModifiersLoaded(item.id);
     const mods = loaded ?? modifiersByItem[item.id];
@@ -593,18 +862,18 @@ export default function TablePage({ params, searchParams }: any) {
       return min > 0;
     });
     setCart((prev) => {
-      const idx = prev.findIndex((x) => x.item.id === item.id);
+      const idx = prev.findIndex((x) => x.item.id === item.id && !x.isCombo);
       if (idx >= 0) {
         const next = prev.slice();
         next[idx] = { ...next[idx], qty: next[idx].qty + 1 };
         return next;
       }
-      return [...prev, { item, qty: 1, comment: "", modifierOptionIds: [], modifierSummary: "" }];
+      return [...prev, { lineId: makeLineId(), item, qty: 1, comment: "", modifierOptionIds: [], modifierSummary: "", isCombo: false }];
     });
     if (hasRequired) {
       setModOpenByItem((prev) => ({ ...prev, [item.id]: true }));
     }
-  }, [ensureModifiersLoaded, modifiersByItem]);
+  }, [ensureModifiersLoaded, makeLineId, modifiersByItem]);
 
   const repeatLastOrder = useCallback(async (orderId: number) => {
     const order = lastOrders.find((o) => o.orderId === orderId);
@@ -618,14 +887,24 @@ export default function TablePage({ params, searchParams }: any) {
     }
   }, [lastOrders, menuItemById, addToCart]);
 
-  function dec(itemId: number) {
+  function dec(lineId: string) {
     setCart((prev) => {
-      const idx = prev.findIndex((x) => x.item.id === itemId);
+      const idx = prev.findIndex((x) => x.lineId === lineId);
       if (idx < 0) return prev;
       const next = prev.slice();
       const q = next[idx].qty - 1;
       if (q <= 0) next.splice(idx, 1);
       else next[idx] = { ...next[idx], qty: q };
+      return next;
+    });
+  }
+
+  function inc(lineId: string) {
+    setCart((prev) => {
+      const idx = prev.findIndex((x) => x.lineId === lineId);
+      if (idx < 0) return prev;
+      const next = prev.slice();
+      next[idx] = { ...next[idx], qty: next[idx].qty + 1 };
       return next;
     });
   }
@@ -807,6 +1086,83 @@ export default function TablePage({ params, searchParams }: any) {
       cancelled = true;
     };
   }, [tablePublicId, requestLocale, sig, ts, hasUrlLang, lang, rawLang, refreshBillOptions, searchParams, sessionHeaders]);
+
+  useEffect(() => {
+    if (!menu?.branchId) return;
+    let cancelled = false;
+    async function loadCombos() {
+      setComboLoading(true);
+      setComboError(null);
+      try {
+        const res = await fetch(`${API_BASE}/api/public/menu/combos?branchId=${menu.branchId}&lang=${lang}`);
+        if (!res.ok) throw new Error(await readApiError(res, t(lang, "menuLoadFailed")));
+        const body: Combo[] = await res.json();
+        if (!cancelled) setCombos(body ?? []);
+      } catch (e: any) {
+        if (!cancelled) setComboError(e?.message ?? t(lang, "errorGeneric"));
+      } finally {
+        if (!cancelled) setComboLoading(false);
+      }
+    }
+    loadCombos();
+    return () => {
+      cancelled = true;
+    };
+  }, [lang, menu?.branchId]);
+
+  useEffect(() => {
+    if (!menu?.branchId) return;
+    let cancelled = false;
+    async function loadBranchRecs() {
+      setBranchRecLoading(true);
+      setBranchRecError(null);
+      try {
+        const res = await fetch(`${API_BASE}/api/public/recommendation-templates?branchId=${menu.branchId}&lang=${lang}`);
+        if (!res.ok) throw new Error(await readApiError(res, t(lang, "menuLoadFailed")));
+        const body: RecommendationTemplate[] = await res.json();
+        if (!cancelled) setBranchRecTemplates(body ?? []);
+      } catch (e: any) {
+        if (!cancelled) setBranchRecError(e?.message ?? t(lang, "errorGeneric"));
+      } finally {
+        if (!cancelled) setBranchRecLoading(false);
+      }
+    }
+    loadBranchRecs();
+    return () => {
+      cancelled = true;
+    };
+  }, [lang, menu?.branchId]);
+
+  useEffect(() => {
+    if (!menu?.branchId || !session?.guestSessionId) return;
+    if (!session.isVerified) {
+      setPersonalRecs([]);
+      setPersonalRecsError(null);
+      setPersonalRecsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    async function loadPersonalRecs() {
+      setPersonalRecsLoading(true);
+      setPersonalRecsError(null);
+      try {
+        const res = await fetch(`${API_BASE}/api/public/recommendations/personal?guestSessionId=${session.guestSessionId}&branchId=${menu.branchId}&lang=${lang}`, {
+          headers: { ...sessionHeaders() },
+        });
+        if (!res.ok) throw new Error(await readApiError(res, t(lang, "menuLoadFailed")));
+        const body: MenuItem[] = await res.json();
+        if (!cancelled) setPersonalRecs(body ?? []);
+      } catch (e: any) {
+        if (!cancelled) setPersonalRecsError(e?.message ?? t(lang, "errorGeneric"));
+      } finally {
+        if (!cancelled) setPersonalRecsLoading(false);
+      }
+    }
+    loadPersonalRecs();
+    return () => {
+      cancelled = true;
+    };
+  }, [lang, menu?.branchId, session?.guestSessionId, session?.isVerified, sessionHeaders]);
 
   useEffect(() => {
     setWaiterPhotoFailed(false);
@@ -1380,13 +1736,13 @@ export default function TablePage({ params, searchParams }: any) {
 
   function toggleOption(item: MenuItem, group: ModGroup, opt: ModOption) {
     setCart((prev) => {
-      const idx = prev.findIndex((l) => l.item.id === item.id);
+      const idx = prev.findIndex((l) => l.item.id === item.id && !l.isCombo);
       const next = prev.slice();
       if (idx < 0) {
-        next.push({ item, qty: 1, comment: "", modifierOptionIds: [], modifierSummary: "" });
+        next.push({ lineId: makeLineId(), item, qty: 1, comment: "", modifierOptionIds: [], modifierSummary: "", isCombo: false });
       }
       return next.map((l) => {
-        if (l.item.id !== item.id) return l;
+        if (l.item.id !== item.id || l.isCombo) return l;
         const current = new Set(l.modifierOptionIds ?? []);
         const groupOptionIds = new Set((group.options ?? []).map((o) => o.id));
         const selectedInGroup = Array.from(current).filter((id) => groupOptionIds.has(id));
@@ -2157,133 +2513,147 @@ export default function TablePage({ params, searchParams }: any) {
           )}
         </div>
       )}
-      {filteredMenu?.categories.map((cat) => (
+      {typeGroups.length > 0 && (
+        <section style={{ marginBottom: 24 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", margin: "10px 0" }}>
+            <h3 style={{ margin: 0 }}>{t(lang, "typeGroupTitle")}</h3>
+            <button
+              type="button"
+              onClick={() => setHideTypeItemsFromCategories((v) => !v)}
+              style={{ fontSize: 12, padding: "4px 8px", borderRadius: 999, border: "1px solid #ddd", background: "#fff" }}
+            >
+              {hideTypeItemsFromCategories ? t(lang, "showTypeItemsInCategories") : t(lang, "hideTypeItemsInCategories")}
+            </button>
+          </div>
+          {typeGroups.map((group) => (
+            <div key={group.key} style={{ marginBottom: 18 }}>
+              <div style={{ fontWeight: 600, marginBottom: 8 }}>{group.label}</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 10 }}>
+                {group.items.map((it) => renderMenuItemCard(it))}
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
+      {combos.length > 0 && (
+        <section style={{ marginBottom: 24 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", margin: "10px 0" }}>
+            <h3 style={{ margin: 0 }}>{t(lang, "combosTitle")}</h3>
+            {comboLoading && <span style={{ fontSize: 12, color: "#666" }}>{t(lang, "loading")}</span>}
+            {comboError && <span style={{ fontSize: 12, color: "#b11e46" }}>{comboError}</span>}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
+            {combos.map((combo) => {
+              const open = comboOpenById[combo.id];
+              const selection = comboSelections[combo.id] ?? {};
+              const invalid = combo.items.some((ci) => {
+                const qty = selection[ci.menuItemId] ?? Math.max(0, ci.minQty);
+                if (!ci.isActive && qty > 0) return true;
+                return qty < ci.minQty || qty > ci.maxQty;
+              });
+              return (
+                <div key={combo.id} style={{ border: "1px solid #eee", borderRadius: 12, padding: 12 }}>
+                  {combo.item.photos?.[0] && (
+                    <Image
+                      src={combo.item.photos[0]}
+                      alt={combo.item.name}
+                      width={280}
+                      height={180}
+                      style={{ width: "100%", height: 160, objectFit: "cover", borderRadius: 10 }}
+                    />
+                  )}
+                  <div style={{ marginTop: 8, display: "flex", justifyContent: "space-between", gap: 8 }}>
+                    <strong>{combo.item.name}</strong>
+                    <span style={{ fontWeight: 600 }}>{money(combo.item.priceCents, combo.item.currency)}</span>
+                  </div>
+                  {combo.item.description && <div style={{ color: "#666", fontSize: 12 }}>{combo.item.description}</div>}
+                  {combo.item.isLowStock && (
+                    <div style={{ marginTop: 6, fontSize: 12, color: "#b11e46" }}>{t(lang, "lowStock")}</div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setComboOpenById((prev) => ({ ...prev, [combo.id]: !open }));
+                      if (!open) initComboSelection(combo);
+                    }}
+                    style={{ marginTop: 8 }}
+                  >
+                    {open ? t(lang, "hide") : t(lang, "comboConfigure")}
+                  </button>
+                  {open && (
+                    <div style={{ marginTop: 8, display: "grid", gap: 8 }}>
+                      {combo.items.map((ci) => {
+                        const qty = selection[ci.menuItemId] ?? Math.max(0, ci.minQty);
+                        return (
+                          <div key={ci.menuItemId} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                            <div style={{ fontSize: 13 }}>
+                              <div style={{ fontWeight: 600 }}>{ci.name}</div>
+                              <div style={{ fontSize: 11, color: "#666" }}>
+                                {t(lang, "comboMin")} {ci.minQty} · {t(lang, "comboMax")} {ci.maxQty}
+                              </div>
+                              {!ci.isActive && <div style={{ fontSize: 11, color: "#b11e46" }}>{t(lang, "comboUnavailable")}</div>}
+                            </div>
+                            <input
+                              type="number"
+                              min={ci.minQty}
+                              max={ci.maxQty}
+                              value={qty}
+                              disabled={!ci.isActive}
+                              onChange={(e) => updateComboSelection(combo.id, ci.menuItemId, Number(e.target.value))}
+                              style={{ width: 70 }}
+                            />
+                          </div>
+                        );
+                      })}
+                      <button
+                        type="button"
+                        onClick={() => addComboToCart(combo)}
+                        disabled={invalid}
+                      >
+                        {t(lang, "comboAdd")}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+      {(branchRecTemplates.length > 0 || branchRecLoading || branchRecError) && (
+        <section style={{ marginBottom: 24 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", margin: "10px 0" }}>
+            <h3 style={{ margin: 0 }}>{t(lang, "recommendationsTitle")}</h3>
+            {branchRecLoading && <span style={{ fontSize: 12, color: "#666" }}>{t(lang, "loading")}</span>}
+            {branchRecError && <span style={{ fontSize: 12, color: "#b11e46" }}>{branchRecError}</span>}
+          </div>
+          {branchRecTemplates.map((tpl) => (
+            <div key={tpl.id} style={{ marginBottom: 16 }}>
+              <div style={{ fontWeight: 600, marginBottom: 8 }}>{tpl.name}</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 10 }}>
+                {tpl.items.map((it) => renderMenuItemCard(it))}
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
+      {(personalRecs.length > 0 || personalRecsLoading || personalRecsError) && (
+        <section style={{ marginBottom: 24 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", margin: "10px 0" }}>
+            <h3 style={{ margin: 0 }}>{t(lang, "personalRecsTitle")}</h3>
+            {personalRecsLoading && <span style={{ fontSize: 12, color: "#666" }}>{t(lang, "loading")}</span>}
+            {personalRecsError && <span style={{ fontSize: 12, color: "#b11e46" }}>{personalRecsError}</span>}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 10 }}>
+            {personalRecs.map((it) => renderMenuItemCard(it))}
+          </div>
+        </section>
+      )}
+      {menuForCategories?.categories.map((cat) => (
         <section key={cat.id} style={{ marginBottom: 18 }}>
           <h3 style={{ margin: "10px 0" }}>{cat.name}</h3>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 10 }}>
-            {cat.items.map((it) => (
-              <div key={it.id} style={{ border: "1px solid #eee", borderRadius: 10, padding: 12 }}>
-                {it.photos?.[0] && (
-                  <Image
-                    src={it.photos[0]}
-                    alt={it.name}
-                    width={520}
-                    height={280}
-                    style={{ width: "100%", height: 140, objectFit: "cover", borderRadius: 8, marginBottom: 8 }}
-                    unoptimized
-                  />
-                )}
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                  <strong>{it.name}</strong>
-                  <span>{money(it.priceCents, it.currency)}</span>
-                </div>
-                {(it.weight || it.kcal || it.proteinG || it.fatG || it.carbsG) && (
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", fontSize: 12, color: "#666", marginTop: 4 }}>
-                    {it.weight && (
-                      <span style={{ padding: "2px 6px", border: "1px solid #eee", borderRadius: 999 }}>
-                        {t(lang, "weightShort")}: {it.weight}
-                      </span>
-                    )}
-                    {it.kcal && (
-                      <span style={{ padding: "2px 6px", border: "1px solid #eee", borderRadius: 999 }}>
-                        {t(lang, "calories")}: {it.kcal}
-                      </span>
-                    )}
-                    {it.proteinG && (
-                      <span style={{ padding: "2px 6px", border: "1px solid #eee", borderRadius: 999 }}>
-                        {t(lang, "protein")}: {it.proteinG}г
-                      </span>
-                    )}
-                    {it.fatG && (
-                      <span style={{ padding: "2px 6px", border: "1px solid #eee", borderRadius: 999 }}>
-                        {t(lang, "fat")}: {it.fatG}г
-                      </span>
-                    )}
-                    {it.carbsG && (
-                      <span style={{ padding: "2px 6px", border: "1px solid #eee", borderRadius: 999 }}>
-                        {t(lang, "carbs")}: {it.carbsG}г
-                      </span>
-                    )}
-                  </div>
-                )}
-                {it.description && <p style={{ margin: "8px 0", color: "#444" }}>{it.description}</p>}
-                {it.ingredients && <div style={{ fontSize: 12, color: "#666" }}>{it.ingredients}</div>}
-                {it.allergens && <div style={{ fontSize: 12, color: "#b11e46" }}>{it.allergens}</div>}
-                <div style={{ marginTop: 10, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                  {cart.find((c) => c.item.id === it.id) ? (
-                    <>
-                      <button onClick={() => dec(it.id)}>-</button>
-                      <span>{cart.find((c) => c.item.id === it.id)?.qty ?? 0}</span>
-                      <button onClick={() => addToCart(it)}>+</button>
-                    </>
-                  ) : (
-                    <button onClick={() => addToCart(it)} style={{ padding: "8px 12px" }}>
-                      {t(lang, "addToCart")}
-                    </button>
-                  )}
-                  <button onClick={() => toggleModifiers(it.id)} style={{ padding: "6px 10px" }}>
-                    {t(lang, "modifiers")}
-                  </button>
-                </div>
-                <a href={`/t/${tablePublicId}/item/${it.id}?lang=${lang}&sig=${encodeURIComponent(sig)}&ts=${encodeURIComponent(ts)}`} style={{ display: "inline-block", marginTop: 6 }}>
-                  {t(lang, "details")}
-                </a>
-                {modOpenByItem[it.id] && modifiersByItem[it.id]?.groups?.length ? (
-                  <div style={{ marginTop: 8, borderTop: "1px dashed #ddd", paddingTop: 8 }}>
-                    {modifiersByItem[it.id].groups.map((g) => (
-                      <div key={g.id} style={{ marginBottom: 8 }}>
-                        <div style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                          {g.name}
-                          <span
-                            style={{
-                              fontSize: 11,
-                              padding: "2px 6px",
-                              borderRadius: 999,
-                              background: g.isRequired ? "#fee2e2" : "#e0f2fe",
-                              color: g.isRequired ? "#991b1b" : "#0369a1",
-                            }}
-                          >
-                            {g.isRequired ? t(lang, "modifiersRequiredLabel") : t(lang, "modifiersOptionalLabel")}
-                          </span>
-                          <span style={{ fontSize: 11, color: "#666" }}>
-                            {t(lang, "modifiersSelected")}:{" "}
-                            {(() => {
-                              const optionIds = new Set(g.options.map((o) => o.id));
-                              const selected = cart.find((c) => c.item.id === it.id)?.modifierOptionIds ?? [];
-                              return selected.filter((id) => optionIds.has(id)).length;
-                            })()}
-                          </span>
-                        </div>
-                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                          {g.options.map((o) => {
-                            const selected = cart.find((c) => c.item.id === it.id)?.modifierOptionIds?.includes(o.id) ?? false;
-                            return (
-                              <button
-                                key={o.id}
-                                onClick={() => toggleOption(it, g, o)}
-                                style={{
-                                  padding: "6px 8px",
-                                  borderRadius: 8,
-                                  border: selected ? "2px solid #333" : "1px solid #ddd",
-                                  background: selected ? "#111" : "#fff",
-                                  color: selected ? "#fff" : "#111",
-                                }}
-                              >
-                                {o.name} {o.priceCents ? `+${money(o.priceCents, it.currency)}` : ""}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        <div style={{ color: "#666", fontSize: 12, marginTop: 4 }}>
-                          {g.minSelect ? `${t(lang, "choose")} ${g.minSelect}` : ""}
-                          {g.maxSelect ? ` / ${g.maxSelect}` : ""}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            ))}
+            {cat.items.map((it) => renderMenuItemCard(it))}
           </div>
         </section>
       ))}
@@ -2296,7 +2666,7 @@ export default function TablePage({ params, searchParams }: any) {
           {cart.map((l) => {
             const missing = missingRequiredGroups(l.item.id, l.modifierOptionIds ?? []);
             return (
-              <div key={l.item.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0" }}>
+              <div key={l.lineId} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0" }}>
               <div>
                 <div><strong>{l.item.name}</strong></div>
                 <div style={{ color: "#666", fontSize: 12 }}>{money(l.item.priceCents, l.item.currency)}</div>
@@ -2309,16 +2679,16 @@ export default function TablePage({ params, searchParams }: any) {
                 <div style={{ marginTop: 6, display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <input
                     value={l.comment ?? ""}
-                    onChange={(e) => setCart((prev) => prev.map((x) => x.item.id === l.item.id ? { ...x, comment: e.target.value } : x))}
+                    onChange={(e) => setCart((prev) => prev.map((x) => x.lineId === l.lineId ? { ...x, comment: e.target.value } : x))}
                     placeholder={t(lang, "comment")}
                     style={{ padding: "6px 8px", border: "1px solid #ddd", borderRadius: 6, minWidth: 160 }}
                   />
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <button onClick={() => dec(l.item.id)}>-</button>
+                <button onClick={() => dec(l.lineId)}>-</button>
                 <span>{l.qty}</span>
-                <button onClick={() => addToCart(l.item)}>+</button>
+                <button onClick={() => (l.isCombo ? inc(l.lineId) : addToCart(l.item))}>+</button>
               </div>
               </div>
             );

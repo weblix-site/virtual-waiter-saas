@@ -27,6 +27,9 @@ public final class Messages {
     put("Restaurant does not belong to tenant", "error.restaurant_not_in_tenant");
     put("Branch not found", "error.branch_not_found");
     put("Branch has no restaurant", "error.branch_no_restaurant");
+    put("branchId does not belong to restaurant", "error.branch_not_in_restaurant");
+    put("branchId does not belong to tenant", "error.branch_not_in_tenant");
+    put("tenantId is required", "error.tenant_id_required");
     put("Wrong tenant", "error.wrong_tenant");
     put("Unsupported role", "error.unsupported_role");
     put("Staff user not found", "error.staff_user_not_found");
@@ -43,10 +46,18 @@ public final class Messages {
     put("Invalid QR signature", "error.invalid_qr_signature");
     put("Table not found", "error.table_not_found");
     put("Menu item not found", "error.menu_item_not_found");
+    put("Unknown menu item", "error.unknown_menu_item");
     put("Menu item not in branch", "error.menu_item_not_in_branch");
     put("Menu item not available", "error.menu_item_not_available");
     put("Menu item not in tenant", "error.menu_item_not_in_tenant");
     put("Category not found", "error.category_not_found");
+    put("Unknown tag", "error.unknown_tag");
+    put("Tag not found", "error.tag_not_found");
+    put("Tag already exists", "error.tag_exists");
+    put("Invalid tag name", "error.invalid_tag_name");
+    put("Time slot not found", "error.time_slot_not_found");
+    put("Time slot not in branch", "error.time_slot_not_in_branch");
+    put("daysMask out of range", "error.days_mask_out_of_range");
     put("Wrong branch", "error.wrong_branch");
     put("Session not found", "error.session_not_found");
     put("Session expired", "error.session_expired");
@@ -121,6 +132,9 @@ public final class Messages {
     put("Promo code not active", "error.promo_code_not_active");
     put("Promo code exhausted", "error.promo_code_exhausted");
     put("Promo code invalid", "error.promo_code_invalid");
+    put("Combo already exists for menu item", "error.combo_exists");
+    put("Combo not found", "error.combo_not_found");
+    put("Unknown target item", "error.unknown_target_item");
 
     // Admin layout / data
     put("layoutX + layoutW must be <= 100", "error.layout_x_w_exceed");
@@ -210,6 +224,11 @@ public final class Messages {
     put("External photo URL is not allowed", "error.photo_url_external_not_allowed");
     put("Too many photo URLs", "error.too_many_photo_urls");
     put("Unsupported photo type", "error.unsupported_photo_type");
+    put("Unsupported video type", "error.video_unsupported_type");
+    put("Video URL host not allowed", "error.video_host_not_allowed");
+    put("Video URL is invalid", "error.video_url_invalid");
+    put("Video URL must be absolute", "error.video_url_absolute");
+    put("Video file is too large", "error.video_file_too_large");
     put("File is required", "error.file_required");
     put("File is too large", "error.file_too_large");
     put("Unsupported file type", "error.unsupported_file_type");
@@ -223,6 +242,7 @@ public final class Messages {
     put("Happy hour time window invalid", "error.hh_time_window_invalid");
     put("Happy hour time window required", "error.hh_time_window_required");
     put("Happy hour tz offset invalid", "error.hh_tz_offset_invalid");
+    put("Invalid time zone", "error.invalid_time_zone");
 
     // Misc
     put("phone required", "error.phone_required");

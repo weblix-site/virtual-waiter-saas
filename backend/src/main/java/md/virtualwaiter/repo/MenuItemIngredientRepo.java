@@ -6,5 +6,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface MenuItemIngredientRepo extends JpaRepository<MenuItemIngredient, Long> {
   List<MenuItemIngredient> findByMenuItemId(long menuItemId);
+  List<MenuItemIngredient> findByMenuItemIdIn(List<Long> menuItemIds);
   void deleteByMenuItemId(long menuItemId);
 }

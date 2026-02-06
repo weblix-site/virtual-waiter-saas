@@ -17,12 +17,17 @@ import md.virtualwaiter.domain.HallPlanVersion;
 import md.virtualwaiter.domain.InventoryItem;
 import md.virtualwaiter.domain.MenuCategory;
 import md.virtualwaiter.domain.MenuItem;
+import md.virtualwaiter.domain.Combo;
+import md.virtualwaiter.domain.ComboItem;
 import md.virtualwaiter.domain.MenuItemIngredient;
 import md.virtualwaiter.domain.MenuItemModifierGroup;
 import md.virtualwaiter.domain.MenuItemTimeSlot;
 import md.virtualwaiter.domain.MenuTimeSlot;
 import md.virtualwaiter.domain.MenuTag;
 import md.virtualwaiter.domain.MenuItemTag;
+import md.virtualwaiter.domain.MenuItemRecommendation;
+import md.virtualwaiter.domain.BranchRecommendationTemplate;
+import md.virtualwaiter.domain.BranchRecommendationTemplateItem;
 import md.virtualwaiter.domain.ModifierGroup;
 import md.virtualwaiter.domain.ModifierOption;
 import md.virtualwaiter.domain.StaffReview;
@@ -52,9 +57,14 @@ import md.virtualwaiter.repo.MenuCategoryRepo;
 import md.virtualwaiter.repo.MenuItemIngredientRepo;
 import md.virtualwaiter.repo.MenuItemModifierGroupRepo;
 import md.virtualwaiter.repo.MenuItemTagRepo;
+import md.virtualwaiter.repo.MenuItemRecommendationRepo;
 import md.virtualwaiter.repo.MenuItemTimeSlotRepo;
 import md.virtualwaiter.repo.MenuTemplateRepo;
 import md.virtualwaiter.repo.MenuItemRepo;
+import md.virtualwaiter.repo.BranchRecommendationTemplateRepo;
+import md.virtualwaiter.repo.BranchRecommendationTemplateItemRepo;
+import md.virtualwaiter.repo.ComboRepo;
+import md.virtualwaiter.repo.ComboItemRepo;
 import md.virtualwaiter.repo.MenuTagRepo;
 import md.virtualwaiter.repo.MenuTimeSlotRepo;
 import md.virtualwaiter.repo.ModifierGroupRepo;
@@ -140,11 +150,16 @@ public class AdminController {
   private final BranchReviewRepo branchReviewRepo;
   private final MenuCategoryRepo categoryRepo;
   private final MenuItemRepo itemRepo;
+  private final ComboRepo comboRepo;
+  private final ComboItemRepo comboItemRepo;
   private final BranchMenuItemOverrideRepo menuItemOverrideRepo;
   private final MenuTimeSlotRepo menuTimeSlotRepo;
   private final MenuItemTimeSlotRepo menuItemTimeSlotRepo;
   private final MenuTagRepo menuTagRepo;
   private final MenuItemTagRepo menuItemTagRepo;
+  private final MenuItemRecommendationRepo menuItemRecommendationRepo;
+  private final BranchRecommendationTemplateRepo branchRecommendationTemplateRepo;
+  private final BranchRecommendationTemplateItemRepo branchRecommendationTemplateItemRepo;
   private final CafeTableRepo tableRepo;
   private final BranchRepo branchRepo;
   private final MenuTemplateRepo menuTemplateRepo;
@@ -182,6 +197,7 @@ public class AdminController {
   private final int maxPhotoUrlLength;
   private final int maxPhotoUrlsCount;
   private final Set<String> allowedPhotoExts;
+  private final Set<String> allowedVideoHosts;
   private final String mediaPublicBaseUrl;
 
   public AdminController(
@@ -192,11 +208,16 @@ public class AdminController {
     BranchReviewRepo branchReviewRepo,
     MenuCategoryRepo categoryRepo,
     MenuItemRepo itemRepo,
+    ComboRepo comboRepo,
+    ComboItemRepo comboItemRepo,
     BranchMenuItemOverrideRepo menuItemOverrideRepo,
     MenuTimeSlotRepo menuTimeSlotRepo,
     MenuItemTimeSlotRepo menuItemTimeSlotRepo,
     MenuTagRepo menuTagRepo,
     MenuItemTagRepo menuItemTagRepo,
+    MenuItemRecommendationRepo menuItemRecommendationRepo,
+    BranchRecommendationTemplateRepo branchRecommendationTemplateRepo,
+    BranchRecommendationTemplateItemRepo branchRecommendationTemplateItemRepo,
     CafeTableRepo tableRepo,
     BranchRepo branchRepo,
     MenuTemplateRepo menuTemplateRepo,
@@ -234,6 +255,7 @@ public class AdminController {
     @Value("${app.media.maxPhotoUrlLength:512}") int maxPhotoUrlLength,
     @Value("${app.media.maxPhotoUrlsCount:6}") int maxPhotoUrlsCount,
     @Value("${app.media.allowedPhotoExts:jpg,jpeg,png,webp,gif}") String allowedPhotoExts,
+    @Value("${app.media.videoUrlAllowlist:}") String videoUrlAllowlist,
     @Value("${app.media.publicBaseUrl:http://localhost:8080}") String mediaPublicBaseUrl
   ) {
     this.staffUserRepo = staffUserRepo;
@@ -243,11 +265,16 @@ public class AdminController {
     this.branchReviewRepo = branchReviewRepo;
     this.categoryRepo = categoryRepo;
     this.itemRepo = itemRepo;
+    this.comboRepo = comboRepo;
+    this.comboItemRepo = comboItemRepo;
     this.menuItemOverrideRepo = menuItemOverrideRepo;
     this.menuTimeSlotRepo = menuTimeSlotRepo;
     this.menuItemTimeSlotRepo = menuItemTimeSlotRepo;
     this.menuTagRepo = menuTagRepo;
     this.menuItemTagRepo = menuItemTagRepo;
+    this.menuItemRecommendationRepo = menuItemRecommendationRepo;
+    this.branchRecommendationTemplateRepo = branchRecommendationTemplateRepo;
+    this.branchRecommendationTemplateItemRepo = branchRecommendationTemplateItemRepo;
     this.tableRepo = tableRepo;
     this.branchRepo = branchRepo;
     this.menuTemplateRepo = menuTemplateRepo;
@@ -285,6 +312,7 @@ public class AdminController {
     this.maxPhotoUrlLength = maxPhotoUrlLength;
     this.maxPhotoUrlsCount = maxPhotoUrlsCount;
     this.allowedPhotoExts = parseExts(allowedPhotoExts);
+    this.allowedVideoHosts = parseHosts(videoUrlAllowlist);
     this.mediaPublicBaseUrl = trimTrailingSlash(mediaPublicBaseUrl);
   }
 
@@ -2672,6 +2700,7 @@ public class AdminController {
     String weight,
     String tags,
     String photoUrls,
+    String videoUrl,
     Integer kcal,
     Integer proteinG,
     Integer fatG,
@@ -2760,6 +2789,7 @@ public class AdminController {
         it.weight,
         it.tags,
         it.photoUrls,
+        it.videoUrl,
         it.kcal,
         it.proteinG,
         it.fatG,
@@ -3046,8 +3076,9 @@ public class AdminController {
     }
     String slug = slugify(req.name);
     if (slug.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid tag name");
+    long tagId = t.id;
     menuTagRepo.findByTenantIdAndSlug(b.tenantId, slug)
-      .filter(existing -> !existing.id.equals(t.id))
+      .filter(existing -> !existing.id.equals(tagId))
       .ifPresent(existing -> {
         throw new ResponseStatusException(HttpStatus.CONFLICT, "Tag already exists");
       });
@@ -3094,6 +3125,7 @@ public class AdminController {
     String weight,
     String tags,
     String photoUrls,
+    String videoUrl,
     Integer kcal,
     Integer proteinG,
     Integer fatG,
@@ -3119,6 +3151,7 @@ public class AdminController {
     String weight,
     String tags,
     String photoUrls,
+    String videoUrl,
     Integer kcal,
     Integer proteinG,
     Integer fatG,
@@ -3131,6 +3164,170 @@ public class AdminController {
 
   public record MenuItemTagsResponse(List<Long> tagIds) {}
   public record MenuItemTagsRequest(List<Long> tagIds) {}
+  public record MenuItemRecommendationDto(long targetItemId, String type, int sortOrder, boolean isActive) {}
+  public record MenuItemRecommendationsRequest(List<MenuItemRecommendationDto> items) {}
+  public record RecommendationTemplateDto(Long id, String name, int sortOrder, boolean isActive) {}
+  public record RecommendationTemplateRequest(@NotBlank String name, int sortOrder, boolean isActive) {}
+  public record RecommendationTemplateItemDto(long menuItemId, int sortOrder, boolean isActive) {}
+  public record RecommendationTemplateItemsRequest(List<RecommendationTemplateItemDto> items) {}
+
+  // --- Combos ---
+  public record ComboDto(long id, long branchId, long menuItemId, boolean isActive) {}
+  public record CreateComboRequest(@NotNull Long menuItemId, Boolean isActive) {}
+  public record UpdateComboRequest(Long menuItemId, Boolean isActive) {}
+  public record ComboItemDto(long id, long menuItemId, int minQty, int maxQty, int sortOrder, boolean isActive) {}
+  public record ComboItemsRequest(@NotNull List<ComboItemDto> items) {}
+
+  @GetMapping("/combos")
+  public List<ComboDto> listCombos(@RequestParam(value = "branchId", required = false) Long branchId, Authentication auth) {
+    StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_VIEW);
+    long bid = resolveBranchId(u, branchId);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
+    return comboRepo.findByBranchId(b.id).stream()
+      .map(c -> new ComboDto(c.id, c.branchId, c.menuItemId, c.isActive))
+      .toList();
+  }
+
+  @PostMapping("/combos")
+  public ComboDto createCombo(
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @Valid @RequestBody CreateComboRequest req,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_MANAGE);
+    long bid = resolveBranchId(u, branchId);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
+    MenuItem mi = itemRepo.findById(req.menuItemId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Menu item not found"));
+    MenuCategory cat = categoryRepo.findById(mi.categoryId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found"));
+    if (!Objects.equals(cat.tenantId, b.tenantId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong tenant");
+    }
+    if (comboRepo.findByBranchIdAndMenuItemId(b.id, mi.id).isPresent()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Combo already exists for menu item");
+    }
+    Combo c = new Combo();
+    c.branchId = b.id;
+    c.tenantId = b.tenantId;
+    c.menuItemId = mi.id;
+    c.isActive = req.isActive == null || req.isActive;
+    c = comboRepo.save(c);
+    auditService.log(u, "CREATE", "Combo", c.id, null);
+    return new ComboDto(c.id, c.branchId, c.menuItemId, c.isActive);
+  }
+
+  @PatchMapping("/combos/{id}")
+  public ComboDto updateCombo(
+    @PathVariable long id,
+    @RequestParam(value = "branchId", required = false) Long branchId,
+    @RequestBody UpdateComboRequest req,
+    Authentication auth
+  ) {
+    StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_MANAGE);
+    long bid = resolveBranchId(u, branchId);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
+    Combo c = comboRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Combo not found"));
+    if (!Objects.equals(c.branchId, b.id)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong branch");
+    }
+    if (req.menuItemId != null && !Objects.equals(req.menuItemId, c.menuItemId)) {
+      MenuItem mi = itemRepo.findById(req.menuItemId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Menu item not found"));
+      MenuCategory cat = categoryRepo.findById(mi.categoryId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found"));
+      if (!Objects.equals(cat.tenantId, b.tenantId)) {
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong tenant");
+      }
+      c.menuItemId = mi.id;
+    }
+    if (req.isActive != null) c.isActive = req.isActive;
+    c = comboRepo.save(c);
+    auditService.log(u, "UPDATE", "Combo", c.id, null);
+    return new ComboDto(c.id, c.branchId, c.menuItemId, c.isActive);
+  }
+
+  @DeleteMapping("/combos/{id}")
+  @Transactional
+  public void deleteCombo(@PathVariable long id, Authentication auth) {
+    StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_MANAGE);
+    Combo c = comboRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Combo not found"));
+    comboItemRepo.deleteByComboId(c.id);
+    comboRepo.delete(c);
+    auditService.log(u, "DELETE", "Combo", c.id, null);
+  }
+
+  @GetMapping("/combos/{id}/items")
+  public List<ComboItemDto> listComboItems(@PathVariable long id, Authentication auth) {
+    StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_VIEW);
+    Combo c = comboRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Combo not found"));
+    Branch b = branchRepo.findById(c.branchId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
+    return comboItemRepo.findByComboIdOrderBySortOrderAscIdAsc(c.id).stream()
+      .map(ci -> new ComboItemDto(ci.id, ci.menuItemId, ci.minQty, ci.maxQty, ci.sortOrder, ci.isActive))
+      .toList();
+  }
+
+  @PutMapping("/combos/{id}/items")
+  @Transactional
+  public void updateComboItems(@PathVariable long id, @Valid @RequestBody ComboItemsRequest req, Authentication auth) {
+    StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_MANAGE);
+    Combo c = comboRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Combo not found"));
+    Branch b = branchRepo.findById(c.branchId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
+    List<ComboItemDto> items = req == null ? List.of() : req.items;
+    if (items == null) items = List.of();
+    List<Long> menuItemIds = items.stream().map(i -> i.menuItemId).distinct().toList();
+    Map<Long, MenuItem> menuItems = new HashMap<>();
+    for (MenuItem mi : itemRepo.findAllById(menuItemIds)) {
+      menuItems.put(mi.id, mi);
+    }
+    for (Long mid : menuItemIds) {
+      MenuItem mi = menuItems.get(mid);
+      if (mi == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown menu item: " + mid);
+      MenuCategory cat = categoryRepo.findById(mi.categoryId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found"));
+      if (!Objects.equals(cat.tenantId, b.tenantId)) {
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong tenant");
+      }
+    }
+    comboItemRepo.deleteByComboId(c.id);
+    List<ComboItem> next = new ArrayList<>();
+    int idx = 0;
+    for (ComboItemDto dto : items) {
+      if (dto.menuItemId <= 0) continue;
+      ComboItem ci = new ComboItem();
+      ci.comboId = c.id;
+      ci.menuItemId = dto.menuItemId;
+      ci.minQty = Math.max(0, dto.minQty);
+      ci.maxQty = Math.max(ci.minQty, dto.maxQty);
+      if (ci.maxQty == 0) ci.maxQty = 1;
+      ci.sortOrder = dto.sortOrder == 0 ? idx : dto.sortOrder;
+      ci.isActive = dto.isActive;
+      next.add(ci);
+      idx++;
+    }
+    if (!next.isEmpty()) comboItemRepo.saveAll(next);
+    auditService.log(u, "UPDATE_ITEMS", "Combo", c.id, "count=" + next.size());
+  }
 
   @GetMapping("/menu/items")
   public List<MenuItemDto> listMenuItems(
@@ -3228,6 +3425,211 @@ public class AdminController {
     auditService.log(u, "UPDATE_TAGS", "MenuItem", it.id, "tagIds=" + tagIds);
   }
 
+  @GetMapping("/menu/items/{id}/recommendations")
+  public List<MenuItemRecommendationDto> getMenuItemRecommendations(@PathVariable long id, Authentication auth) {
+    StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_VIEW);
+    long bid = resolveBranchId(u, null);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    MenuItem it = itemRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Menu item not found"));
+    MenuCategory c = categoryRepo.findById(it.categoryId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found"));
+    requireBranchAccess(u, b.id);
+    if (!Objects.equals(c.tenantId, b.tenantId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong tenant");
+    }
+    List<MenuItemRecommendation> recs = menuItemRecommendationRepo.findBySourceItemIdOrderBySortOrderAscIdAsc(it.id);
+    List<MenuItemRecommendationDto> out = new ArrayList<>();
+    for (MenuItemRecommendation r : recs) {
+      out.add(new MenuItemRecommendationDto(r.targetItemId, r.type, r.sortOrder, r.isActive));
+    }
+    return out;
+  }
+
+  @PutMapping("/menu/items/{id}/recommendations")
+  @Transactional
+  public void updateMenuItemRecommendations(@PathVariable long id, @RequestBody MenuItemRecommendationsRequest req, Authentication auth) {
+    StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_MANAGE);
+    long bid = resolveBranchId(u, null);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    MenuItem it = itemRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Menu item not found"));
+    MenuCategory c = categoryRepo.findById(it.categoryId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found"));
+    requireBranchAccess(u, b.id);
+    if (!Objects.equals(c.tenantId, b.tenantId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong tenant");
+    }
+    List<MenuItemRecommendationDto> items = req == null || req.items == null ? List.of() : req.items;
+    List<Long> targetIds = items.stream().map(x -> x.targetItemId).distinct().toList();
+    if (!targetIds.isEmpty()) {
+      List<MenuItem> targets = itemRepo.findAllById(targetIds);
+      if (targets.size() != targetIds.size()) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown target item");
+      }
+      for (MenuItem t : targets) {
+        MenuCategory tc = categoryRepo.findById(t.categoryId)
+          .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found"));
+        if (!Objects.equals(tc.tenantId, b.tenantId)) {
+          throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong tenant");
+        }
+      }
+    }
+    menuItemRecommendationRepo.deleteBySourceItemId(it.id);
+    List<MenuItemRecommendation> recs = new ArrayList<>();
+    int idx = 0;
+    for (MenuItemRecommendationDto dto : items) {
+      if (dto.targetItemId == it.id) continue;
+      MenuItemRecommendation r = new MenuItemRecommendation();
+      r.tenantId = b.tenantId;
+      r.sourceItemId = it.id;
+      r.targetItemId = dto.targetItemId;
+      r.type = dto.type == null || dto.type.isBlank() ? "WITH" : dto.type.trim().toUpperCase(Locale.ROOT);
+      r.sortOrder = dto.sortOrder;
+      r.isActive = dto.isActive;
+      if (dto.sortOrder == 0) r.sortOrder = idx;
+      recs.add(r);
+      idx++;
+    }
+    if (!recs.isEmpty()) {
+      menuItemRecommendationRepo.saveAll(recs);
+    }
+    auditService.log(u, "UPDATE_RECOMMENDATIONS", "MenuItem", it.id, "count=" + recs.size());
+  }
+
+  @GetMapping("/recommendation-templates")
+  public List<RecommendationTemplateDto> listRecommendationTemplates(Authentication auth) {
+    StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_VIEW);
+    long bid = resolveBranchId(u, null);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
+    List<BranchRecommendationTemplate> templates = branchRecommendationTemplateRepo.findByBranchIdOrderBySortOrderAscIdAsc(b.id);
+    List<RecommendationTemplateDto> out = new ArrayList<>();
+    for (BranchRecommendationTemplate t : templates) {
+      out.add(new RecommendationTemplateDto(t.id, t.name, t.sortOrder, t.isActive));
+    }
+    return out;
+  }
+
+  @PostMapping("/recommendation-templates")
+  public RecommendationTemplateDto createRecommendationTemplate(@Valid @RequestBody RecommendationTemplateRequest req, Authentication auth) {
+    StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_MANAGE);
+    long bid = resolveBranchId(u, null);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
+    BranchRecommendationTemplate t = new BranchRecommendationTemplate();
+    t.branchId = b.id;
+    t.tenantId = b.tenantId;
+    t.name = req.name().trim();
+    t.sortOrder = req.sortOrder();
+    t.isActive = req.isActive();
+    t = branchRecommendationTemplateRepo.save(t);
+    auditService.log(u, "CREATE", "RecommendationTemplate", t.id, "branch=" + b.id);
+    return new RecommendationTemplateDto(t.id, t.name, t.sortOrder, t.isActive);
+  }
+
+  @PutMapping("/recommendation-templates/{id}")
+  public RecommendationTemplateDto updateRecommendationTemplate(@PathVariable long id, @Valid @RequestBody RecommendationTemplateRequest req, Authentication auth) {
+    StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_MANAGE);
+    long bid = resolveBranchId(u, null);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
+    BranchRecommendationTemplate t = branchRecommendationTemplateRepo.findByIdAndBranchId(id, b.id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Template not found"));
+    t.name = req.name().trim();
+    t.sortOrder = req.sortOrder();
+    t.isActive = req.isActive();
+    t = branchRecommendationTemplateRepo.save(t);
+    auditService.log(u, "UPDATE", "RecommendationTemplate", t.id, "branch=" + b.id);
+    return new RecommendationTemplateDto(t.id, t.name, t.sortOrder, t.isActive);
+  }
+
+  @DeleteMapping("/recommendation-templates/{id}")
+  public void deleteRecommendationTemplate(@PathVariable long id, Authentication auth) {
+    StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_MANAGE);
+    long bid = resolveBranchId(u, null);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
+    BranchRecommendationTemplate t = branchRecommendationTemplateRepo.findByIdAndBranchId(id, b.id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Template not found"));
+    branchRecommendationTemplateRepo.deleteById(t.id);
+    auditService.log(u, "DELETE", "RecommendationTemplate", t.id, "branch=" + b.id);
+  }
+
+  @GetMapping("/recommendation-templates/{id}/items")
+  public List<RecommendationTemplateItemDto> listRecommendationTemplateItems(@PathVariable long id, Authentication auth) {
+    StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_VIEW);
+    long bid = resolveBranchId(u, null);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
+    BranchRecommendationTemplate t = branchRecommendationTemplateRepo.findByIdAndBranchId(id, b.id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Template not found"));
+    List<BranchRecommendationTemplateItem> items = branchRecommendationTemplateItemRepo.findByTemplateIdOrderBySortOrderAscIdAsc(t.id);
+    List<RecommendationTemplateItemDto> out = new ArrayList<>();
+    for (BranchRecommendationTemplateItem it : items) {
+      out.add(new RecommendationTemplateItemDto(it.menuItemId, it.sortOrder, it.isActive));
+    }
+    return out;
+  }
+
+  @PutMapping("/recommendation-templates/{id}/items")
+  @Transactional
+  public void updateRecommendationTemplateItems(@PathVariable long id, @RequestBody RecommendationTemplateItemsRequest req, Authentication auth) {
+    StaffUser u = requireAdmin(auth);
+    authzService.require(u, Permission.MENU_MANAGE);
+    long bid = resolveBranchId(u, null);
+    Branch b = branchRepo.findById(bid)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    requireBranchAccess(u, b.id);
+    BranchRecommendationTemplate t = branchRecommendationTemplateRepo.findByIdAndBranchId(id, b.id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Template not found"));
+    List<RecommendationTemplateItemDto> items = req == null || req.items == null ? List.of() : req.items;
+    List<Long> menuItemIds = items.stream().map(x -> x.menuItemId).distinct().toList();
+    if (!menuItemIds.isEmpty()) {
+      List<MenuItem> menuItems = itemRepo.findAllById(menuItemIds);
+      if (menuItems.size() != menuItemIds.size()) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown menu item");
+      }
+      for (MenuItem mi : menuItems) {
+        MenuCategory c = categoryRepo.findById(mi.categoryId)
+          .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found"));
+        if (!Objects.equals(c.tenantId, b.tenantId)) {
+          throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Wrong tenant");
+        }
+      }
+    }
+    branchRecommendationTemplateItemRepo.deleteByTemplateId(t.id);
+    List<BranchRecommendationTemplateItem> out = new ArrayList<>();
+    int idx = 0;
+    for (RecommendationTemplateItemDto dto : items) {
+      BranchRecommendationTemplateItem it = new BranchRecommendationTemplateItem();
+      it.templateId = t.id;
+      it.menuItemId = dto.menuItemId();
+      it.sortOrder = dto.sortOrder() != 0 ? dto.sortOrder() : idx;
+      it.isActive = dto.isActive();
+      out.add(it);
+      idx++;
+    }
+    if (!out.isEmpty()) {
+      branchRecommendationTemplateItemRepo.saveAll(out);
+    }
+    auditService.log(u, "UPDATE_ITEMS", "RecommendationTemplate", t.id, "items=" + out.size());
+  }
+
   @PostMapping("/menu/items")
   public MenuItemDto createMenuItem(
     @RequestParam(value = "branchId", required = false) Long branchId,
@@ -3260,6 +3662,7 @@ public class AdminController {
     it.weight = req.weight;
     it.tags = req.tags;
     it.photoUrls = sanitizePhotoUrls(req.photoUrls);
+    it.videoUrl = sanitizeVideoUrl(req.videoUrl);
     it.kcal = req.kcal;
     it.proteinG = req.proteinG;
     it.fatG = req.fatG;
@@ -3302,6 +3705,7 @@ public class AdminController {
     String weight,
     String tags,
     String photoUrls,
+    String videoUrl,
     Integer kcal,
     Integer proteinG,
     Integer fatG,
@@ -3413,6 +3817,7 @@ public class AdminController {
     if (req.weight != null) it.weight = req.weight;
     if (req.tags != null) it.tags = req.tags;
     if (req.photoUrls != null) it.photoUrls = sanitizePhotoUrls(req.photoUrls);
+    if (req.videoUrl != null) it.videoUrl = sanitizeVideoUrl(req.videoUrl);
     if (req.kcal != null) it.kcal = req.kcal;
     if (req.proteinG != null) it.proteinG = req.proteinG;
     if (req.fatG != null) it.fatG = req.fatG;
@@ -3478,6 +3883,7 @@ public class AdminController {
       it.weight,
       it.tags,
       it.photoUrls,
+      it.videoUrl,
       it.kcal,
       it.proteinG,
       it.fatG,
@@ -5395,6 +5801,16 @@ public class AdminController {
     return out;
   }
 
+  private static Set<String> parseHosts(String raw) {
+    if (raw == null) return Set.of();
+    Set<String> out = new HashSet<>();
+    for (String p : raw.split(",")) {
+      String t = p.trim().toLowerCase(Locale.ROOT);
+      if (!t.isEmpty()) out.add(t);
+    }
+    return out;
+  }
+
   private String sanitizePhotoUrl(String raw) {
     String url = trimOrNull(raw);
     if (url == null) return null;
@@ -5462,6 +5878,39 @@ public class AdminController {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Too many photo URLs");
     }
     return String.join(",", cleaned);
+  }
+
+  private String sanitizeVideoUrl(String raw) {
+    String url = trimOrNull(raw);
+    if (url == null) return null;
+    String lower = url.toLowerCase(Locale.ROOT);
+    if (!(lower.startsWith("http://") || lower.startsWith("https://"))) {
+      logReject("Video URL must be absolute http(s)", url);
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Video URL must be absolute");
+    }
+    if (!allowedVideoHosts.isEmpty()) {
+      try {
+        java.net.URI uri = java.net.URI.create(url);
+        String host = uri.getHost();
+        if (host == null || !isHostAllowed(host)) {
+          logReject("Video URL host not allowed", url);
+          throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Video URL host not allowed");
+        }
+      } catch (IllegalArgumentException e) {
+        logReject("Video URL is invalid", url);
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Video URL is invalid");
+      }
+    }
+    return url;
+  }
+
+  private boolean isHostAllowed(String host) {
+    String h = host.toLowerCase(Locale.ROOT);
+    if (allowedVideoHosts.contains(h)) return true;
+    for (String allowed : allowedVideoHosts) {
+      if (h.endsWith("." + allowed)) return true;
+    }
+    return false;
   }
 
   private void logReject(String reason, String url) {

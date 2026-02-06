@@ -73,4 +73,39 @@ public class InventoryService {
       inventoryRepo.saveAll(toSave);
     }
   }
+
+  public Map<Long, Boolean> resolveLowStockForMenuItems(long branchId, List<Long> menuItemIds) {
+    Map<Long, Boolean> out = new HashMap<>();
+    if (menuItemIds == null || menuItemIds.isEmpty()) return out;
+    BranchSettingsService.Resolved settings = settingsService.resolveForBranch(branchId);
+    if (!settings.inventoryEnabled()) return out;
+    List<MenuItemIngredient> ingredients = ingredientRepo.findByMenuItemIdIn(menuItemIds);
+    if (ingredients.isEmpty()) return out;
+    Map<Long, List<MenuItemIngredient>> byMenu = new HashMap<>();
+    for (MenuItemIngredient ing : ingredients) {
+      byMenu.computeIfAbsent(ing.menuItemId, k -> new ArrayList<>()).add(ing);
+    }
+    List<Long> invIds = ingredients.stream().map(i -> i.inventoryItemId).distinct().toList();
+    Map<Long, InventoryItem> invById = inventoryRepo.findAllById(invIds).stream()
+      .filter(inv -> inv.branchId == branchId)
+      .collect(java.util.stream.Collectors.toMap(inv -> inv.id, inv -> inv, (a, b) -> a));
+    for (Long menuItemId : menuItemIds) {
+      boolean low = false;
+      List<MenuItemIngredient> list = byMenu.get(menuItemId);
+      if (list != null) {
+        for (MenuItemIngredient ing : list) {
+          InventoryItem inv = invById.get(ing.inventoryItemId);
+          if (inv == null || !inv.isActive) continue;
+          double minQty = inv.minQty == null ? 0.0 : inv.minQty;
+          double qty = inv.qtyOnHand == null ? 0.0 : inv.qtyOnHand;
+          if (minQty > 0 && qty <= minQty) {
+            low = true;
+            break;
+          }
+        }
+      }
+      if (low) out.put(menuItemId, true);
+    }
+    return out;
+  }
 }
