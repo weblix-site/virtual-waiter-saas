@@ -281,6 +281,7 @@ export default function TablePage({ params, searchParams }: any) {
   const [guestProfileError, setGuestProfileError] = useState<string | null>(null);
   const [guestVisits, setGuestVisits] = useState<{ orderId: number; status: string; createdAt: string; tableNumber: number; branchId: number }[]>([]);
   const [guestVisitsLoading, setGuestVisitsLoading] = useState(false);
+  const [hideTypeItemsFromCategories, setHideTypeItemsFromCategories] = useState(true);
 
   const normalizeToken = useCallback((value: string) => value.trim().toLowerCase(), []);
   const splitAllergens = useCallback((value?: string | null) => {
@@ -462,17 +463,20 @@ export default function TablePage({ params, searchParams }: any) {
       {it.ingredients && <div style={{ fontSize: 12, color: "#666" }}>{it.ingredients}</div>}
       {it.allergens && <div style={{ fontSize: 12, color: "#b11e46" }}>{it.allergens}</div>}
       <div style={{ marginTop: 10, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-        {cart.find((c) => c.item.id === it.id) ? (
+        {(() => {
+          const existingLine = cart.find((c) => c.item.id === it.id && !c.isCombo);
+          return existingLine ? (
           <>
-            <button onClick={() => dec(it.id)}>-</button>
-            <span>{cart.find((c) => c.item.id === it.id)?.qty ?? 0}</span>
+            <button onClick={() => dec(existingLine.lineId)}>-</button>
+            <span>{existingLine.qty ?? 0}</span>
             <button onClick={() => addToCart(it)} disabled={it.isStopList}>+</button>
           </>
-        ) : (
+          ) : (
           <button onClick={() => addToCart(it)} style={{ padding: "8px 12px" }} disabled={it.isStopList}>
             {t(lang, "addToCart")}
           </button>
-        )}
+          );
+        })()}
         <button onClick={() => toggleModifiers(it.id)} style={{ padding: "6px 10px" }}>
           {t(lang, "modifiers")}
         </button>
@@ -545,7 +549,6 @@ export default function TablePage({ params, searchParams }: any) {
   const [guestAllergens, setGuestAllergens] = useState("");
   const [revealedOffers, setRevealedOffers] = useState<Record<number, boolean>>({});
   const [offersFilter, setOffersFilter] = useState<"ALL" | "ACTIVE" | "EXPIRING">("ALL");
-  const [hideTypeItemsFromCategories, setHideTypeItemsFromCategories] = useState(true);
 
   const menuItemById = useMemo(() => {
     const map = new Map<number, MenuItem>();
@@ -1088,13 +1091,14 @@ export default function TablePage({ params, searchParams }: any) {
   }, [tablePublicId, requestLocale, sig, ts, hasUrlLang, lang, rawLang, refreshBillOptions, searchParams, sessionHeaders]);
 
   useEffect(() => {
-    if (!menu?.branchId) return;
+    const branchId = menu?.branchId;
+    if (!branchId) return;
     let cancelled = false;
     async function loadCombos() {
       setComboLoading(true);
       setComboError(null);
       try {
-        const res = await fetch(`${API_BASE}/api/public/menu/combos?branchId=${menu.branchId}&lang=${lang}`);
+        const res = await fetch(`${API_BASE}/api/public/menu/combos?branchId=${branchId}&lang=${lang}`);
         if (!res.ok) throw new Error(await readApiError(res, t(lang, "menuLoadFailed")));
         const body: Combo[] = await res.json();
         if (!cancelled) setCombos(body ?? []);
@@ -1111,13 +1115,14 @@ export default function TablePage({ params, searchParams }: any) {
   }, [lang, menu?.branchId]);
 
   useEffect(() => {
-    if (!menu?.branchId) return;
+    const branchId = menu?.branchId;
+    if (!branchId) return;
     let cancelled = false;
     async function loadBranchRecs() {
       setBranchRecLoading(true);
       setBranchRecError(null);
       try {
-        const res = await fetch(`${API_BASE}/api/public/recommendation-templates?branchId=${menu.branchId}&lang=${lang}`);
+        const res = await fetch(`${API_BASE}/api/public/recommendation-templates?branchId=${branchId}&lang=${lang}`);
         if (!res.ok) throw new Error(await readApiError(res, t(lang, "menuLoadFailed")));
         const body: RecommendationTemplate[] = await res.json();
         if (!cancelled) setBranchRecTemplates(body ?? []);
@@ -1134,8 +1139,11 @@ export default function TablePage({ params, searchParams }: any) {
   }, [lang, menu?.branchId]);
 
   useEffect(() => {
-    if (!menu?.branchId || !session?.guestSessionId) return;
-    if (!session.isVerified) {
+    const branchId = menu?.branchId;
+    const currentSession = session;
+    const guestSessionId = currentSession?.guestSessionId;
+    if (!branchId || !guestSessionId) return;
+    if (!currentSession?.isVerified) {
       setPersonalRecs([]);
       setPersonalRecsError(null);
       setPersonalRecsLoading(false);
@@ -1146,7 +1154,7 @@ export default function TablePage({ params, searchParams }: any) {
       setPersonalRecsLoading(true);
       setPersonalRecsError(null);
       try {
-        const res = await fetch(`${API_BASE}/api/public/recommendations/personal?guestSessionId=${session.guestSessionId}&branchId=${menu.branchId}&lang=${lang}`, {
+        const res = await fetch(`${API_BASE}/api/public/recommendations/personal?guestSessionId=${guestSessionId}&branchId=${branchId}&lang=${lang}`, {
           headers: { ...sessionHeaders() },
         });
         if (!res.ok) throw new Error(await readApiError(res, t(lang, "menuLoadFailed")));
@@ -1162,7 +1170,7 @@ export default function TablePage({ params, searchParams }: any) {
     return () => {
       cancelled = true;
     };
-  }, [lang, menu?.branchId, session?.guestSessionId, session?.isVerified, sessionHeaders]);
+  }, [lang, menu?.branchId, session, sessionHeaders]);
 
   useEffect(() => {
     setWaiterPhotoFailed(false);

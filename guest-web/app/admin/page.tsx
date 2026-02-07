@@ -6411,7 +6411,7 @@ export default function AdminPage() {
                 <option value="">{t(lang, "branchRecsAddItem")}</option>
                 {items.map((it) => (
                   <option key={`branch-rec-item-${it.id}`} value={it.id}>
-                    {it.name} {it.isActive ? "" : `(${t(lang, "inactive")})`}
+                    {it.nameRu} {it.isActive ? "" : `(${t(lang, "inactive")})`}
                   </option>
                 ))}
               </select>
@@ -6438,7 +6438,7 @@ export default function AdminPage() {
                 const item = menuItemMap.get(it.menuItemId);
                 return (
                   <div key={`branch-rec-row-${it.menuItemId}`} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", borderBottom: "1px dashed #eee", paddingBottom: 6 }}>
-                    <strong style={{ minWidth: 160 }}>{item?.name ?? `#${it.menuItemId}`}</strong>
+                    <strong style={{ minWidth: 160 }}>{item?.nameRu ?? `#${it.menuItemId}`}</strong>
                     <input
                       type="number"
                       value={it.sortOrder ?? 0}

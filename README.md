@@ -68,6 +68,11 @@ source ~/.bashrc || true
 flutter --version
 ```
 Если `flutter` всё ещё не найден — перезапустите терминал/сессию.
+Если Flutter уже установлен, просто добавьте путь в PATH (пример):
+```bash
+echo 'export PATH=/home/codespace/flutter/bin:$PATH' >> ~/.profile
+echo 'export PATH=/home/codespace/flutter/bin:$PATH' >> ~/.bashrc
+```
 
 ---
 

@@ -69,6 +69,11 @@ source /etc/profile.d/flutter.sh
 flutter --version
 ```
 Если `flutter` не найден — перезапустите терминал/сессию.
+Если Flutter установлен в другом месте — добавьте его в PATH (пример):
+```bash
+echo 'export PATH=/home/codespace/flutter/bin:$PATH' >> ~/.profile
+echo 'export PATH=/home/codespace/flutter/bin:$PATH' >> ~/.bashrc
+```
 
 ---
 

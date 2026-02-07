@@ -56,11 +56,17 @@
 > Можно установить позже, если пока нужен только web.
 
 1. Скачайте Flutter SDK: https://docs.flutter.dev/get-started/install/windows
-2. Распакуйте, добавьте в PATH.
+2. Распакуйте, добавьте в PATH (на постоянной основе).
 3. Проверьте:
    ```
    flutter --version
    ```
+
+Пример (PowerShell, замените путь на ваш):
+```
+setx PATH "$env:PATH;C:\flutter\bin"
+```
+После `setx` перезапустите PowerShell/терминал.
 
 ---
 
