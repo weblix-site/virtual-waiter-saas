@@ -69,6 +69,19 @@ const dict: Record<string, Record<Lang, string>> = {
   permGuestFlagsManage: { ru: "Флаги гостей", ro: "Flaguri oaspeți", en: "Guest flags manage" },
   permMediaManage: { ru: "Медиа", ro: "Media", en: "Media manage" },
   permHallPlanManage: { ru: "Планы зала", ro: "Plan sală", en: "Hall plan manage" },
+  permFeatureFlagsManage: { ru: "Feature flags", ro: "Feature flags", en: "Feature flags" },
+  featureFlagsTitle: { ru: "Feature flags", ro: "Feature flags", en: "Feature flags" },
+  featureFlagsHelp: { ru: "Включение фич по тенантам/филиалам", ro: "Activare funcții pe tenant/filială", en: "Enable features per tenant/branch" },
+  featureFlagCode: { ru: "Код", ro: "Cod", en: "Code" },
+  featureFlagName: { ru: "Название", ro: "Nume", en: "Name" },
+  featureFlagDescription: { ru: "Описание", ro: "Descriere", en: "Description" },
+  featureFlagDefault: { ru: "По умолчанию", ro: "Implicit", en: "Default" },
+  featureFlagCreate: { ru: "Создать флаг", ro: "Creează flag", en: "Create flag" },
+  featureFlagTenantOverrides: { ru: "Переопределения по тенанту", ro: "Override pe tenant", en: "Tenant overrides" },
+  featureFlagBranchOverrides: { ru: "Переопределения по филиалу", ro: "Override pe filială", en: "Branch overrides" },
+  featureFlagEffective: { ru: "Эффективно", ro: "Efectiv", en: "Effective" },
+  featureFlagSource: { ru: "Источник", ro: "Sursă", en: "Source" },
+  featureFlagUseDefault: { ru: "Сбросить в default", ro: "Resetează la default", en: "Reset to default" },
   deviceSessions: { ru: "Сессии устройств", ro: "Sesiuni dispozitive", en: "Device sessions" },
   totpTitle: { ru: "Двухфакторная защита", ro: "Autentificare cu doi factori", en: "Two‑factor auth" },
   totpStatusEnabled: { ru: "Включено", ro: "Activat", en: "Enabled" },
@@ -105,6 +118,7 @@ const dict: Record<string, Record<Lang, string>> = {
   profileEmpty: { ru: "Пустой", ro: "Gol", en: "Empty" },
   active: { ru: "Активен", ro: "Activ", en: "Active" },
   inactive: { ru: "Неактивен", ro: "Inactiv", en: "Inactive" },
+  readOnly: { ru: "Только чтение", ro: "Doar citire", en: "Read-only" },
   allStatuses: { ru: "Все статусы", ro: "Toate statusurile", en: "All statuses" },
   selectTenant: { ru: "Выберите тeнанта", ro: "Selectați tenantul", en: "Select tenant" },
   selectRestaurant: { ru: "Выберите ресторан", ro: "Selectați restaurantul", en: "Select restaurant" },
@@ -330,6 +344,7 @@ type Tenant = {
   phone?: string | null;
   contactPerson?: string | null;
   isActive: boolean;
+  readOnly: boolean;
 };
 type Restaurant = {
   id: number;
@@ -341,6 +356,7 @@ type Restaurant = {
   phone?: string | null;
   contactPerson?: string | null;
   isActive: boolean;
+  readOnly: boolean;
 };
 type Branch = {
   id: number;
@@ -353,6 +369,25 @@ type Branch = {
   phone?: string | null;
   contactPerson?: string | null;
   isActive: boolean;
+};
+type FeatureFlag = {
+  id: number;
+  code: string;
+  name: string;
+  description?: string | null;
+  defaultEnabled: boolean;
+  createdAt?: string | null;
+};
+type FeatureFlagScope = {
+  flagId: number;
+  code: string;
+  name: string;
+  description?: string | null;
+  defaultEnabled: boolean;
+  tenantEnabled?: boolean | null;
+  branchEnabled?: boolean | null;
+  effectiveEnabled: boolean;
+  source: string;
 };
 type BranchSettings = {
   branchId: number;
@@ -644,6 +679,7 @@ export default function SuperAdminPage() {
     GUEST_FLAGS_MANAGE: "permGuestFlagsManage",
     MEDIA_MANAGE: "permMediaManage",
     HALL_PLAN_MANAGE: "permHallPlanManage",
+    FEATURE_FLAGS_MANAGE: "permFeatureFlagsManage",
   };
 
   const permissionOrder = useMemo(() => ([
@@ -662,6 +698,7 @@ export default function SuperAdminPage() {
     "GUEST_FLAGS_MANAGE",
     "MEDIA_MANAGE",
     "HALL_PLAN_MANAGE",
+    "FEATURE_FLAGS_MANAGE",
   ]), []);
 
   const roleDefaultPermissions = useMemo<Record<string, string[]>>(() => ({
@@ -783,6 +820,17 @@ export default function SuperAdminPage() {
   const [deviceError, setDeviceError] = useState<string | null>(null);
   const [tenantId, setTenantId] = useState<number | "">("");
   const [branchId, setBranchId] = useState<number | "">("");
+  const [featureTenantId, setFeatureTenantId] = useState<number | "">("");
+  const [featureBranchId, setFeatureBranchId] = useState<number | "">("");
+  const [featureFlags, setFeatureFlags] = useState<FeatureFlag[]>([]);
+  const [featureFlagsLoading, setFeatureFlagsLoading] = useState(false);
+  const [featureFlagsError, setFeatureFlagsError] = useState<string | null>(null);
+  const [tenantFeatureFlags, setTenantFeatureFlags] = useState<FeatureFlagScope[]>([]);
+  const [branchFeatureFlags, setBranchFeatureFlags] = useState<FeatureFlagScope[]>([]);
+  const [newFeatureCode, setNewFeatureCode] = useState("");
+  const [newFeatureName, setNewFeatureName] = useState("");
+  const [newFeatureDesc, setNewFeatureDesc] = useState("");
+  const [newFeatureDefault, setNewFeatureDefault] = useState(false);
   const [branchSettings, setBranchSettings] = useState<BranchSettings | null>(null);
   const [tenantStatusFilter, setTenantStatusFilter] = useState<"" | "ACTIVE" | "INACTIVE">("");
   const [branchStatusFilter, setBranchStatusFilter] = useState<"" | "ACTIVE" | "INACTIVE">("");
@@ -920,6 +968,7 @@ export default function SuperAdminPage() {
   const [editRestaurantAddress, setEditRestaurantAddress] = useState("");
   const [editRestaurantPhone, setEditRestaurantPhone] = useState("");
   const [editRestaurantContactPerson, setEditRestaurantContactPerson] = useState("");
+  const [editRestaurantReadOnly, setEditRestaurantReadOnly] = useState(false);
   const [editRestaurantLogoUploading, setEditRestaurantLogoUploading] = useState(false);
 
   const [editingBranchId, setEditingBranchId] = useState<number | null>(null);
@@ -929,6 +978,7 @@ export default function SuperAdminPage() {
   const [editBranchAddress, setEditBranchAddress] = useState("");
   const [editBranchPhone, setEditBranchPhone] = useState("");
   const [editBranchContactPerson, setEditBranchContactPerson] = useState("");
+  const [editBranchReadOnly, setEditBranchReadOnly] = useState(false);
   const [editBranchLogoUploading, setEditBranchLogoUploading] = useState(false);
   const [editBranchRestaurantId, setEditBranchRestaurantId] = useState<number | "">("");
   const [newStaffUser, setNewStaffUser] = useState("");
@@ -1360,11 +1410,63 @@ export default function SuperAdminPage() {
     }
   }, [authReady, api]);
 
+  const loadFeatureFlags = useCallback(async () => {
+    if (!authReady) return;
+    setFeatureFlagsLoading(true);
+    setFeatureFlagsError(null);
+    try {
+      const res = await api("/api/super/feature-flags");
+      if (!res.ok) throw new Error(await res.text());
+      setFeatureFlags(await res.json());
+    } catch (e: any) {
+      setFeatureFlagsError(e?.message ?? t(lang, "loadError"));
+    } finally {
+      setFeatureFlagsLoading(false);
+    }
+  }, [authReady, api, lang]);
+
+  const loadTenantFeatureFlags = useCallback(async (id: number | "") => {
+    if (!authReady || !id) {
+      setTenantFeatureFlags([]);
+      return;
+    }
+    try {
+      const res = await api(`/api/super/tenants/${id}/feature-flags`);
+      if (!res.ok) throw new Error(await res.text());
+      setTenantFeatureFlags(await res.json());
+    } catch (_) {
+      setTenantFeatureFlags([]);
+    }
+  }, [authReady, api]);
+
+  const loadBranchFeatureFlags = useCallback(async (id: number | "") => {
+    if (!authReady || !id) {
+      setBranchFeatureFlags([]);
+      return;
+    }
+    try {
+      const res = await api(`/api/super/branches/${id}/feature-flags`);
+      if (!res.ok) throw new Error(await res.text());
+      setBranchFeatureFlags(await res.json());
+    } catch (_) {
+      setBranchFeatureFlags([]);
+    }
+  }, [authReady, api]);
+
   useEffect(() => {
     loadTenants();
     loadCurrencies();
+    loadFeatureFlags();
     loadTotpStatus();
-  }, [loadTenants, loadCurrencies, loadTotpStatus]);
+  }, [loadTenants, loadCurrencies, loadFeatureFlags, loadTotpStatus]);
+
+  useEffect(() => {
+    loadTenantFeatureFlags(featureTenantId);
+  }, [featureTenantId, loadTenantFeatureFlags]);
+
+  useEffect(() => {
+    loadBranchFeatureFlags(featureBranchId);
+  }, [featureBranchId, loadBranchFeatureFlags]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1443,6 +1545,58 @@ export default function SuperAdminPage() {
       }),
     });
     loadBranchSettings();
+  }
+
+  async function createFeatureFlag() {
+    if (!newFeatureCode.trim() || !newFeatureName.trim()) return;
+    await api("/api/super/feature-flags", {
+      method: "POST",
+      body: JSON.stringify({
+        code: newFeatureCode.trim(),
+        name: newFeatureName.trim(),
+        description: newFeatureDesc.trim() || null,
+        defaultEnabled: newFeatureDefault,
+      }),
+    });
+    setNewFeatureCode("");
+    setNewFeatureName("");
+    setNewFeatureDesc("");
+    setNewFeatureDefault(false);
+    loadFeatureFlags();
+    loadTenantFeatureFlags(featureTenantId);
+    loadBranchFeatureFlags(featureBranchId);
+  }
+
+  async function setTenantFeatureFlag(flagId: number, enabled: boolean) {
+    if (!featureTenantId) return;
+    await api(`/api/super/tenants/${featureTenantId}/feature-flags/${flagId}`, {
+      method: "PUT",
+      body: JSON.stringify({ enabled }),
+    });
+    loadTenantFeatureFlags(featureTenantId);
+    loadBranchFeatureFlags(featureBranchId);
+  }
+
+  async function clearTenantFeatureFlag(flagId: number) {
+    if (!featureTenantId) return;
+    await api(`/api/super/tenants/${featureTenantId}/feature-flags/${flagId}`, { method: "DELETE" });
+    loadTenantFeatureFlags(featureTenantId);
+    loadBranchFeatureFlags(featureBranchId);
+  }
+
+  async function setBranchFeatureFlag(flagId: number, enabled: boolean) {
+    if (!featureBranchId) return;
+    await api(`/api/super/branches/${featureBranchId}/feature-flags/${flagId}`, {
+      method: "PUT",
+      body: JSON.stringify({ enabled }),
+    });
+    loadBranchFeatureFlags(featureBranchId);
+  }
+
+  async function clearBranchFeatureFlag(flagId: number) {
+    if (!featureBranchId) return;
+    await api(`/api/super/branches/${featureBranchId}/feature-flags/${flagId}`, { method: "DELETE" });
+    loadBranchFeatureFlags(featureBranchId);
   }
 
   function missingOnlinePayFields() {
@@ -2149,6 +2303,7 @@ export default function SuperAdminPage() {
         address: editRestaurantAddress || null,
         phone: editRestaurantPhone || null,
         contactPerson: editRestaurantContactPerson || null,
+        readOnly: editRestaurantReadOnly,
       }),
     });
     setEditingRestaurantId(null);
@@ -2203,6 +2358,7 @@ export default function SuperAdminPage() {
         address: editBranchAddress || null,
         phone: editBranchPhone || null,
         contactPerson: editBranchContactPerson || null,
+        readOnly: editBranchReadOnly,
       }),
     });
     setEditingBranchId(null);
@@ -2608,6 +2764,7 @@ export default function SuperAdminPage() {
               <strong>{r.name}</strong>
               <span>{t(lang, "tenant")} #{r.tenantId}</span>
               <span>{r.isActive ? t(lang, "active") : t(lang, "inactive")}</span>
+              {r.readOnly && <span>{t(lang, "readOnly")}</span>}
               {r.country && <span>{t(lang, "country")}: {r.country}</span>}
               {r.phone && <span>{t(lang, "phone")}: {r.phone}</span>}
               <button onClick={() => toggleRestaurant(r)}>{r.isActive ? t(lang, "disable") : t(lang, "enable")}</button>
@@ -2619,6 +2776,7 @@ export default function SuperAdminPage() {
                 setEditRestaurantAddress(r.address ?? "");
                 setEditRestaurantPhone(r.phone ?? "");
                 setEditRestaurantContactPerson(r.contactPerson ?? "");
+                setEditRestaurantReadOnly(!!r.readOnly);
               }}>{t(lang, "editEntity")}</button>
               <button onClick={() => deleteRestaurant(r.id)}>{t(lang, "delete")}</button>
             </div>
@@ -2654,6 +2812,14 @@ export default function SuperAdminPage() {
               <input placeholder={t(lang, "address")} value={editRestaurantAddress} onChange={(e) => setEditRestaurantAddress(e.target.value)} />
               <input placeholder={t(lang, "phone")} value={editRestaurantPhone} onChange={(e) => setEditRestaurantPhone(e.target.value)} />
               <input placeholder={t(lang, "contactPerson")} value={editRestaurantContactPerson} onChange={(e) => setEditRestaurantContactPerson(e.target.value)} />
+              <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <input
+                  type="checkbox"
+                  checked={editRestaurantReadOnly}
+                  onChange={(e) => setEditRestaurantReadOnly(e.target.checked)}
+                />
+                {t(lang, "readOnly")}
+              </label>
               <button onClick={() => updateRestaurant(editingRestaurantId)}>{t(lang, "saveEntity")}</button>
               <button onClick={() => setEditingRestaurantId(null)}>{t(lang, "cancelEdit")}</button>
               {editRestaurantLogoUploading && <span style={{ fontSize: 12 }}>{t(lang, "uploading")}</span>}
@@ -2713,6 +2879,7 @@ export default function SuperAdminPage() {
               <span>{t(lang, "tenant")} #{b.tenantId}</span>
               <span>{t(lang, "restaurant")}: {restaurantLabel(b.restaurantId)}</span>
               <span>{b.isActive ? t(lang, "active") : t(lang, "inactive")}</span>
+              {b.readOnly && <span>{t(lang, "readOnly")}</span>}
               {b.country && <span>{translate(lang, "country")}: {b.country}</span>}
               {b.phone && <span>{translate(lang, "phone")}: {b.phone}</span>}
               <button onClick={() => toggleBranch(b)}>{b.isActive ? t(lang, "disable") : t(lang, "enable")}</button>
@@ -2725,6 +2892,7 @@ export default function SuperAdminPage() {
                 setEditBranchPhone(b.phone ?? "");
                 setEditBranchContactPerson(b.contactPerson ?? "");
                 setEditBranchRestaurantId(b.restaurantId ?? "");
+                setEditBranchReadOnly(!!b.readOnly);
               }}>{t(lang, "editEntity")}</button>
               <button onClick={() => deleteBranch(b.id)}>{t(lang, "delete")}</button>
             </div>
@@ -2766,6 +2934,14 @@ export default function SuperAdminPage() {
               <input placeholder={t(lang, "address")} value={editBranchAddress} onChange={(e) => setEditBranchAddress(e.target.value)} />
               <input placeholder={t(lang, "phone")} value={editBranchPhone} onChange={(e) => setEditBranchPhone(e.target.value)} />
               <input placeholder={t(lang, "contactPerson")} value={editBranchContactPerson} onChange={(e) => setEditBranchContactPerson(e.target.value)} />
+              <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <input
+                  type="checkbox"
+                  checked={editBranchReadOnly}
+                  onChange={(e) => setEditBranchReadOnly(e.target.checked)}
+                />
+                {t(lang, "readOnly")}
+              </label>
               <button onClick={() => updateBranch(editingBranchId)}>{t(lang, "saveEntity")}</button>
               <button onClick={() => setEditingBranchId(null)}>{t(lang, "cancelEdit")}</button>
               {editBranchLogoUploading && <span style={{ fontSize: 12 }}>{t(lang, "uploading")}</span>}
@@ -3887,6 +4063,149 @@ export default function SuperAdminPage() {
                 {t(lang, "addZone")}
               </button>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section style={{ marginTop: 24 }}>
+        <h2>{t(lang, "featureFlagsTitle")}</h2>
+        <div style={{ fontSize: 12, color: "#6b7280" }}>{t(lang, "featureFlagsHelp")}</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
+          <input placeholder={t(lang, "featureFlagCode")} value={newFeatureCode} onChange={(e) => setNewFeatureCode(e.target.value)} />
+          <input placeholder={t(lang, "featureFlagName")} value={newFeatureName} onChange={(e) => setNewFeatureName(e.target.value)} />
+          <input placeholder={t(lang, "featureFlagDescription")} value={newFeatureDesc} onChange={(e) => setNewFeatureDesc(e.target.value)} />
+          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <input type="checkbox" checked={newFeatureDefault} onChange={(e) => setNewFeatureDefault(e.target.checked)} />
+            {t(lang, "featureFlagDefault")}
+          </label>
+          <button onClick={createFeatureFlag} disabled={!newFeatureCode.trim() || !newFeatureName.trim()}>
+            {t(lang, "featureFlagCreate")}
+          </button>
+          <button onClick={loadFeatureFlags} disabled={featureFlagsLoading}>
+            {featureFlagsLoading ? t(lang, "loading") : t(lang, "refresh")}
+          </button>
+        </div>
+        {featureFlagsError && <div style={{ color: "#b11e46", marginTop: 6 }}>{featureFlagsError}</div>}
+        <div style={{ marginTop: 10 }}>
+          {featureFlags.length === 0 ? (
+            <div style={{ color: "#666" }}>{t(lang, "noData")}</div>
+          ) : (
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "featureFlagCode")}</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "featureFlagName")}</th>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "featureFlagDescription")}</th>
+                  <th style={{ textAlign: "center", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "featureFlagDefault")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {featureFlags.map((f) => (
+                  <tr key={f.id}>
+                    <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{f.code}</td>
+                    <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{f.name}</td>
+                    <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{f.description ?? "—"}</td>
+                    <td style={{ padding: "6px 4px", textAlign: "center", borderBottom: "1px solid #f0f0f0" }}>
+                      {f.defaultEnabled ? t(lang, "enable") : t(lang, "disable")}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        <div style={{ marginTop: 16, display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))" }}>
+          <div style={{ border: "1px solid #eee", borderRadius: 10, padding: 10 }}>
+            <h3 style={{ marginTop: 0 }}>{t(lang, "featureFlagTenantOverrides")}</h3>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <select value={featureTenantId} onChange={(e) => setFeatureTenantId(e.target.value ? Number(e.target.value) : "")}>
+                <option value="">{t(lang, "selectTenant")}</option>
+                {tenants.map((tnt) => (
+                  <option key={tnt.id} value={tnt.id}>{tnt.name}</option>
+                ))}
+              </select>
+              <button onClick={() => loadTenantFeatureFlags(featureTenantId)} disabled={!featureTenantId}>{t(lang, "load")}</button>
+            </div>
+            {tenantFeatureFlags.length === 0 ? (
+              <div style={{ color: "#666", marginTop: 8 }}>{t(lang, "noData")}</div>
+            ) : (
+              <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 8 }}>
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "featureFlagCode")}</th>
+                    <th style={{ textAlign: "center", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "featureFlagDefault")}</th>
+                    <th style={{ textAlign: "center", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Tenant</th>
+                    <th style={{ textAlign: "center", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "featureFlagEffective")}</th>
+                    <th style={{ textAlign: "center", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "featureFlagSource")}</th>
+                    <th style={{ borderBottom: "1px solid #ddd", padding: "6px 4px" }} />
+                  </tr>
+                </thead>
+                <tbody>
+                  {tenantFeatureFlags.map((f) => (
+                    <tr key={f.flagId}>
+                      <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{f.code}</td>
+                      <td style={{ padding: "6px 4px", textAlign: "center", borderBottom: "1px solid #f0f0f0" }}>{f.defaultEnabled ? t(lang, "enable") : t(lang, "disable")}</td>
+                      <td style={{ padding: "6px 4px", textAlign: "center", borderBottom: "1px solid #f0f0f0" }}>{f.tenantEnabled == null ? "—" : (f.tenantEnabled ? t(lang, "enable") : t(lang, "disable"))}</td>
+                      <td style={{ padding: "6px 4px", textAlign: "center", borderBottom: "1px solid #f0f0f0" }}>{f.effectiveEnabled ? t(lang, "enable") : t(lang, "disable")}</td>
+                      <td style={{ padding: "6px 4px", textAlign: "center", borderBottom: "1px solid #f0f0f0" }}>{f.source}</td>
+                      <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0", whiteSpace: "nowrap" }}>
+                        <button onClick={() => setTenantFeatureFlag(f.flagId, true)} disabled={!featureTenantId}>{t(lang, "enable")}</button>{" "}
+                        <button onClick={() => setTenantFeatureFlag(f.flagId, false)} disabled={!featureTenantId}>{t(lang, "disable")}</button>{" "}
+                        <button onClick={() => clearTenantFeatureFlag(f.flagId)} disabled={!featureTenantId}>{t(lang, "featureFlagUseDefault")}</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          <div style={{ border: "1px solid #eee", borderRadius: 10, padding: 10 }}>
+            <h3 style={{ marginTop: 0 }}>{t(lang, "featureFlagBranchOverrides")}</h3>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <select value={featureBranchId} onChange={(e) => setFeatureBranchId(e.target.value ? Number(e.target.value) : "")}>
+                <option value="">{t(lang, "selectBranch")}</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>{`${b.name} · ${tenantLabel(b.tenantId)} / ${restaurantLabel(b.restaurantId)}`}</option>
+                ))}
+              </select>
+              <button onClick={() => loadBranchFeatureFlags(featureBranchId)} disabled={!featureBranchId}>{t(lang, "load")}</button>
+            </div>
+            {branchFeatureFlags.length === 0 ? (
+              <div style={{ color: "#666", marginTop: 8 }}>{t(lang, "noData")}</div>
+            ) : (
+              <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 8 }}>
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "featureFlagCode")}</th>
+                    <th style={{ textAlign: "center", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "featureFlagDefault")}</th>
+                    <th style={{ textAlign: "center", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Tenant</th>
+                    <th style={{ textAlign: "center", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>Branch</th>
+                    <th style={{ textAlign: "center", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "featureFlagEffective")}</th>
+                    <th style={{ textAlign: "center", borderBottom: "1px solid #ddd", padding: "6px 4px" }}>{t(lang, "featureFlagSource")}</th>
+                    <th style={{ borderBottom: "1px solid #ddd", padding: "6px 4px" }} />
+                  </tr>
+                </thead>
+                <tbody>
+                  {branchFeatureFlags.map((f) => (
+                    <tr key={f.flagId}>
+                      <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0" }}>{f.code}</td>
+                      <td style={{ padding: "6px 4px", textAlign: "center", borderBottom: "1px solid #f0f0f0" }}>{f.defaultEnabled ? t(lang, "enable") : t(lang, "disable")}</td>
+                      <td style={{ padding: "6px 4px", textAlign: "center", borderBottom: "1px solid #f0f0f0" }}>{f.tenantEnabled == null ? "—" : (f.tenantEnabled ? t(lang, "enable") : t(lang, "disable"))}</td>
+                      <td style={{ padding: "6px 4px", textAlign: "center", borderBottom: "1px solid #f0f0f0" }}>{f.branchEnabled == null ? "—" : (f.branchEnabled ? t(lang, "enable") : t(lang, "disable"))}</td>
+                      <td style={{ padding: "6px 4px", textAlign: "center", borderBottom: "1px solid #f0f0f0" }}>{f.effectiveEnabled ? t(lang, "enable") : t(lang, "disable")}</td>
+                      <td style={{ padding: "6px 4px", textAlign: "center", borderBottom: "1px solid #f0f0f0" }}>{f.source}</td>
+                      <td style={{ padding: "6px 4px", borderBottom: "1px solid #f0f0f0", whiteSpace: "nowrap" }}>
+                        <button onClick={() => setBranchFeatureFlag(f.flagId, true)} disabled={!featureBranchId}>{t(lang, "enable")}</button>{" "}
+                        <button onClick={() => setBranchFeatureFlag(f.flagId, false)} disabled={!featureBranchId}>{t(lang, "disable")}</button>{" "}
+                        <button onClick={() => clearBranchFeatureFlag(f.flagId)} disabled={!featureBranchId}>{t(lang, "featureFlagUseDefault")}</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
       </section>

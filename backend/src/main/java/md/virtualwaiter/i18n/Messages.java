@@ -135,6 +135,8 @@ public final class Messages {
     put("Combo already exists for menu item", "error.combo_exists");
     put("Combo not found", "error.combo_not_found");
     put("Unknown target item", "error.unknown_target_item");
+    put("Feature flag already exists", "error.feature_flag_exists");
+    put("Feature flag not found", "error.feature_flag_not_found");
 
     // Admin layout / data
     put("layoutX + layoutW must be <= 100", "error.layout_x_w_exceed");

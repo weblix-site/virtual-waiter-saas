@@ -41,6 +41,9 @@ public class Branch {
   @Column(name = "is_active", nullable = false)
   public boolean isActive = true;
 
+  @Column(name = "read_only", nullable = false)
+  public boolean readOnly = false;
+
   @Column(name = "layout_bg_url")
   public String layoutBgUrl;
 

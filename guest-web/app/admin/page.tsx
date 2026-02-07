@@ -72,6 +72,7 @@ const dict: Record<string, Record<Lang, string>> = {
   permGuestFlagsManage: { ru: "Флаги гостей", ro: "Flaguri oaspeți", en: "Guest flags manage" },
   permMediaManage: { ru: "Медиа", ro: "Media", en: "Media manage" },
   permHallPlanManage: { ru: "Планы зала", ro: "Plan sală", en: "Hall plan manage" },
+  permFeatureFlagsManage: { ru: "Feature flags", ro: "Feature flags", en: "Feature flags" },
   deviceSessions: { ru: "Сессии устройств", ro: "Sesiuni dispozitive", en: "Device sessions" },
   deviceSessionIncludeRevoked: { ru: "Показывать отозванные", ro: "Arată revocate", en: "Show revoked" },
   deviceSessionFilterStaff: { ru: "Сотрудник", ro: "Angajat", en: "Staff" },
@@ -1244,6 +1245,7 @@ export default function AdminPage() {
     GUEST_FLAGS_MANAGE: "permGuestFlagsManage",
     MEDIA_MANAGE: "permMediaManage",
     HALL_PLAN_MANAGE: "permHallPlanManage",
+    FEATURE_FLAGS_MANAGE: "permFeatureFlagsManage",
   };
 
   const permissionOrder = useMemo(() => ([
@@ -1262,6 +1264,7 @@ export default function AdminPage() {
     "GUEST_FLAGS_MANAGE",
     "MEDIA_MANAGE",
     "HALL_PLAN_MANAGE",
+    "FEATURE_FLAGS_MANAGE",
   ]), []);
 
   const roleDefaultPermissions = useMemo<Record<string, string[]>>(() => ({

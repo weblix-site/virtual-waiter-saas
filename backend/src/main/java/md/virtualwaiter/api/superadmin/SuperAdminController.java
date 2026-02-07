@@ -3,22 +3,28 @@ package md.virtualwaiter.api.superadmin;
 import md.virtualwaiter.domain.Branch;
 import md.virtualwaiter.domain.BranchReview;
 import md.virtualwaiter.domain.BranchHall;
+import md.virtualwaiter.domain.BranchFeatureFlag;
 import md.virtualwaiter.domain.Combo;
 import md.virtualwaiter.domain.ComboItem;
+import md.virtualwaiter.domain.FeatureFlag;
 import md.virtualwaiter.domain.Restaurant;
 import md.virtualwaiter.domain.StaffDeviceToken;
 import md.virtualwaiter.domain.StaffUser;
 import md.virtualwaiter.domain.Tenant;
+import md.virtualwaiter.domain.TenantFeatureFlag;
 import md.virtualwaiter.repo.CafeTableRepo;
 import md.virtualwaiter.repo.BranchRepo;
 import md.virtualwaiter.repo.BranchHallRepo;
 import md.virtualwaiter.repo.BranchReviewRepo;
+import md.virtualwaiter.repo.BranchFeatureFlagRepo;
 import md.virtualwaiter.repo.ComboItemRepo;
 import md.virtualwaiter.repo.ComboRepo;
+import md.virtualwaiter.repo.FeatureFlagRepo;
 import md.virtualwaiter.repo.MenuItemRepo;
 import md.virtualwaiter.repo.RestaurantRepo;
 import md.virtualwaiter.repo.StaffDeviceTokenRepo;
 import md.virtualwaiter.repo.StaffUserRepo;
+import md.virtualwaiter.repo.TenantFeatureFlagRepo;
 import md.virtualwaiter.repo.TenantRepo;
 import md.virtualwaiter.service.StatsService;
 import md.virtualwaiter.service.AuditService;
@@ -77,6 +83,9 @@ public class SuperAdminController {
   private final BranchRepo branchRepo;
   private final BranchHallRepo hallRepo;
   private final BranchReviewRepo branchReviewRepo;
+  private final FeatureFlagRepo featureFlagRepo;
+  private final TenantFeatureFlagRepo tenantFeatureFlagRepo;
+  private final BranchFeatureFlagRepo branchFeatureFlagRepo;
   private final CafeTableRepo tableRepo;
   private final StaffDeviceTokenRepo staffDeviceTokenRepo;
   private final ComboRepo comboRepo;
@@ -100,6 +109,9 @@ public class SuperAdminController {
     BranchRepo branchRepo,
     BranchHallRepo hallRepo,
     BranchReviewRepo branchReviewRepo,
+    FeatureFlagRepo featureFlagRepo,
+    TenantFeatureFlagRepo tenantFeatureFlagRepo,
+    BranchFeatureFlagRepo branchFeatureFlagRepo,
     CafeTableRepo tableRepo,
     StaffDeviceTokenRepo staffDeviceTokenRepo,
     ComboRepo comboRepo,
@@ -122,6 +134,9 @@ public class SuperAdminController {
     this.branchRepo = branchRepo;
     this.hallRepo = hallRepo;
     this.branchReviewRepo = branchReviewRepo;
+    this.featureFlagRepo = featureFlagRepo;
+    this.tenantFeatureFlagRepo = tenantFeatureFlagRepo;
+    this.branchFeatureFlagRepo = branchFeatureFlagRepo;
     this.tableRepo = tableRepo;
     this.staffDeviceTokenRepo = staffDeviceTokenRepo;
     this.comboRepo = comboRepo;
@@ -160,6 +175,42 @@ public class SuperAdminController {
   public record TotpStatusResponse(boolean enabled, boolean hasSecret) {}
   public record TotpSetupResponse(String secret, String otpauthUrl, boolean enabled) {}
   public record TotpVerifyRequest(@NotBlank String code) {}
+
+  public record FeatureFlagDto(
+    long id,
+    String code,
+    String name,
+    String description,
+    boolean defaultEnabled,
+    String createdAt
+  ) {}
+
+  public record FeatureFlagCreateRequest(
+    @NotBlank String code,
+    @NotBlank String name,
+    String description,
+    Boolean defaultEnabled
+  ) {}
+
+  public record FeatureFlagUpdateRequest(
+    String name,
+    String description,
+    Boolean defaultEnabled
+  ) {}
+
+  public record FeatureFlagOverrideRequest(@NotNull Boolean enabled) {}
+
+  public record FeatureFlagScopeDto(
+    long flagId,
+    String code,
+    String name,
+    String description,
+    boolean defaultEnabled,
+    Boolean tenantEnabled,
+    Boolean branchEnabled,
+    boolean effectiveEnabled,
+    String source
+  ) {}
 
   @GetMapping("/2fa/status")
   public TotpStatusResponse totpStatus(Authentication auth) {
@@ -208,6 +259,165 @@ public class SuperAdminController {
     staffUserRepo.save(u);
     auditService.log(u, "UPDATE", "StaffUser2FA", u.id, "disable");
     return new TotpStatusResponse(false, false);
+  }
+
+  private FeatureFlagDto toFlagDto(FeatureFlag f) {
+    return new FeatureFlagDto(
+      f.id,
+      f.code,
+      f.name,
+      f.description,
+      f.defaultEnabled,
+      f.createdAt == null ? null : f.createdAt.toString()
+    );
+  }
+
+  @GetMapping("/feature-flags")
+  public List<FeatureFlagDto> listFeatureFlags(Authentication auth) {
+    requireSuper(auth);
+    return featureFlagRepo.findAll()
+      .stream()
+      .sorted((a, b) -> a.code.compareToIgnoreCase(b.code))
+      .map(this::toFlagDto)
+      .collect(Collectors.toList());
+  }
+
+  @PostMapping("/feature-flags")
+  public FeatureFlagDto createFeatureFlag(@Valid @RequestBody FeatureFlagCreateRequest req, Authentication auth) {
+    StaffUser u = requireSuper(auth);
+    String code = req.code().trim();
+    if (featureFlagRepo.findByCodeIgnoreCase(code).isPresent()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Feature flag already exists");
+    }
+    FeatureFlag f = new FeatureFlag();
+    f.code = code;
+    f.name = req.name().trim();
+    f.description = req.description();
+    f.defaultEnabled = req.defaultEnabled() != null && req.defaultEnabled();
+    featureFlagRepo.save(f);
+    auditService.log(u, "CREATE", "FeatureFlag", f.id, f.code);
+    return toFlagDto(f);
+  }
+
+  @PatchMapping("/feature-flags/{id}")
+  public FeatureFlagDto updateFeatureFlag(@PathVariable long id, @Valid @RequestBody FeatureFlagUpdateRequest req, Authentication auth) {
+    StaffUser u = requireSuper(auth);
+    FeatureFlag f = featureFlagRepo.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Feature flag not found"));
+    if (req.name() != null && !req.name().trim().isEmpty()) f.name = req.name().trim();
+    if (req.description() != null) f.description = req.description();
+    if (req.defaultEnabled() != null) f.defaultEnabled = req.defaultEnabled();
+    featureFlagRepo.save(f);
+    auditService.log(u, "UPDATE", "FeatureFlag", f.id, f.code);
+    return toFlagDto(f);
+  }
+
+  @GetMapping("/tenants/{tenantId}/feature-flags")
+  public List<FeatureFlagScopeDto> listTenantFeatureFlags(@PathVariable long tenantId, Authentication auth) {
+    requireSuper(auth);
+    tenantRepo.findById(tenantId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tenant not found"));
+    Map<Long, TenantFeatureFlag> overrides = tenantFeatureFlagRepo.findByTenantId(tenantId)
+      .stream()
+      .collect(Collectors.toMap(o -> o.flagId, o -> o));
+    return featureFlagRepo.findAll()
+      .stream()
+      .sorted((a, b) -> a.code.compareToIgnoreCase(b.code))
+      .map(flag -> {
+        TenantFeatureFlag ov = overrides.get(flag.id);
+        Boolean tenantEnabled = ov == null ? null : ov.enabled;
+        boolean effective = tenantEnabled != null ? tenantEnabled : flag.defaultEnabled;
+        String source = tenantEnabled != null ? "TENANT" : "DEFAULT";
+        return new FeatureFlagScopeDto(flag.id, flag.code, flag.name, flag.description, flag.defaultEnabled, tenantEnabled, null, effective, source);
+      })
+      .collect(Collectors.toList());
+  }
+
+  @PutMapping("/tenants/{tenantId}/feature-flags/{flagId}")
+  public FeatureFlagScopeDto setTenantFeatureFlag(@PathVariable long tenantId, @PathVariable long flagId, @Valid @RequestBody FeatureFlagOverrideRequest req, Authentication auth) {
+    StaffUser u = requireSuper(auth);
+    tenantRepo.findById(tenantId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tenant not found"));
+    FeatureFlag flag = featureFlagRepo.findById(flagId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Feature flag not found"));
+    TenantFeatureFlag ov = tenantFeatureFlagRepo.findByTenantIdAndFlagId(tenantId, flagId)
+      .orElseGet(TenantFeatureFlag::new);
+    ov.tenantId = tenantId;
+    ov.flagId = flagId;
+    ov.enabled = req.enabled();
+    ov.updatedAt = Instant.now();
+    tenantFeatureFlagRepo.save(ov);
+    auditService.log(u, "UPDATE", "TenantFeatureFlag", ov.id, flag.code + "=" + req.enabled());
+    Boolean tenantEnabled = ov.enabled;
+    boolean effective = tenantEnabled;
+    return new FeatureFlagScopeDto(flag.id, flag.code, flag.name, flag.description, flag.defaultEnabled, tenantEnabled, null, effective, "TENANT");
+  }
+
+  @DeleteMapping("/tenants/{tenantId}/feature-flags/{flagId}")
+  public void clearTenantFeatureFlag(@PathVariable long tenantId, @PathVariable long flagId, Authentication auth) {
+    StaffUser u = requireSuper(auth);
+    tenantFeatureFlagRepo.findByTenantIdAndFlagId(tenantId, flagId).ifPresent(ov -> {
+      tenantFeatureFlagRepo.delete(ov);
+      auditService.log(u, "DELETE", "TenantFeatureFlag", ov.id, "remove");
+    });
+  }
+
+  @GetMapping("/branches/{branchId}/feature-flags")
+  public List<FeatureFlagScopeDto> listBranchFeatureFlags(@PathVariable long branchId, Authentication auth) {
+    requireSuper(auth);
+    Branch b = branchRepo.findById(branchId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    Map<Long, TenantFeatureFlag> tenantOverrides = tenantFeatureFlagRepo.findByTenantId(b.tenantId)
+      .stream()
+      .collect(Collectors.toMap(o -> o.flagId, o -> o));
+    Map<Long, BranchFeatureFlag> branchOverrides = branchFeatureFlagRepo.findByBranchId(branchId)
+      .stream()
+      .collect(Collectors.toMap(o -> o.flagId, o -> o));
+    return featureFlagRepo.findAll()
+      .stream()
+      .sorted((a, b2) -> a.code.compareToIgnoreCase(b2.code))
+      .map(flag -> {
+        BranchFeatureFlag bov = branchOverrides.get(flag.id);
+        TenantFeatureFlag tov = tenantOverrides.get(flag.id);
+        Boolean branchEnabled = bov == null ? null : bov.enabled;
+        Boolean tenantEnabled = tov == null ? null : tov.enabled;
+        boolean effective = branchEnabled != null
+          ? branchEnabled
+          : (tenantEnabled != null ? tenantEnabled : flag.defaultEnabled);
+        String source = branchEnabled != null ? "BRANCH" : (tenantEnabled != null ? "TENANT" : "DEFAULT");
+        return new FeatureFlagScopeDto(flag.id, flag.code, flag.name, flag.description, flag.defaultEnabled, tenantEnabled, branchEnabled, effective, source);
+      })
+      .collect(Collectors.toList());
+  }
+
+  @PutMapping("/branches/{branchId}/feature-flags/{flagId}")
+  public FeatureFlagScopeDto setBranchFeatureFlag(@PathVariable long branchId, @PathVariable long flagId, @Valid @RequestBody FeatureFlagOverrideRequest req, Authentication auth) {
+    StaffUser u = requireSuper(auth);
+    Branch b = branchRepo.findById(branchId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+    FeatureFlag flag = featureFlagRepo.findById(flagId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Feature flag not found"));
+    BranchFeatureFlag ov = branchFeatureFlagRepo.findByBranchIdAndFlagId(branchId, flagId)
+      .orElseGet(BranchFeatureFlag::new);
+    ov.branchId = branchId;
+    ov.flagId = flagId;
+    ov.enabled = req.enabled();
+    ov.updatedAt = Instant.now();
+    branchFeatureFlagRepo.save(ov);
+    auditService.log(u, "UPDATE", "BranchFeatureFlag", ov.id, flag.code + "=" + req.enabled());
+    Boolean tenantEnabled = tenantFeatureFlagRepo.findByTenantIdAndFlagId(b.tenantId, flagId)
+      .map(t -> t.enabled)
+      .orElse(null);
+    return new FeatureFlagScopeDto(flag.id, flag.code, flag.name, flag.description, flag.defaultEnabled, tenantEnabled, ov.enabled, ov.enabled, "BRANCH");
+  }
+
+  @DeleteMapping("/branches/{branchId}/feature-flags/{flagId}")
+  public void clearBranchFeatureFlag(@PathVariable long branchId, @PathVariable long flagId, Authentication auth) {
+    StaffUser u = requireSuper(auth);
+    branchFeatureFlagRepo.findByBranchIdAndFlagId(branchId, flagId).ifPresent(ov -> {
+      branchFeatureFlagRepo.delete(ov);
+      auditService.log(u, "DELETE", "BranchFeatureFlag", ov.id, "remove");
+    });
   }
 
   public record DeviceSessionDto(
@@ -589,7 +799,8 @@ public class SuperAdminController {
     String address,
     String phone,
     String contactPerson,
-    boolean isActive
+    boolean isActive,
+    boolean readOnly
   ) {}
   public record CreateRestaurantRequest(
     @NotBlank String name,
@@ -606,7 +817,8 @@ public class SuperAdminController {
     String address,
     String phone,
     String contactPerson,
-    Boolean isActive
+    Boolean isActive,
+    Boolean readOnly
   ) {}
 
   @GetMapping("/restaurants")
@@ -631,7 +843,8 @@ public class SuperAdminController {
         r.address,
         r.phone,
         r.contactPerson,
-        r.isActive
+        r.isActive,
+        r.readOnly
       ));
     }
     return out;
@@ -665,7 +878,8 @@ public class SuperAdminController {
       r.address,
       r.phone,
       r.contactPerson,
-      r.isActive
+      r.isActive,
+      r.readOnly
     );
   }
 
@@ -681,6 +895,7 @@ public class SuperAdminController {
     if (req.phone != null) r.phone = trimOrNull(req.phone);
     if (req.contactPerson != null) r.contactPerson = trimOrNull(req.contactPerson);
     if (req.isActive != null) r.isActive = req.isActive;
+    if (req.readOnly != null) r.readOnly = req.readOnly;
     r = restaurantRepo.save(r);
     auditService.log(u, "UPDATE", "Restaurant", r.id, null);
     return new RestaurantDto(
@@ -692,7 +907,8 @@ public class SuperAdminController {
       r.address,
       r.phone,
       r.contactPerson,
-      r.isActive
+      r.isActive,
+      r.readOnly
     );
   }
 
@@ -719,7 +935,8 @@ public class SuperAdminController {
     String address,
     String phone,
     String contactPerson,
-    boolean isActive
+    boolean isActive,
+    boolean readOnly
   ) {}
   public record CreateBranchRequest(
     @NotBlank String name,
@@ -738,7 +955,8 @@ public class SuperAdminController {
     String address,
     String phone,
     String contactPerson,
-    Boolean isActive
+    Boolean isActive,
+    Boolean readOnly
   ) {}
 
   @GetMapping("/branches")
@@ -774,7 +992,8 @@ public class SuperAdminController {
         b.address,
         b.phone,
         b.contactPerson,
-        b.isActive
+        b.isActive,
+        b.readOnly
       ));
     }
     return out;
@@ -822,7 +1041,8 @@ public class SuperAdminController {
       b.address,
       b.phone,
       b.contactPerson,
-      b.isActive
+      b.isActive,
+      b.readOnly
     );
   }
 
@@ -846,6 +1066,7 @@ public class SuperAdminController {
     if (req.phone != null) b.phone = trimOrNull(req.phone);
     if (req.contactPerson != null) b.contactPerson = trimOrNull(req.contactPerson);
     if (req.isActive != null) b.isActive = req.isActive;
+    if (req.readOnly != null) b.readOnly = req.readOnly;
     b = branchRepo.save(b);
     auditService.log(u, "UPDATE", "Branch", b.id, null);
     return new BranchDto(
@@ -858,7 +1079,8 @@ public class SuperAdminController {
       b.address,
       b.phone,
       b.contactPerson,
-      b.isActive
+      b.isActive,
+      b.readOnly
     );
   }
 

@@ -38,7 +38,8 @@ public final class RolePermissions {
     Permission.LOYALTY_MANAGE,
     Permission.GUEST_FLAGS_MANAGE,
     Permission.MEDIA_MANAGE,
-    Permission.HALL_PLAN_MANAGE
+    Permission.HALL_PLAN_MANAGE,
+    Permission.FEATURE_FLAGS_MANAGE
   );
 
   private static final Set<Permission> CASHIER_PERMS = EnumSet.of(

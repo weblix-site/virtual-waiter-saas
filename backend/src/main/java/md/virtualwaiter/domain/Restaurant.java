@@ -37,4 +37,7 @@ public class Restaurant {
 
   @Column(name = "is_active", nullable = false)
   public boolean isActive = true;
+
+  @Column(name = "read_only", nullable = false)
+  public boolean readOnly = false;
 }
